@@ -16,8 +16,9 @@ class ChangeGateTest {
     private val gate = ChangeGate(schedule)
 
     // 2026-11-02 is a Monday; a request made on 2026-10-25 has waited its seven days by then.
-    private fun at(text: String) = Instant.parse(text)
-    private val asked = at("2026-10-25T12:00:00Z")
+    // Local times in the schedule's own zone, so the test does not depend on the offset the time-zone data gives Morocco.
+    private fun at(text: String): Instant = java.time.LocalDateTime.parse(text).atZone(zone).toInstant()
+    private val asked = at("2026-10-25T12:00:00")
     private fun request(kind: RequestKind = RequestKind.NIGHT_ADD, target: String = "app.x", time: Instant = asked) =
         ChangeRequest(kind, target, time.toEpochMilli())
 
@@ -38,26 +39,26 @@ class ChangeGateTest {
 
     @Test
     fun `after the wait it applies in the Monday window when the clocks agree`() {
-        val inWindow = at("2026-11-02T08:30:00Z") // 09:30 in Casablanca (UTC+1)
+        val inWindow = at("2026-11-02T09:30:00")
         assertIs<Decision.Allowed>(gate.decideApply(request(), inWindow, networkTime = inWindow))
     }
 
     @Test
     fun `after the wait but outside the window it still does not apply`() {
-        val monday3pm = at("2026-11-02T14:00:00Z")
+        val monday3pm = at("2026-11-02T15:00:00")
         assertIs<Decision.Denied>(gate.decideApply(request(), monday3pm, networkTime = monday3pm))
     }
 
     @Test
     fun `inside the window but before the wait is over it does not apply`() {
-        val laterRequest = request(time = at("2026-10-28T12:00:00Z"))
-        val inWindow = at("2026-11-02T08:30:00Z")
+        val laterRequest = request(time = at("2026-10-28T12:00:00"))
+        val inWindow = at("2026-11-02T09:30:00")
         assertIs<Decision.Denied>(gate.decideApply(laterRequest, inWindow, networkTime = inWindow))
     }
 
     @Test
     fun `without network time or with a disagreeing clock nothing applies`() {
-        val inWindow = at("2026-11-02T08:30:00Z")
+        val inWindow = at("2026-11-02T09:30:00")
         assertIs<Decision.Denied>(gate.decideApply(request(), inWindow, networkTime = null))
         assertIs<Decision.Denied>(gate.decideApply(request(), inWindow, networkTime = inWindow.plus(Duration.ofHours(3))))
     }
