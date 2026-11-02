@@ -21,6 +21,7 @@ jobs:
   # Boots a real Android emulator, makes the app its device owner and checks that Android itself enforces the policy.
   device-owner-emulator:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4

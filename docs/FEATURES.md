@@ -166,7 +166,7 @@ The sealed build disables factory reset in the OS. Recovery-mode reset still exi
 | Layer | How | Status |
 |---|---|---|
 | Core logic (schedule, gate, TOTP, planner, lists, Fajr, config, events) | JVM unit tests, 82 | Passing at last local run |
-| Device-owner behaviour | GitHub Actions emulator (API 34), instrumented tests | See the latest CI run; the 0.3.0 tests (requests, per-app unblock, Chrome policy, auto time) are new |
+| Device-owner behaviour | GitHub Actions emulator (API 34), instrumented tests | See the latest CI run (the sealed-only restrictions are checked on the JVM, because applying them would cut the emulator's adb link); the 0.3.0 tests (requests, per-app unblock, Chrome policy, auto time) are new |
 | Compose screens | One smoke test that the home screen opens | Green on 0.2.0. The QR screen and the new request screens are not covered by a UI test |
 | Real HyperOS phone | Nothing | Not tested |
 
