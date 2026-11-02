@@ -30,7 +30,7 @@ class PolicyApplier(context: Context) {
 
         // The DNS call is refused while the Private DNS restriction is on, so the host is set first.
         dpm.clearUserRestriction(admin, Restrictions.CONFIG_PRIVATE_DNS)
-        val dns = dpm.setGlobalPrivateDnsModeSpecifiedHost(admin, plan.privateDnsHost)
+        val dns = setDnsHost(plan.privateDnsHost)
         if (dns != DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR) failed += "private dns host ${plan.privateDnsHost}: code $dns"
         if (Restrictions.CONFIG_PRIVATE_DNS in plan.restrictions) dpm.addUserRestriction(admin, Restrictions.CONFIG_PRIVATE_DNS)
 
@@ -42,7 +42,24 @@ class PolicyApplier(context: Context) {
         return ApplyReport(failed)
     }
 
+    /**
+     * Android only accepts the host after the DNS server answers, so right after boot (no network yet) the first tries can fail.
+     * A few tries cover that; if all fail, the report says so and the watchdog tries again later.
+     */
+    private fun setDnsHost(host: String): Int {
+        var code = DevicePolicyManager.PRIVATE_DNS_SET_ERROR_HOST_NOT_SERVING
+        repeat(DNS_ATTEMPTS) { attempt ->
+            code = dpm.setGlobalPrivateDnsModeSpecifiedHost(admin, host)
+            if (code == DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR) return code
+            if (attempt < DNS_ATTEMPTS - 1) Thread.sleep(DNS_PAUSE_MS)
+        }
+        return code
+    }
+
     companion object {
+        private const val DNS_ATTEMPTS = 4
+        private const val DNS_PAUSE_MS = 5_000L
+
         /** Every restriction the planner can set, so one that leaves the plan is cleared. */
         val ALL_RESTRICTIONS = listOf(
             Restrictions.DEBUGGING,
