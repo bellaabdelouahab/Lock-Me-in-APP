@@ -20,13 +20,12 @@ data class LockConfig(
     val alwaysBlocked: Set<String> = emptySet(),
     /** Start of the night and end of social-app time, "HH:mm". */
     val nightStart: String = "22:00",
-    /** The weekly open window: ISO day (1 = Monday .. 7 = Sunday) and its hours. */
-    val windowDay: Int = 7,
-    val windowStart: String = "20:00",
-    val windowEnd: String = "22:00",
-    /** Browsers asked for are approved only if the wait ends before this time of day. */
-    val daytimeEnd: String = "20:00",
-    val browserWaitMinutes: Int = 30,
+    /** The weekly open window, when waiting requests can be carried out: ISO day (1 = Monday .. 7 = Sunday) and its hours. */
+    val windowDay: Int = 1,
+    val windowStart: String = "09:00",
+    val windowEnd: String = "10:00",
+    /** How long anything that opens the phone up waits before it can be carried out in the window. */
+    val loosenWaitDays: Int = 7,
     val latitude: Double = 30.4278,
     val longitude: Double = -9.5981,
     val sunAngleDegrees: Double = 19.0,
@@ -37,7 +36,6 @@ data class LockConfig(
         windowDay = DayOfWeek.of(windowDay),
         windowStart = LocalTime.parse(windowStart),
         windowEnd = LocalTime.parse(windowEnd),
-        daytimeEnd = LocalTime.parse(daytimeEnd),
     )
 
     fun fajrConfig() = FajrConfig(latitude, longitude, sunAngleDegrees, fajrOffsetMinutes.toLong())
@@ -68,14 +66,14 @@ object ConfigRules {
 
     fun problems(config: LockConfig): List<String> = buildList {
         DnsHost.problem(config.dnsHost)?.let(::add)
-        for ((label, value) in listOf("night start" to config.nightStart, "window start" to config.windowStart, "window end" to config.windowEnd, "end of the day" to config.daytimeEnd)) {
+        for ((label, value) in listOf("night start" to config.nightStart, "window start" to config.windowStart, "window end" to config.windowEnd)) {
             if (time(value) == null) add("The $label is not a time like 22:00.")
         }
         if (config.windowDay !in 1..7) add("The window day must be 1 (Monday) to 7 (Sunday).")
         val start = time(config.windowStart)
         val end = time(config.windowEnd)
         if (start != null && end != null && end <= start) add("The window must end after it starts.")
-        if (config.browserWaitMinutes !in 1..24 * 60) add("The browser wait must be between 1 minute and 24 hours.")
+        if (config.loosenWaitDays !in 1..30) add("The wait before a change must be 1 to 30 days.")
         if (config.latitude !in -66.0..66.0) add("Latitude must be between -66 and 66 (fajr cannot be calculated near the poles).")
         if (config.longitude !in -180.0..180.0) add("Longitude must be between -180 and 180.")
         if (config.sunAngleDegrees !in 10.0..25.0) add("The sun angle for fajr must be between 10 and 25 degrees.")

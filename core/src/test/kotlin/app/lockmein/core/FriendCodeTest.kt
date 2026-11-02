@@ -52,7 +52,7 @@ class FriendCodeTest {
     @Test
     fun `removing the protection needs the window and the friend's code together`() {
         val open = Decision.Allowed("open window")
-        val closed = Decision.Denied("changes open Sunday")
+        val closed = Decision.Denied("changes apply in the open window")
         assertIs<Decision.Allowed>(Removal.decide(open, CodeCheck.Accepted(5)))
         assertIs<Decision.Denied>(Removal.decide(closed, CodeCheck.Accepted(5)))
         assertIs<Decision.Denied>(Removal.decide(open, CodeCheck.Wrong))

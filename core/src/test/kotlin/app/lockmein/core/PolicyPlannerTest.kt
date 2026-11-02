@@ -58,16 +58,37 @@ class PolicyPlannerTest {
     }
 
     @Test
-    fun `YouTube is available only in the open window`() {
-        val window = planner.plan(Phase.OPEN_WINDOW, BuildMode.SEALED, inventory)
-        assertFalse(youtube in window.suspended)
-        assertTrue(youtube in planner.plan(Phase.DAY, BuildMode.SEALED, inventory).suspended)
-        assertTrue(youtube in planner.plan(Phase.NIGHT, BuildMode.SEALED, inventory).suspended)
+    fun `YouTube is blocked in every phase, the open window included`() {
+        for (phase in Phase.entries) assertTrue(youtube in planner.plan(phase, BuildMode.SEALED, inventory).suspended)
+    }
+
+    @Test
+    fun `an app the friend unblocked for an hour is let through, and nothing else`() {
+        val night = planner.plan(Phase.NIGHT, BuildMode.SEALED, inventory.copy(temporarilyAllowed = setOf(instagram)))
+        assertFalse(instagram in night.suspended)
+        assertTrue(bank in night.suspended)
+        assertTrue(youtube in planner.plan(Phase.DAY, BuildMode.SEALED, inventory.copy(temporarilyAllowed = setOf(instagram))).suspended)
+    }
+
+    @Test
+    fun `every browser the phone knows is closed unless allowed or approved, Brave and the Google app included`() {
+        val google = "com.google.android.googlequicksearchbox"
+        val more = Inventory(installed + google, approvedBrowsers = emptySet())
+        val chromeAllowed = PolicyPlanner(rules.copy(allowedBrowser = chrome), "abc123.dns.nextdns.io")
+        val plan = chromeAllowed.plan(Phase.DAY, BuildMode.SEALED, more)
+        assertTrue(setOf(brave, firefox, google).all { it in plan.suspended })
+        assertFalse(chrome in plan.suspended)
+    }
+
+    @Test
+    fun `Chrome gets managed configuration when it is installed`() {
+        assertTrue(planner.plan(Phase.DAY, BuildMode.SEALED, inventory).managedChrome)
+        assertFalse(planner.plan(Phase.DAY, BuildMode.SEALED, Inventory(installed - chrome)).managedChrome)
     }
 
     @Test
     fun `other browsers stay suspended in the open window until the owner approves them`() {
-        assertEquals(setOf(chrome, firefox), planner.plan(Phase.OPEN_WINDOW, BuildMode.SEALED, inventory).suspended)
+        assertEquals(setOf(chrome, firefox, youtube), planner.plan(Phase.OPEN_WINDOW, BuildMode.SEALED, inventory).suspended)
     }
 
     @Test

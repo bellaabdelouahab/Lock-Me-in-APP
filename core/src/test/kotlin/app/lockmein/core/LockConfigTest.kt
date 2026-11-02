@@ -25,9 +25,9 @@ class LockConfigTest {
     fun `the defaults describe the agreed rhythm`() {
         val schedule = config.scheduleConfig()
         assertEquals(LocalTime.of(22, 0), schedule.nightStart)
-        assertEquals(DayOfWeek.SUNDAY, schedule.windowDay)
-        assertEquals(LocalTime.of(20, 0), schedule.windowStart)
-        assertEquals(LocalTime.of(22, 0), schedule.windowEnd)
+        assertEquals(DayOfWeek.MONDAY, schedule.windowDay)
+        assertEquals(LocalTime.of(9, 0), schedule.windowStart)
+        assertEquals(LocalTime.of(10, 0), schedule.windowEnd)
         assertEquals(19.0, config.fajrConfig().sunAngleDegrees)
     }
 
@@ -44,7 +44,7 @@ class LockConfigTest {
         assertTrue("time" in refused { copy(nightStart = "late") })
         assertTrue("end after" in refused { copy(windowStart = "21:00", windowEnd = "20:00") })
         assertTrue("Monday" in refused { copy(windowDay = 9) })
-        assertTrue("wait" in refused { copy(browserWaitMinutes = 0) })
+        assertTrue("wait" in refused { copy(loosenWaitDays = 0) })
         assertTrue("both" in refused { copy(alwaysBlocked = setOf("deezer.android.app")) })
         assertTrue("allowed browser" in refused { copy(alwaysBlocked = setOf("com.brave.browser")) })
         assertTrue("poles" in refused { copy(latitude = 80.0) })

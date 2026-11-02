@@ -63,7 +63,7 @@ fun DnsFields(config: LockConfig, onChange: (LockConfig) -> Unit) {
 fun RhythmFields(config: LockConfig, onChange: (LockConfig) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         ValidatedField("Night starts (everything but the night list stops)", config.nightStart, "a time like 22:00", ::time) { onChange(config.copy(nightStart = it.toString())) }
-        Note("The weekly open window, the one time you can change things:")
+        Note("The weekly open window: the only hour when a change you asked for a week ago can be carried out. Anything that opens the phone up waits 7 days first.")
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             DAYS.chunked(4).forEach { row ->
                 ButtonRow {
@@ -74,10 +74,8 @@ fun RhythmFields(config: LockConfig, onChange: (LockConfig) -> Unit) {
                 }
             }
         }
-        ValidatedField("Window opens", config.windowStart, "a time like 20:00", ::time) { onChange(config.copy(windowStart = it.toString())) }
-        ValidatedField("Window closes", config.windowEnd, "a time like 22:00, after it opens", ::time) { onChange(config.copy(windowEnd = it.toString())) }
-        ValidatedField("A requested browser opens only before", config.daytimeEnd, "a time like 20:00", ::time) { onChange(config.copy(daytimeEnd = it.toString())) }
-        ValidatedField("Browser wait in minutes", config.browserWaitMinutes.toString(), "1 to 1440", { it.trim().toIntOrNull()?.takeIf { n -> n in 1..1440 } }) { onChange(config.copy(browserWaitMinutes = it)) }
+        ValidatedField("Window opens", config.windowStart, "a time like 09:00", ::time) { onChange(config.copy(windowStart = it.toString())) }
+        ValidatedField("Window closes", config.windowEnd, "a time like 10:00, after it opens", ::time) { onChange(config.copy(windowEnd = it.toString())) }
     }
 }
 

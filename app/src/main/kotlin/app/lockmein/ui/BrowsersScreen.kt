@@ -14,15 +14,10 @@ import app.lockmein.ConfigStore
 import app.lockmein.DeviceInventory
 import app.lockmein.LockState
 import app.lockmein.Outcome
-import app.lockmein.Rules
-import app.lockmein.core.BrowserApproval
-import java.time.Duration
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import app.lockmein.core.KnownBrowsers
+import app.lockmein.core.RequestKind
 
-private val TIME = DateTimeFormatter.ofPattern("EEE d MMM HH:mm")
-
-/** The closed browsers: ask for one and it opens after the wait, if that moment falls in the day. */
+/** The closed browsers. A browser is a new door, so asking for one is a request: it waits, then opens in the weekly window. */
 @Composable
 fun BrowsersScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -36,27 +31,25 @@ fun BrowsersScreen(onBack: () -> Unit) {
 
     val inventory = remember { DeviceInventory(context) }
     val snapshot = remember(version) { inventory.read() }
-    val closed = (snapshot.browsers - setOfNotNull(config.allowedBrowser) - state.approvedBrowsers).sorted()
-    val approval = BrowserApproval(Rules.schedule(config), Duration.ofMinutes(config.browserWaitMinutes.toLong()))
-    val zone = ZoneId.systemDefault()
+    val closed = ((snapshot.browsers + KnownBrowsers.ALL).filter { it in snapshot.installed } - setOfNotNull(config.allowedBrowser) - state.approvedBrowsers).sorted()
+    val waiting = remember(version) { manager.requests().filter { it.kind == RequestKind.BROWSER }.map { it.target }.toSet() }
 
     Page("Browsers", onBack) {
-        Note("Open: ${config.allowedBrowser?.let(inventory::label) ?: "none"}. Others are closed. Ask for one and it opens ${config.browserWaitMinutes} minutes later, only if that falls before ${config.daytimeEnd}; otherwise at the next fajr.")
+        Note("Open: ${config.allowedBrowser?.let(inventory::label) ?: "none"}. Others are closed. Asking for one waits ${config.loosenWaitDays} days, then you carry it out in the weekly window (see The open window).")
         OutcomeText(outcome)
         if (closed.isEmpty()) Note("No other browser is closed.")
         closed.forEach { pkg ->
             InfoCard {
                 Text(inventory.label(pkg))
-                val requestedAt = state.browserRequests[pkg]
-                if (requestedAt == null) {
+                if (pkg in waiting) {
+                    Text("Requested. See The open window for when it can open.")
+                } else {
                     SecondaryButton("Request this browser", {
                         scope.background({ manager.requestBrowser(pkg) }) {
                             outcome = it
                             version++
                         }
                     })
-                } else {
-                    Text("Requested. Opens ${TIME.format(approval.approvalTime(requestedAt).atZone(zone))}.")
                 }
             }
         }

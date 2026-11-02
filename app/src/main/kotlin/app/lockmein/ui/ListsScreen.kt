@@ -27,6 +27,7 @@ import app.lockmein.DeviceInventory
 import app.lockmein.Outcome
 import app.lockmein.core.AppList
 import app.lockmein.core.ListOp
+import app.lockmein.core.NightRisk
 
 /** The two lists the person edits: apps allowed at night and apps blocked all the time. */
 @Composable
@@ -44,16 +45,17 @@ fun ListsScreen(onBack: () -> Unit) {
 
     fun change(list: AppList, op: ListOp, pkg: String) {
         scope.background({ manager.editList(list, op, pkg) }) {
-            outcome = it
+            val risk = if (list == AppList.NIGHT_ALLOWED && op == ListOp.ADD) NightRisk.warning(pkg) else null
+            outcome = if (risk != null && it is Outcome.Done) Outcome.Done("${it.message} Careful: $risk") else it
             version++
         }
     }
 
     Page("Night and blocked apps", onBack) {
         OutcomeText(outcome)
-        Listing("Apps allowed at night", "Adding one opens the phone up, so it works only in the open window. Removing one works any time.", config.nightAllowlist, inventory,
+        Listing("Apps allowed at night", "Adding one opens the phone up: it is a request that waits 7 days, then you carry it out in the weekly window. Removing one works at once.", config.nightAllowlist, inventory,
             onRemove = { change(AppList.NIGHT_ALLOWED, ListOp.REMOVE, it) }, onAdd = { picking = AppList.NIGHT_ALLOWED })
-        Listing("Apps blocked all the time", "Blocking works any time. Unblocking works only in the open window.", config.alwaysBlocked, inventory,
+        Listing("Apps blocked all the time", "Blocking works at once. Unblocking is a request that waits 7 days.", config.alwaysBlocked, inventory,
             onRemove = { change(AppList.ALWAYS_BLOCKED, ListOp.REMOVE, it) }, onAdd = { picking = AppList.ALWAYS_BLOCKED })
     }
 

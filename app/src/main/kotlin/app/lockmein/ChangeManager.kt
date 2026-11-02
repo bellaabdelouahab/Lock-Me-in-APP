@@ -4,9 +4,9 @@ import android.app.admin.DevicePolicyManager
 import android.content.Context
 import app.lockmein.core.AppList
 import app.lockmein.core.AppListEditor
-import app.lockmein.core.BrowserApproval
 import app.lockmein.core.ChangeGate
 import app.lockmein.core.ChangeKind
+import app.lockmein.core.ChangeRequest
 import app.lockmein.core.CodeCheck
 import app.lockmein.core.CodeChecker
 import app.lockmein.core.ConfigRules
@@ -17,6 +17,8 @@ import app.lockmein.core.FriendCode
 import app.lockmein.core.ListOp
 import app.lockmein.core.LockConfig
 import app.lockmein.core.Removal
+import app.lockmein.core.RequestKind
+import app.lockmein.core.Requests
 import java.time.Duration
 import java.time.Instant
 
@@ -27,9 +29,10 @@ sealed interface Outcome {
 }
 
 /**
- * Every change goes through here, so the rules are in one place: whatever opens the phone up needs the open window (or the friend's
- * emergency window) and a clock the network agrees with; whatever closes it more is always allowed. Several calls ask the network for
- * the time, so call them off the main thread.
+ * Every change goes through here, so the rules are in one place. Whatever closes the phone more applies at once. Whatever opens it up
+ * becomes a request that waits (seven days by default) and is carried out only in the open window, with a clock the network agrees
+ * with. The friend's code never changes a setting: it unblocks one named app for an hour. Several calls ask the network for the time,
+ * so call them off the main thread.
  */
 class ChangeManager(private val context: Context) {
     private val store = ConfigStore(context)
@@ -37,97 +40,126 @@ class ChangeManager(private val context: Context) {
     private val events = EventLog(context)
     private val secrets = SecretStore(context)
     private val dpm = context.getSystemService(DevicePolicyManager::class.java)
+    private val editor = AppListEditor()
 
     private fun config(): LockConfig = checkNotNull(store.load()) { "the setup has not been finished" }
 
-    private fun gate(config: LockConfig) = ChangeGate(Rules.schedule(config))
-
-    private fun decide(kind: ChangeKind, config: LockConfig, now: Instant, networkTime: Instant?): Decision =
-        gate(config).decide(kind, now, networkTime, state.emergencyUntil)
+    private fun gate(config: LockConfig) = ChangeGate(Rules.schedule(config), wait = Duration.ofDays(config.loosenWaitDays.toLong()))
 
     private fun refused(why: String, what: String, now: Instant): Outcome.Refused {
         events.add(EventKind.DENIED, "$what: $why", now)
         return Outcome.Refused("Not now: $why.")
     }
 
+    /** Puts something that opens the phone up in the queue. Asking again never restarts the wait. */
+    private fun ask(kind: RequestKind, target: String, now: Instant, settings: LockConfig? = null): Outcome {
+        val config = config()
+        val request = ChangeRequest(kind, target, now.toEpochMilli(), settings)
+        state.requests = Requests.add(state.requests, request)
+        val kept = state.requests.first { it.id == request.id }
+        events.add(EventKind.LOOSEN_REQUESTED, "$kind $target", now)
+        val ready = gate(config).readyAt(kept)
+        return Outcome.Done("Requested. It can be carried out in the open window after $ready.")
+    }
+
+    /** The waiting requests, oldest first. */
+    fun requests(): List<ChangeRequest> = state.requests.sortedBy { it.requestedAtMillis }
+
+    /** Gives up a waiting request. This closes things, so it is always allowed. */
+    fun cancelRequest(id: String, now: Instant = Instant.now()): Outcome {
+        state.requests = Requests.cancel(state.requests, id)
+        events.add(EventKind.REQUEST_CANCELLED, id, now)
+        return Outcome.Done("Cancelled.")
+    }
+
+    /** Carries out a waiting request, if its wait is over and the open window is running. */
+    fun applyRequest(id: String, now: Instant = Instant.now(), networkTime: Instant? = NetworkClock.now()): Outcome {
+        val request = state.requests.firstOrNull { it.id == id } ?: return Outcome.Refused("That request is gone.")
+        val config = config()
+        val decision = gate(config).decideApply(request, now, networkTime)
+        if (decision is Decision.Denied) return refused(decision.why, "apply ${request.id}", now)
+
+        val updated: LockConfig = when (request.kind) {
+            RequestKind.NIGHT_ADD -> config.copy(nightAllowlist = config.nightAllowlist + request.target, alwaysBlocked = config.alwaysBlocked - request.target)
+            RequestKind.BLOCKED_REMOVE -> config.copy(alwaysBlocked = config.alwaysBlocked - request.target)
+            RequestKind.SETTINGS -> request.settings ?: return Outcome.Refused("That request holds no settings.")
+            RequestKind.BROWSER -> { state.approveBrowser(request.target); config }
+            RequestKind.RELEASE_APP -> { state.release(request.target); config }
+            RequestKind.REMOVE_PROTECTION -> return Outcome.Refused("Taking the protection off needs your friend's code: use Remove protection.")
+        }
+        ConfigRules.problems(updated).firstOrNull()?.let { return Outcome.Refused(it) }
+        if (updated != config) store.save(updated)
+        state.requests = Requests.cancel(state.requests, id)
+        events.add(EventKind.LOOSENED, "${request.kind} ${request.target}", now)
+        if (request.kind == RequestKind.BROWSER) events.add(EventKind.BROWSER_APPROVED, request.target, now)
+        if (request.kind == RequestKind.RELEASE_APP) events.add(EventKind.APP_RELEASED, request.target, now)
+        PolicyRunner(context).runIfActive(now)
+        return Outcome.Done("Carried out.")
+    }
+
     /** Add or remove an app on the night list or the always-blocked list. Before protection starts these are free. */
-    fun editList(list: AppList, op: ListOp, packageName: String, now: Instant = Instant.now(), networkTime: Instant? = NetworkClock.now()): Outcome {
+    fun editList(list: AppList, op: ListOp, packageName: String, now: Instant = Instant.now()): Outcome {
         val config = config()
         val current = if (list == AppList.NIGHT_ALLOWED) config.nightAllowlist else config.alwaysBlocked
         val untouchable = DeviceInventory(context).read().protectedPackages + context.packageName
-        val editor = AppListEditor(gate(config))
-        val newList: Set<String> = if (store.protectionActive) {
-            val result = editor.edit(list, op, current, packageName, untouchable, now, networkTime, state.emergencyUntil)
-            val decision = result.decision
-            if (decision is Decision.Denied) return refused(decision.why, "$op $packageName on $list", now)
-            result.list
-        } else {
-            // Before protection starts everything is free, except the packages that keep the phone working.
-            if (packageName in untouchable) return Outcome.Refused("This app keeps the phone working and cannot be listed.")
-            if (op == ListOp.ADD) current + packageName else current - packageName
-        }
+        if (packageName in untouchable) return Outcome.Refused("This app keeps the phone working and cannot be listed.")
+
+        val loosens = editor.kindOf(list, op) == ChangeKind.LOOSEN
+        if (store.protectionActive && loosens) return ask(editor.requestKind(list), packageName, now)
+
+        val newList: Set<String> = if (op == ListOp.ADD) current + packageName else current - packageName
         val updated = if (list == AppList.NIGHT_ALLOWED) config.copy(nightAllowlist = newList) else config.copy(alwaysBlocked = newList)
-        val problem = ConfigRules.problems(updated).firstOrNull()
-        if (problem != null) return Outcome.Refused(problem)
+        ConfigRules.problems(updated).firstOrNull()?.let { return Outcome.Refused(it) }
         store.save(updated)
-        events.add(if (editor.kindOf(list, op) == ChangeKind.LOOSEN) EventKind.LOOSENED else EventKind.TIGHTENED, "$op $packageName on $list", now)
+        if (store.protectionActive) events.add(EventKind.TIGHTENED, "$op $packageName on $list", now)
         PolicyRunner(context).runIfActive(now)
         return Outcome.Done()
     }
 
-    /** Saves changed settings (DNS host, browser, rhythm, location). Every change counts as opening up, so after protection starts it needs the window. */
-    fun saveSettings(updated: LockConfig, now: Instant = Instant.now(), networkTime: Instant? = NetworkClock.now()): Outcome {
-        val problem = ConfigRules.problems(updated).firstOrNull()
-        if (problem != null) return Outcome.Refused(problem)
+    /** Saves changed settings (DNS host, browser, rhythm, location). After protection starts every change is a request that waits. */
+    fun saveSettings(updated: LockConfig, now: Instant = Instant.now()): Outcome {
+        ConfigRules.problems(updated).firstOrNull()?.let { return Outcome.Refused(it) }
         if (store.protectionActive) {
-            val old = config()
-            if (old == updated) return Outcome.Done("Nothing changed.")
-            val decision = decide(ChangeKind.LOOSEN, old, now, networkTime)
-            if (decision is Decision.Denied) return refused(decision.why, "settings", now)
-            events.add(EventKind.LOOSENED, "settings changed", now)
+            if (config() == updated) return Outcome.Done("Nothing changed.")
+            return ask(RequestKind.SETTINGS, "settings", now, updated)
         }
         store.save(updated)
         PolicyRunner(context).runIfActive(now)
         return Outcome.Done("Saved.")
     }
 
-    /** The open window: an app held back after it was installed is let through. */
-    fun releaseApp(packageName: String, now: Instant = Instant.now(), networkTime: Instant? = NetworkClock.now()): Outcome {
-        val decision = decide(ChangeKind.LOOSEN, config(), now, networkTime)
-        if (decision is Decision.Denied) return refused(decision.why, "release $packageName", now)
-        state.release(packageName)
-        events.add(EventKind.APP_RELEASED, packageName, now)
-        PolicyRunner(context).runIfActive(now)
-        return Outcome.Done()
-    }
+    /** A new app held back since it was installed: asking to let it through is a request that waits. */
+    fun releaseApp(packageName: String, now: Instant = Instant.now()): Outcome = ask(RequestKind.RELEASE_APP, packageName, now)
 
-    /** Ask for a closed browser. The wait starts now and a second request does not restart it. */
+    /** Ask for a closed browser. A browser is a new door, so it waits like every other opening. */
     fun requestBrowser(packageName: String, now: Instant = Instant.now()): Outcome {
-        val config = config()
-        val approval = BrowserApproval(Rules.schedule(config), Duration.ofMinutes(config.browserWaitMinutes.toLong()))
-        state.browserRequests = approval.requested(state.browserRequests, packageName, now)
         events.add(EventKind.BROWSER_REQUESTED, packageName, now)
-        PolicyRunner(context).runIfActive(now)
-        return Outcome.Done("Requested.")
+        return ask(RequestKind.BROWSER, packageName, now)
     }
 
-    /** The friend's code opens a 60-minute emergency window. */
-    fun redeemEmergency(code: String, now: Instant = Instant.now()): Outcome {
+    /**
+     * The friend's code unblocks one app for 60 minutes, then it closes again by itself. It changes no setting and no list.
+     */
+    fun redeemEmergency(code: String, packageName: String, now: Instant = Instant.now()): Outcome {
+        if (packageName.isBlank()) return Outcome.Refused("Choose the app to unblock.")
+        val untouchable = DeviceInventory(context).read().protectedPackages + context.packageName
+        if (packageName in untouchable) return Outcome.Refused("That app is never blocked.")
         val secret = secrets.load() ?: return Outcome.Refused("No friend code is set up.")
         val redemption = Emergency(secret).redeem(code, now, state.lastCodeCounter)
         if (redemption == null) {
             events.add(EventKind.EMERGENCY_REFUSED, "wrong or used code", now)
             return Outcome.Refused("That code is wrong or was already used.")
         }
-        state.emergencyUntil = redemption.until
+        state.unblock(packageName, redemption.until)
         state.lastCodeCounter = redemption.counter
-        events.add(EventKind.EMERGENCY_USED, "until ${redemption.until}", now)
-        return Outcome.Done("Emergency window open for 60 minutes.")
+        events.add(EventKind.EMERGENCY_USED, "$packageName until ${redemption.until}", now)
+        PolicyRunner(context).runIfActive(now)
+        return Outcome.Done("$packageName is open for 60 minutes. It closes by itself.")
     }
 
     /**
-     * Checks a code while the friend is on the phone during setup, to prove the secret reached them. Does not use up the code for real
-     * unlocks: the counter is remembered so the same code cannot open an emergency window a moment later.
+     * Checks a code while the friend is on the phone during setup, to prove the secret reached them. The counter is remembered so the
+     * same code cannot be used for an unblock a moment later.
      */
     fun verifyEnrolment(code: String, now: Instant = Instant.now()): Boolean {
         val secret = secrets.load() ?: return false
@@ -136,7 +168,7 @@ class ChangeManager(private val context: Context) {
         return check is CodeCheck.Accepted
     }
 
-    /** Makes the friend's secret (once, in setup) and returns it for the owner to send. Replaces any earlier one. */
+    /** Makes the friend's secret (once, in setup) and returns it for the QR code. Replaces any earlier one. */
     fun newFriendSecret(): ByteArray = FriendCode.newSecret().also {
         secrets.save(it)
         state.lastCodeCounter = null
@@ -156,12 +188,17 @@ class ChangeManager(private val context: Context) {
         return if (result.report.ok) Outcome.Done("Protection is on.") else Outcome.Done("Protection is on, but not everything could be applied: ${result.report.failed.joinToString("; ")}")
     }
 
-    /** Takes the protection off: needs the open window (or an emergency) and the friend's code. */
+    /** Asks to take the protection off. It waits like every opening; the friend's code is needed when it is carried out. */
+    fun requestRemoval(now: Instant = Instant.now()): Outcome = ask(RequestKind.REMOVE_PROTECTION, "", now)
+
+    /** Takes the protection off: the request has waited, the open window is running, and the friend's code is fresh. */
     fun removeProtection(code: String, now: Instant = Instant.now(), networkTime: Instant? = NetworkClock.now()): Outcome {
         val config = config()
         val secret = secrets.load() ?: return Outcome.Refused("No friend code is set up.")
+        val request = state.requests.firstOrNull { it.kind == RequestKind.REMOVE_PROTECTION }
+            ?: return Outcome.Refused("Ask to remove the protection first. The request waits ${config.loosenWaitDays} days.")
         events.add(EventKind.REMOVAL_REQUESTED, "", now)
-        val gate = decide(ChangeKind.LOOSEN, config, now, networkTime)
+        val gate = gate(config).decideApply(request, now, networkTime)
         val check = CodeChecker(secret).check(code, now, state.lastCodeCounter)
         val decision = Removal.decide(gate, check)
         if (decision is Decision.Denied) return refused(decision.why, "remove protection", now)
@@ -172,7 +209,8 @@ class ChangeManager(private val context: Context) {
         PolicyRunner(context).cancelAlarm()
         store.protectionActive = false
         events.add(EventKind.PROTECTION_REMOVED, "", now)
-        state.emergencyUntil = null
+        state.clearUnblocks()
+        state.requests = emptyList()
         dpm.clearDeviceOwnerApp(context.packageName)
         return Outcome.Done("Protection removed. This app is no longer the device owner and can be uninstalled.")
     }

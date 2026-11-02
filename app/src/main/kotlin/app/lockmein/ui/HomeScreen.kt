@@ -40,13 +40,15 @@ fun HomeScreen() {
                     when (phase) {
                         Phase.DAY -> "Now: day."
                         Phase.NIGHT -> "Now: night. Only the night apps run."
-                        Phase.OPEN_WINDOW -> "Now: the open window. You can change things."
+                        Phase.OPEN_WINDOW -> "Now: the open window. Requests that waited can be carried out."
                     },
                 )
                 Text("Next change: ${TIME.format(schedule.nextTransition(now).atZone(zone))}")
                 Text("Open window next: ${TIME.format(schedule.nextWindowStart(now).atZone(zone))}")
                 if (state.quarantined.isNotEmpty()) Text("${state.quarantined.size} new app(s) are held back until you review them.")
-                state.emergencyUntil?.takeIf { it.isAfter(now) }?.let { Text("Emergency window open until ${TIME.format(it.atZone(zone))}.") }
+                state.unblocks(now).forEach { (pkg, until) -> Text("${pkg.substringAfterLast('.')} is open until ${TIME.format(until.atZone(zone))}.") }
+                val waiting = state.requests.size
+                if (waiting > 0) Text("$waiting request(s) waiting for the open window.")
             }
         }
 

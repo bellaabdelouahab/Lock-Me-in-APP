@@ -4,7 +4,6 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import app.lockmein.core.BrowserApproval
 import app.lockmein.core.BuildMode
 import app.lockmein.core.EventKind
 import app.lockmein.core.Inventory
@@ -36,22 +35,18 @@ class PolicyRunner(private val context: Context) {
         val state = LockState(context)
 
         state.noteInstalled(snapshot.installed).forEach { events.add(EventKind.APP_QUARANTINED, it, now) }
-        val approval = BrowserApproval(schedule, Duration.ofMinutes(config.browserWaitMinutes.toLong()))
-        approval.due(state.browserRequests, now).filter { it !in state.approvedBrowsers }.forEach {
-            state.approveBrowser(it)
-            events.add(EventKind.BROWSER_APPROVED, it, now)
-        }
+        val unblocks = state.unblocks(now)
 
         val mode = if (BuildConfig.DEBUG) BuildMode.TEST else BuildMode.SEALED
         val plan = PolicyPlanner(Rules.forDevice(snapshot, context.packageName, config), config.dnsHost).plan(
             schedule.phaseAt(now),
             mode,
-            Inventory(snapshot.installed, state.approvedBrowsers, state.quarantined),
+            Inventory(snapshot.installed, state.approvedBrowsers, state.quarantined, unblocks.keys),
         )
         val report = PolicyApplier(context).apply(plan)
         events.add(if (report.ok) EventKind.PASS_OK else EventKind.PASS_FAILED, report.failed.joinToString("; "), now)
 
-        val next = minOf(schedule.nextTransition(now), now.plus(CHECK_EVERY))
+        val next = listOfNotNull(schedule.nextTransition(now), now.plus(CHECK_EVERY), unblocks.values.minOrNull()).min()
         scheduleAt(next)
         return RunResult(report, next)
     }

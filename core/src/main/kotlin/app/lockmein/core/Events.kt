@@ -18,7 +18,13 @@ enum class EventKind {
     BROWSER_REQUESTED,
     BROWSER_APPROVED,
 
-    /** A change that opens the phone up was applied. */
+    /** Something that opens the phone up was asked for and is waiting. */
+    LOOSEN_REQUESTED,
+
+    /** A waiting request was cancelled. */
+    REQUEST_CANCELLED,
+
+    /** A waiting request was carried out in the open window. */
     LOOSENED,
 
     /** A change was refused (detail says why). */

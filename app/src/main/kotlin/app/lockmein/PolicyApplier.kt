@@ -3,6 +3,8 @@ package app.lockmein
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
+import android.os.Bundle
+import app.lockmein.core.ChromePolicy
 import app.lockmein.core.PolicyPlan
 import app.lockmein.core.Restrictions
 
@@ -34,6 +36,12 @@ class PolicyApplier(context: Context) {
         if (dns != DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR) failed += "private dns host ${plan.privateDnsHost}: code $dns"
         if (Restrictions.CONFIG_PRIVATE_DNS in plan.restrictions) dpm.addUserRestriction(admin, Restrictions.CONFIG_PRIVATE_DNS)
 
+        // The clock and the zone come from the network and cannot be changed by hand (the restriction above closes the Settings page).
+        dpm.setAutoTimeEnabled(admin, true)
+        dpm.setAutoTimeZoneEnabled(admin, true)
+
+        dpm.setApplicationRestrictions(admin, ChromePolicy.PACKAGE, if (plan.managedChrome) chromeBundle() else Bundle())
+
         for (pkg in plan.uninstallBlocked) dpm.setUninstallBlocked(admin, pkg, true)
         dpm.setUserControlDisabledPackages(admin, plan.userControlDisabled.toList())
 
@@ -51,10 +59,17 @@ class PolicyApplier(context: Context) {
         val failed = mutableListOf<String>()
         for (key in ALL_RESTRICTIONS + Restrictions.CONFIG_PRIVATE_DNS) dpm.clearUserRestriction(admin, key)
         dpm.setGlobalPrivateDnsModeOpportunistic(admin)
+        dpm.setApplicationRestrictions(admin, ChromePolicy.PACKAGE, Bundle())
         dpm.setUninstallBlocked(admin, packageName, false)
         dpm.setUserControlDisabledPackages(admin, emptyList())
         if (suspended.isNotEmpty()) failed += dpm.setPackagesSuspended(admin, suspended.toTypedArray(), false).map { "unsuspend $it" }
         return ApplyReport(failed)
+    }
+
+    private fun chromeBundle() = Bundle().apply {
+        ChromePolicy.STRINGS.forEach(::putString)
+        ChromePolicy.INTS.forEach(::putInt)
+        ChromePolicy.BOOLEANS.forEach(::putBoolean)
     }
 
     /**

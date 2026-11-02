@@ -21,15 +21,19 @@ import app.lockmein.LockState
 import app.lockmein.Outcome
 import app.lockmein.Rules
 import app.lockmein.core.AppList
+import app.lockmein.core.ChangeGate
+import app.lockmein.core.ChangeRequest
 import app.lockmein.core.ListOp
 import app.lockmein.core.Phase
+import app.lockmein.core.RequestKind
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private val TIME = DateTimeFormatter.ofPattern("EEE d MMM HH:mm")
 
-/** The weekly open window: review the apps that arrived, and reach everything that can be changed. */
+/** The weekly open window, and the requests waiting for it. The window carries out what was asked a week ago; it is not for using apps. */
 @Composable
 fun WindowScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -44,34 +48,65 @@ fun WindowScreen(onBack: () -> Unit) {
     val config = store.load() ?: return Page("The open window", onBack) { Note("Finish the setup first.") }
 
     val schedule = Rules.schedule(config)
+    val gate = ChangeGate(schedule, wait = Duration.ofDays(config.loosenWaitDays.toLong()))
     val now = Instant.now()
     val zone = ZoneId.systemDefault()
-    val open = schedule.phaseAt(now) == Phase.OPEN_WINDOW || state.emergencyUntil?.isAfter(now) == true
+    val open = schedule.phaseAt(now) == Phase.OPEN_WINDOW
+    val waiting = remember(version) { manager.requests() }
     val held = remember(version) { state.quarantined.sorted() }
+
+    fun describe(request: ChangeRequest): String = when (request.kind) {
+        RequestKind.NIGHT_ADD -> "Allow at night: ${inventory.label(request.target)}"
+        RequestKind.BLOCKED_REMOVE -> "Unblock: ${inventory.label(request.target)}"
+        RequestKind.BROWSER -> "Open the browser: ${inventory.label(request.target)}"
+        RequestKind.RELEASE_APP -> "Let the new app through: ${inventory.label(request.target)}"
+        RequestKind.SETTINGS -> "Change the settings"
+        RequestKind.REMOVE_PROTECTION -> "Remove the protection"
+    }
 
     Page("The open window", onBack) {
         InfoCard {
-            Text(if (open) "The window is open: you can change things now." else "The window is closed. It opens ${TIME.format(schedule.nextWindowStart(now).atZone(zone))}.")
-            if (!open) Text("Closing the phone more (removing a night app, blocking an app) works any time. Opening it up waits for the window, or your friend's code.")
+            Text(if (open) "The window is open now." else "The window is closed. It opens ${TIME.format(schedule.nextWindowStart(now).atZone(zone))}.")
+            Text("Closing the phone more (removing a night app, blocking an app, cancelling a request) works at any time. Opening it up is a request: it waits ${config.loosenWaitDays} days, then you carry it out here.")
         }
         OutcomeText(outcome)
 
+        Heading("Waiting requests")
+        if (waiting.isEmpty()) Note("None.")
+        waiting.forEach { request ->
+            val ready = gate.readyAt(request)
+            InfoCard {
+                Text(describe(request))
+                Text(if (now >= ready) "Wait is over." else "Can be carried out after ${TIME.format(ready.atZone(zone))}.")
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    if (request.kind == RequestKind.REMOVE_PROTECTION) {
+                        TextButton(onClick = { navigate(Screen.REMOVE) }) { Text("Remove with friend's code") }
+                    } else {
+                        TextButton(enabled = now >= ready && open, onClick = {
+                            scope.background({ manager.applyRequest(request.id) }) { outcome = it; version++ }
+                        }) { Text("Carry out") }
+                    }
+                    TextButton(onClick = { scope.background({ manager.cancelRequest(request.id) }) { outcome = it; version++ } }) { Text("Cancel") }
+                }
+            }
+        }
+
         Heading("New apps held back")
-        Note("Apps installed since protection started stay suspended until you let them through here.")
+        Note("Apps installed since protection started stay suspended. Letting one through is a request like any other opening; blocking it is instant.")
         if (held.isEmpty()) Note("None.")
         held.forEach { pkg ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(inventory.label(pkg), Modifier.weight(1f))
                 TextButton(onClick = {
                     scope.background({ manager.releaseApp(pkg) }) { outcome = it; version++ }
-                }) { Text("Let through") }
+                }) { Text("Ask to let through") }
                 TextButton(onClick = {
                     scope.background({ manager.editList(AppList.ALWAYS_BLOCKED, ListOp.ADD, pkg).also { if (it is Outcome.Done) state.release(pkg) } }) { outcome = it; version++ }
                 }) { Text("Block") }
             }
         }
 
-        Heading("Change")
+        Heading("Ask for a change")
         SecondaryButton("Night and blocked apps", { navigate(Screen.LISTS) })
         SecondaryButton("Browsers", { navigate(Screen.BROWSERS) })
         SecondaryButton("Settings", { navigate(Screen.SETTINGS) })

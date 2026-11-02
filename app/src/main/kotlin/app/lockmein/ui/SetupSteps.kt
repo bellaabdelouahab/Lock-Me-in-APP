@@ -28,7 +28,8 @@ import androidx.compose.ui.unit.dp
 import app.lockmein.AppInfo
 import app.lockmein.BuildConfig
 import app.lockmein.ChangeManager
-import app.lockmein.core.Base32
+import app.lockmein.core.KnownBrowsers
+import app.lockmein.core.NightRisk
 import app.lockmein.core.ConfigRules
 import app.lockmein.core.FriendCode
 import app.lockmein.core.LockConfig
@@ -68,11 +69,11 @@ fun DnsStep(draft: LockConfig, onChange: (LockConfig) -> Unit) {
 @Composable
 fun BrowserStep(draft: LockConfig, apps: SetupApps?, onChange: (LockConfig) -> Unit) {
     Heading("3. Which browser stays open")
-    Note("One browser stays open; every other browser is closed. You can ask for a closed one in the app and it opens after a wait, by day only.")
+    Note("One browser stays open; every other browser (Brave, Mi Browser, Opera, Firefox, the Google app) is closed, because their private windows and own secure-DNS can go around the filter. Chrome is the recommended choice: this app configures it so private windows are off, its own secure DNS is off, safe search is forced and YouTube restricted mode is strict. A closed browser can be requested later; it waits 7 days and opens in the weekly window.")
     if (apps == null) return Note("Reading your apps...")
     ChoiceRow("No browser stays open", draft.allowedBrowser == null) { onChange(draft.copy(allowedBrowser = null)) }
-    apps.browsers.forEach { app ->
-        ChoiceRow("${app.label} (${app.packageName})", draft.allowedBrowser == app.packageName) {
+    apps.browsers.sortedByDescending { it.packageName == KnownBrowsers.CHROME }.forEach { app ->
+        ChoiceRow("${app.label}${if (app.packageName == KnownBrowsers.CHROME) " (recommended)" else ""}", draft.allowedBrowser == app.packageName) {
             onChange(draft.copy(allowedBrowser = app.packageName, alwaysBlocked = draft.alwaysBlocked - app.packageName))
         }
     }
@@ -81,13 +82,16 @@ fun BrowserStep(draft: LockConfig, apps: SetupApps?, onChange: (LockConfig) -> U
 @Composable
 fun NightStep(draft: LockConfig, apps: SetupApps?, onChange: (LockConfig) -> Unit) {
     Heading("4. Apps that may run at night")
-    Note("From the night start until fajr only these apps and the phone's essentials (calls, messages, keyboard, settings) work. Pick your music player, alarm clock and authenticator. You can change this later, but only in the open window.")
+    Note("From the night start until fajr only these apps and the phone's essentials (calls, messages, keyboard, settings) work. Pick your music player, alarm clock and authenticator. Pick audio-only apps: music apps that also play video (YouTube Music, Spotify, Deezer) are a way back to video, so the best choice is an offline audio player with downloaded files. Adding an app later waits 7 days and applies in the weekly window.")
     if (apps == null) return Note("Reading your apps...")
     apps.launchable.forEach { app ->
         val on = app.packageName in draft.nightAllowlist
         Row(Modifier.fillMaxWidth().selectable(on, onClick = { onChange(toggle(draft, app.packageName, !on)) }), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(on, onCheckedChange = { onChange(toggle(draft, app.packageName, it)) })
-            Text(app.label, Modifier.padding(start = 4.dp))
+            Column(Modifier.padding(start = 4.dp)) {
+                Text(app.label)
+                NightRisk.warning(app.packageName)?.let { Text("Careful: $it", style = androidx.compose.material3.MaterialTheme.typography.bodySmall) }
+            }
         }
     }
 }
@@ -104,32 +108,22 @@ fun RhythmStep(draft: LockConfig, onChange: (LockConfig) -> Unit) {
 
 @Composable
 fun FriendStep(manager: ChangeManager, verified: Boolean, onVerified: () -> Unit) {
-    val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var secret by remember { mutableStateOf<ByteArray?>(null) }
     var typed by remember { mutableStateOf("") }
     var wrong by remember { mutableStateOf(false) }
 
     Heading("6. The friend's code")
-    Note("A friend holds the key to emergencies and to taking the protection off. This app makes a secret and shows it once. Your friend adds it to their authenticator app; from then on they can read you a 6-digit code when you really need one. The app keeps the secret where you cannot read it back.")
+    Note("A friend holds the key to emergencies and to taking the protection off. Do this step with your friend next to you. The app shows a QR code once; your friend scans it with an authenticator app on their own phone. There is no text to copy and no link to send, and the screen cannot be captured. The app keeps the secret where you cannot read it back.")
     val shown = secret
     if (shown == null) {
         SecondaryButton(if (manager.hasFriendSecret) "Make a new secret (replaces the old one)" else "Make the friend's secret", { secret = manager.newFriendSecret() })
         if (manager.hasFriendSecret && !verified) Note("A secret exists but was not confirmed with your friend yet. Make a new one to confirm it.")
         return
     }
-    val uri = FriendCode.otpauthUri(shown)
-    InfoCard {
-        Text("Secret: ${Base32.encode(shown).chunked(4).joinToString(" ")}")
-        Text("Authenticator link: $uri", style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
-    }
-    SecondaryButton("Copy the link", { clipboard.setText(AnnotatedString(uri)) })
-    SecondaryButton("Send it to my friend", {
-        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "Add this to your authenticator app (open the link, or enter the secret): $uri")
-        context.startActivity(Intent.createChooser(send, "Send to your friend").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    })
-    Note("Once they have added it, ask them to read you the current 6-digit code, and type it here. This proves it reached them. If you keep the message, you keep a copy of the key: delete it after you send it.")
+    SecretScreen()
+    QrImage(FriendCode.otpauthUri(shown))
+    Note("Your friend scans this in their authenticator app, then reads you the current 6-digit code. Type it here. This proves it reached them; the QR code disappears once it matches.")
     OutlinedTextField(
         value = typed,
         onValueChange = { typed = it.filter(Char::isDigit).take(6); wrong = false },
@@ -160,14 +154,14 @@ fun ReviewStep(draft: LockConfig, apps: SetupApps?, friendVerified: Boolean, out
         Text("DNS: ${draft.dnsHost}")
         Text("Browser: ${draft.allowedBrowser?.let(::label) ?: "none stays open"}")
         Text("Night apps: ${draft.nightAllowlist.joinToString { label(it) }.ifBlank { "none" }}")
-        Text("Night starts ${draft.nightStart}; open window day ${draft.windowDay} (1 = Monday) ${draft.windowStart} to ${draft.windowEnd}")
+        Text("Night starts ${draft.nightStart}; weekly window on day ${draft.windowDay} (1 = Monday) ${draft.windowStart} to ${draft.windowEnd}")
         Text("Fajr from ${draft.latitude}, ${draft.longitude} at ${draft.sunAngleDegrees} degrees")
         Text("Friend's code: ${if (friendVerified) "confirmed" else "not confirmed"}")
         Text(if (BuildConfig.DEBUG) "Build: test (can be removed over USB)" else "Build: sealed (USB debugging and factory reset are blocked)")
     }
     problems.forEach { Problem(it) }
     if (!friendVerified) Problem("Confirm the friend's code first.")
-    Note("After you start, changes that open the phone up work only in the open window, or with your friend's code. Adding accounts back is fine.")
+    Note("After you start, anything that opens the phone up is a request: it waits 7 days, then you carry it out in the weekly window. Closing things works at once. Your friend's code unblocks one app for an hour in a real emergency, and changes nothing else. Adding accounts back is fine.")
     OutcomeText(outcome)
     MenuButton(if (working) "Starting..." else "Start protection", enabled = !working && problems.isEmpty() && friendVerified, onClick = onStart)
 }

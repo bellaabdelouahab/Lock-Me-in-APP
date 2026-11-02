@@ -43,3 +43,16 @@ Source: the spec in the owner's vault plus the answers below. Where an answer ch
 ## Staging (data safety)
 1. Test-only build (removable over USB, does not block debugging): first nights on the phone.
 2. Sealed build (blocks debugging, uninstall, safe boot): only after the test nights and a full backup.
+
+## Revision 2026-11-02 (after the outside review of 0.2.0)
+
+These replace the matching lines above where they differ.
+
+- Open window: Monday 09:00 to 10:00, not Sunday evening. It is for carrying out waiting requests, not for using apps.
+- Every loosening (night app, unblock, browser, new app, settings, removal) is a request that waits 7 days, then applies in the window with a network-confirmed clock. Tightening stays instant.
+- YouTube is blocked in every phase. The window does not unlock it.
+- Browsers: Chrome is the recommended single browser, configured by the app (secure DNS off, private windows off, safe search, YouTube strict). Brave and every other browser are closed. A new browser is an ordinary 7-day request.
+- Friend code: shown once as a QR code with the friend present. No text, no copy, no link.
+- Emergency: the friend's code unblocks one named app for 60 minutes, then it closes by itself. No setting changes.
+- Night list: audio-only. The app warns about video-capable music apps; the owner still decides.
+- Not built: the Saturday "yes" step, a day window for YouTube, a network-clock schedule, the screen check (deferred).
