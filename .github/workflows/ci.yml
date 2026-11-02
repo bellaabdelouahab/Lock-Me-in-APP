@@ -40,16 +40,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          script: |
-            adb shell cmd connectivity airplane-mode disable
-            adb shell svc wifi enable
-            adb shell svc data enable
-            for i in $(seq 1 30); do adb shell ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1 && break; sleep 2; done
-            adb shell "ip route; ping -c 1 -W 3 8.8.8.8; echo ping_rc=\$?"
-            adb shell "echo | toybox nc -w 5 8.8.8.8 853; echo dot_8888_rc=\$?"
-            ./gradlew :app:installDebug --console=plain
-            adb shell dpm set-device-owner app.lockmein/.AdminReceiver
-            ./gradlew :app:connectedDebugAndroidTest --console=plain
+          script: bash scripts/ci-emulator.sh
       - name: Test report
         if: always()
         uses: actions/upload-artifact@v4
