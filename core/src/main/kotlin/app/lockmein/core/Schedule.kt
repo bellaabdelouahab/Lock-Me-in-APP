@@ -77,6 +77,21 @@ class Schedule(
         }
     }
 
+    /** The next moment the phase can change after [instant]: fajr, the start of the Sunday window, or the start of the night. */
+    fun nextTransition(instant: Instant): Instant {
+        val local = instant.atZone(zone)
+        val today = local.toLocalDate()
+        val candidates = (0L..8L).flatMap { offset ->
+            val date = today.plusDays(offset)
+            buildList {
+                add(ZonedDateTime.of(date, fajr.fajr(date), zone).toInstant())
+                add(ZonedDateTime.of(date, config.nightStart, zone).toInstant())
+                if (date.dayOfWeek == config.windowDay) add(ZonedDateTime.of(date, config.windowStart, zone).toInstant())
+            }
+        }
+        return candidates.filter { it.isAfter(instant) }.min()
+    }
+
     private fun inOpenWindow(local: ZonedDateTime): Boolean {
         if (local.dayOfWeek != config.windowDay) return false
         val time = local.toLocalTime()

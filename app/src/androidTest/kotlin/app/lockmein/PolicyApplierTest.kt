@@ -14,6 +14,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * Runs on a real emulator where the app has been made device owner (`dpm set-device-owner`, see the CI workflow).
@@ -71,6 +73,23 @@ class PolicyApplierTest {
         PolicyApplier(context).apply(planner.plan(Phase.DAY, BuildMode.TEST, inventory))
         val stillSuspendedByDay = planner.plan(Phase.DAY, BuildMode.TEST, inventory).suspended
         assertEquals(victim in stillSuspendedByDay, dpm.isPackageSuspended(admin, victim))
+    }
+
+    @Test
+    fun theRunnerFollowsTheClockAndNamesTheNextPass() {
+        val zone = ZoneId.systemDefault()
+        val night = LocalDate.of(2026, 11, 3).atTime(2, 0).atZone(zone).toInstant() // a Tuesday, deep night
+        val noon = LocalDate.of(2026, 11, 3).atTime(12, 0).atZone(zone).toInstant()
+        val victim = planner.plan(Phase.NIGHT, BuildMode.TEST, inventory).suspended.first()
+
+        val atNight = PolicyRunner(context).run(night)
+        assertTrue("the night pass should finish: ${atNight.report.failed}", atNight.report.ok)
+        assertTrue(dpm.isPackageSuspended(admin, victim))
+        assertTrue(atNight.nextRunAt.isAfter(night) && !atNight.nextRunAt.isAfter(night.plus(PolicyRunner.CHECK_EVERY)))
+
+        val atNoon = PolicyRunner(context).run(noon)
+        assertTrue(atNoon.nextRunAt.isAfter(noon))
+        assertEquals(victim in planner.plan(Phase.DAY, BuildMode.TEST, inventory).suspended, dpm.isPackageSuspended(admin, victim))
     }
 
     @Test

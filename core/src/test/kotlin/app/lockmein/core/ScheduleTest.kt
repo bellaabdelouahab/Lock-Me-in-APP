@@ -70,6 +70,28 @@ class ScheduleTest {
     }
 
     @Test
+    fun `the next transition is the nearest of fajr, the Sunday window and 22 00`() {
+        assertEquals(at("2026-11-02", "05:30"), schedule.nextTransition(at("2026-11-02", "03:00")))
+        assertEquals(at("2026-11-02", "22:00"), schedule.nextTransition(at("2026-11-02", "05:30")))
+        assertEquals(at("2026-11-03", "05:30"), schedule.nextTransition(at("2026-11-02", "22:00")))
+        assertEquals(at("2026-11-01", "20:00"), schedule.nextTransition(at("2026-11-01", "12:00")))
+        assertEquals(at("2026-11-01", "22:00"), schedule.nextTransition(at("2026-11-01", "20:00")))
+    }
+
+    @Test
+    fun `every phase change is announced by a transition`() {
+        // Walk a week minute by minute: the phase may only change at the instant nextTransition named.
+        var now = at("2026-11-02", "00:00")
+        val end = at("2026-11-09", "00:00")
+        while (now.isBefore(end)) {
+            val next = schedule.nextTransition(now)
+            val phase = schedule.phaseAt(now)
+            assertEquals(phase, schedule.phaseAt(next.minusSeconds(1)), "phase moved before $next")
+            now = next
+        }
+    }
+
+    @Test
     fun `the window follows the clock when Morocco changes its offset`() {
         // Morocco moves to +00 for Ramadan; the zone rules carry that, the schedule only reads local time.
         val before = Schedule(ScheduleConfig(), { LocalTime.of(5, 30) }, ZoneId.of("Africa/Casablanca"))
