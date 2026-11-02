@@ -7,13 +7,14 @@ object OwnerRules {
     const val BRAVE = "com.brave.browser"
 
     /**
-     * Running at night besides the protected packages (which already cover Phone and Messages): Clock and Authenticator.
-     * The local audio player is added once the owner picks it.
+     * Running at night besides the protected packages (which already cover Phone and Messages): Clock, Authenticator and
+     * Deezer, the owner's music player.
      */
     private val nightAllowlist = setOf(
         "com.android.deskclock",
         "com.google.android.deskclock",
         "com.azure.authenticator",
+        "deezer.android.app",
     )
 
     fun forDevice(snapshot: DeviceSnapshot, appPackage: String) = AppRules(

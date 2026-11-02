@@ -58,8 +58,9 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :app:assembleDebug --console=plain
+      # The phone build: a test-only APK (removable over USB) that pins the owner's NextDNS profile.
+      - run: ./gradlew :app:assembleDebug -PdnsHost=poco-6b1bbb.dns.nextdns.io --console=plain
       - uses: actions/upload-artifact@v4
         with:
-          name: lock-me-in-debug-apk
+          name: lock-me-in-phone-test-apk
           path: app/build/outputs/apk/debug/app-debug.apk

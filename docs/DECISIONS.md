@@ -12,7 +12,8 @@ Source: the spec in the owner's vault plus the answers below. Where an answer ch
 - Instagram and Facebook run in the day under the screen check. Reels are allowed; the check blacks out anything suggestive.
 - YouTube (app and web): allowed **only inside the Sunday open window**. Suspended the rest of the time. YouTube app is suspended; YouTube in Brave is blocked by URL policy outside the window.
 - YouTube Music: allowed by day. At night only a local audio player (downloaded music and manhwa audio) is allowed.
-- Night allowlist: Phone, Messages, Clock, Authenticator, local audio player. (There is no Quran app on the phone.)
+- Night allowlist: Phone, Messages, Clock, Authenticator and Deezer (`deezer.android.app`, the owner's music player). There is no Quran app on the phone.
+- DNS: NextDNS profile `poco-6b1bbb.dns.nextdns.io`.
 - Always suspended or invisible: everything else at night, plus system-critical packages must be excluded from suspension (launcher, keyboard, SystemUI, Settings, dialer).
 - New apps: installed, then suspended at once (quarantine) and reviewed in the Sunday window.
 
