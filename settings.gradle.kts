@@ -20,3 +20,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "lock-me-in"
 include(":core")
+include(":app")
