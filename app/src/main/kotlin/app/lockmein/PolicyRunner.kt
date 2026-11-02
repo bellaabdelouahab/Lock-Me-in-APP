@@ -32,7 +32,7 @@ class PolicyRunner(private val context: Context) {
         state.noteInstalled(snapshot.installed)
         BrowserApproval(schedule).due(state.browserRequests, now).forEach(state::approveBrowser)
 
-        val rules = OwnerRules.forDevice(snapshot, context.packageName)
+        val rules = OwnerRules.forDevice(snapshot, context.packageName, state)
         val mode = if (BuildConfig.DEBUG) BuildMode.TEST else BuildMode.SEALED
         val plan = PolicyPlanner(rules, BuildConfig.DNS_HOST).plan(
             schedule.phaseAt(now),

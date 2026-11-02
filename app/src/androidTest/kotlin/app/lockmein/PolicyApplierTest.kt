@@ -5,7 +5,10 @@ import android.content.ComponentName
 import android.content.Context
 import android.os.UserManager
 import androidx.test.platform.app.InstrumentationRegistry
+import app.lockmein.core.AppList
 import app.lockmein.core.BuildMode
+import app.lockmein.core.Decision
+import app.lockmein.core.ListOp
 import app.lockmein.core.Inventory
 import app.lockmein.core.Phase
 import app.lockmein.core.PolicyPlanner
@@ -27,7 +30,7 @@ class PolicyApplierTest {
     private val users = context.getSystemService(UserManager::class.java)
     private val admin = ComponentName(context, AdminReceiver::class.java)
     private val snapshot = DeviceInventory(context).read()
-    private val planner = PolicyPlanner(OwnerRules.forDevice(snapshot, context.packageName), BuildConfig.DNS_HOST)
+    private val planner = PolicyPlanner(OwnerRules.forDevice(snapshot, context.packageName, LockState(context)), BuildConfig.DNS_HOST)
     private val inventory = Inventory(snapshot.installed)
 
     @Test
@@ -108,6 +111,43 @@ class PolicyApplierTest {
         val atNoon = PolicyRunner(context).run(noon)
         assertTrue(atNoon.nextRunAt.isAfter(noon))
         assertEquals(victim in planner.plan(Phase.DAY, BuildMode.TEST, inventory).suspended, dpm.isPackageSuspended(admin, victim))
+    }
+
+    @Test
+    fun theOwnerEditsTheListsOnlyWhereTheRulesAllow() {
+        val zone = ZoneId.systemDefault()
+        val sundayWindow = LocalDate.of(2026, 11, 1).atTime(20, 30).atZone(zone).toInstant()
+        val monday = LocalDate.of(2026, 11, 2).atTime(12, 0).atZone(zone).toInstant()
+        val state = LockState(context)
+        val manager = AppListManager(context)
+        val app = snapshot.installed.first { it !in snapshot.protectedPackages && it != context.packageName && it !in state.nightAllowlist }
+        val before = state.nightAllowlist
+        try {
+            // Opening the phone up on a Monday is refused and changes nothing.
+            assertTrue(manager.edit(AppList.NIGHT_ALLOWED, ListOp.ADD, app, monday, monday) is Decision.Denied)
+            assertEquals(before, state.nightAllowlist)
+
+            // The same edit in the Sunday window, with the network clock agreeing, goes through.
+            assertTrue(manager.edit(AppList.NIGHT_ALLOWED, ListOp.ADD, app, sundayWindow, sundayWindow) is Decision.Allowed)
+            assertTrue(app in state.nightAllowlist)
+
+            // A wound-forward phone clock is not believed: the network says it is Monday.
+            assertTrue(manager.edit(AppList.ALWAYS_BLOCKED, ListOp.REMOVE, app, sundayWindow, monday) is Decision.Denied)
+
+            // Closing the phone more works on a Monday.
+            assertTrue(manager.edit(AppList.NIGHT_ALLOWED, ListOp.REMOVE, app, monday, monday) is Decision.Allowed)
+            assertFalse(app in state.nightAllowlist)
+            assertTrue(manager.edit(AppList.ALWAYS_BLOCKED, ListOp.ADD, app, monday, monday) is Decision.Allowed)
+            assertTrue(dpm.isPackageSuspended(admin, app))
+
+            // The phone's own protected apps cannot be listed at all.
+            val launcher = snapshot.protectedPackages.first { it in snapshot.installed }
+            assertTrue(manager.edit(AppList.ALWAYS_BLOCKED, ListOp.ADD, launcher, sundayWindow, sundayWindow) is Decision.Denied)
+        } finally {
+            state.nightAllowlist = before
+            state.alwaysBlocked = emptySet()
+            PolicyRunner(context).run(monday)
+        }
     }
 
     @Test

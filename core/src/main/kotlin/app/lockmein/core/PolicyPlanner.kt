@@ -29,6 +29,8 @@ data class AppRules(
     val nightAllowlist: Set<String>,
     /** Launcher, keyboard, SystemUI, Settings, dialer: never suspended, in any phase. */
     val protectedPackages: Set<String>,
+    /** Apps the owner blocked for good: suspended in every phase, the open window included. */
+    val alwaysBlocked: Set<String> = emptySet(),
 )
 
 data class Inventory(
@@ -85,6 +87,7 @@ class PolicyPlanner(private val rules: AppRules, private val privateDnsHost: Str
         val youtube = if (phase == Phase.OPEN_WINDOW) emptySet() else setOf(rules.youtubeApp).intersect(managed)
         val nightOnly = if (phase == Phase.NIGHT) managed - rules.nightAllowlist else emptySet()
         val musicAtNight = if (phase == Phase.NIGHT) setOf(rules.youtubeMusic).intersect(managed) else emptySet()
-        return otherBrowsers + quarantined + youtube + nightOnly + musicAtNight
+        val blocked = rules.alwaysBlocked.intersect(managed)
+        return otherBrowsers + quarantined + youtube + nightOnly + musicAtNight + blocked
     }
 }

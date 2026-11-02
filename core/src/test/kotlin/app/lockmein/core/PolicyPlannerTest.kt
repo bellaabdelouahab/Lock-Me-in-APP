@@ -78,6 +78,29 @@ class PolicyPlannerTest {
     }
 
     @Test
+    fun `an app the owner blocked stays suspended in every phase`() {
+        val blocking = PolicyPlanner(rules.copy(alwaysBlocked = setOf(instagram)), "abc123.dns.nextdns.io")
+        for (phase in Phase.entries) {
+            assertTrue(instagram in blocking.plan(phase, BuildMode.SEALED, inventory).suspended, "phase $phase")
+        }
+    }
+
+    @Test
+    fun `a blocked app that is protected or not installed is left alone`() {
+        val blocking = PolicyPlanner(rules.copy(alwaysBlocked = setOf(phone, "not.installed")), "abc123.dns.nextdns.io")
+        val plan = blocking.plan(Phase.DAY, BuildMode.SEALED, inventory)
+        assertFalse(phone in plan.suspended)
+        assertFalse("not.installed" in plan.suspended)
+    }
+
+    @Test
+    fun `an app added to the night list runs at night`() {
+        val more = PolicyPlanner(rules.copy(nightAllowlist = rules.nightAllowlist + bank), "abc123.dns.nextdns.io")
+        assertFalse(bank in more.plan(Phase.NIGHT, BuildMode.SEALED, inventory).suspended)
+        assertTrue(bank in planner.plan(Phase.NIGHT, BuildMode.SEALED, inventory).suspended)
+    }
+
+    @Test
     fun `the phone, the launcher, settings and this app are never suspended`() {
         for (phase in Phase.entries) {
             val suspended = planner.plan(phase, BuildMode.SEALED, inventory).suspended

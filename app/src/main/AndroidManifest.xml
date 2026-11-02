@@ -23,6 +23,10 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".AppListsActivity"
+            android:exported="false" />
+
         <receiver
             android:name=".ReapplyReceiver"
             android:exported="false">

@@ -2,6 +2,7 @@ package app.lockmein
 
 import android.app.Activity
 import android.app.admin.DevicePolicyManager
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
 import android.widget.LinearLayout
@@ -37,7 +38,15 @@ class MainActivity : Activity() {
         }
         val owner = getSystemService(DevicePolicyManager::class.java).isDeviceOwnerApp(packageName)
         column.addView(label(if (owner) "Lock Me In is the device owner." else "Lock Me In is installed but is not the device owner yet.", 18f))
-        if (owner) addBrowserRequests(column)
+        if (owner) {
+            column.addView(
+                Button(this).apply {
+                    text = "Night and blocked apps"
+                    setOnClickListener { startActivity(Intent(this@MainActivity, AppListsActivity::class.java)) }
+                },
+            )
+            addBrowserRequests(column)
+        }
         setContentView(column)
     }
 
