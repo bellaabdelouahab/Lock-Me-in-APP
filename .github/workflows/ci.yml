@@ -1,11 +1,19 @@
 name: ci
-on: [push, workflow_dispatch]
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
 jobs:
-  hello:
+  core-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: |
-          echo "kvm:"; ls -l /dev/kvm || true
-          java -version
-          echo "ANDROID_HOME=$ANDROID_HOME"; ls "$ANDROID_HOME" | head
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Logic tests
+        run: ./gradlew :core:test --console=plain
