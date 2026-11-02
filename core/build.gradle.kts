@@ -1,5 +1,7 @@
 plugins {
+    `java-library`
     kotlin("jvm")
+    kotlin("plugin.serialization")
 }
 
 // Built for Java 17 so the Android app can use it, whichever JDK runs Gradle.
@@ -15,6 +17,7 @@ kotlin {
 }
 
 dependencies {
+    api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     testImplementation(kotlin("test"))
 }
 
