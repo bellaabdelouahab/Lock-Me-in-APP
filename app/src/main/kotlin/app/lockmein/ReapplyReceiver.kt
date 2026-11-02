@@ -15,8 +15,8 @@ class ReapplyReceiver : BroadcastReceiver() {
         // The DNS step blocks, so the pass runs off the main thread.
         thread(name = "lock-me-in-run") {
             try {
-                val result = PolicyRunner(context.applicationContext).run()
-                if (!result.report.ok) Log.w(TAG, "policy pass left problems: ${result.report.failed}")
+                val result = PolicyRunner(context.applicationContext).runIfActive()
+                if (result != null && !result.report.ok) Log.w(TAG, "policy pass left problems: ${result.report.failed}")
             } finally {
                 pending.finish()
             }

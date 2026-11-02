@@ -20,8 +20,9 @@ object Restrictions {
 /** What the owner chose (docs/DECISIONS.md), as package names. */
 data class AppRules(
     val appPackage: String,
-    val allowedBrowser: String,
-    /** Every browser package installed or known; all but [allowedBrowser] are suspended unless approved. */
+    /** Null when no browser is meant to stay open. */
+    val allowedBrowser: String?,
+    /** Every browser installed; all but [allowedBrowser] are suspended unless approved. */
     val browsers: Set<String>,
     val youtubeApp: String = "com.google.android.youtube",
     val youtubeMusic: String = "com.google.android.apps.youtube.music",
@@ -82,7 +83,7 @@ class PolicyPlanner(private val rules: AppRules, private val privateDnsHost: Str
 
     private fun suspendedFor(phase: Phase, inventory: Inventory): Set<String> {
         val managed = inventory.installed - rules.protectedPackages - rules.appPackage
-        val otherBrowsers = (rules.browsers - rules.allowedBrowser - inventory.approvedBrowsers).intersect(managed)
+        val otherBrowsers = (rules.browsers - setOfNotNull(rules.allowedBrowser) - inventory.approvedBrowsers).intersect(managed)
         val quarantined = inventory.quarantined.intersect(managed)
         val youtube = if (phase == Phase.OPEN_WINDOW) emptySet() else setOf(rules.youtubeApp).intersect(managed)
         val nightOnly = if (phase == Phase.NIGHT) managed - rules.nightAllowlist else emptySet()

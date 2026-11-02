@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     kotlin("android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -12,14 +13,8 @@ android {
         minSdk = 30
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // The NextDNS host of the owner's profile is passed with -PdnsHost=<id>.dns.nextdns.io; tests use a public resolver.
-        buildConfigField("String", "DNS_HOST", "\"${providers.gradleProperty("dnsHost").getOrElse("dns.google")}\"")
-    }
-
-    buildFeatures {
-        buildConfig = true
     }
 
     buildTypes {
@@ -31,6 +26,11 @@ android {
             manifestPlaceholders["testOnly"] = "false"
             isMinifyEnabled = false
         }
+    }
+
+    buildFeatures {
+        buildConfig = true
+        compose = true
     }
 
     compileOptions {
@@ -45,6 +45,11 @@ android {
 
 dependencies {
     implementation(project(":core"))
+
+    implementation(platform("androidx.compose:compose-bom:2024.10.01"))
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.activity:activity-compose:1.9.3")
 
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

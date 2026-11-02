@@ -43,6 +43,21 @@ class PolicyApplier(context: Context) {
     }
 
     /**
+     * Takes every policy this app set back off, so the phone is as it was: no restrictions, nothing suspended, uninstall allowed,
+     * private DNS back to automatic. Used when the protection is removed, before this app stops being the device owner.
+     */
+    fun release(suspended: Set<String>): ApplyReport {
+        check(dpm.isDeviceOwnerApp(packageName)) { "this app is not the device owner" }
+        val failed = mutableListOf<String>()
+        for (key in ALL_RESTRICTIONS + Restrictions.CONFIG_PRIVATE_DNS) dpm.clearUserRestriction(admin, key)
+        dpm.setGlobalPrivateDnsModeOpportunistic(admin)
+        dpm.setUninstallBlocked(admin, packageName, false)
+        dpm.setUserControlDisabledPackages(admin, emptyList())
+        if (suspended.isNotEmpty()) failed += dpm.setPackagesSuspended(admin, suspended.toTypedArray(), false).map { "unsuspend $it" }
+        return ApplyReport(failed)
+    }
+
+    /**
      * Android only accepts the host after the DNS server answers, so right after boot (no network yet) the first tries can fail.
      * A few tries cover that; if all fail, the report says so and the watchdog tries again later.
      */
