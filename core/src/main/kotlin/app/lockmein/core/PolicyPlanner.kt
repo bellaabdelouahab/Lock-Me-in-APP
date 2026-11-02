@@ -14,7 +14,7 @@ object Restrictions {
     const val ADD_PRIVATE_PROFILE = "no_add_private_profile"
     const val CONFIG_VPN = "no_config_vpn"
     const val INSTALL_UNKNOWN_SOURCES_GLOBALLY = "no_install_unknown_sources_globally"
-    const val CONFIG_PRIVATE_DNS = "no_config_private_dns"
+    const val CONFIG_PRIVATE_DNS = "disallow_config_private_dns"
 }
 
 /** What the owner chose (docs/DECISIONS.md), as package names. */

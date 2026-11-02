@@ -31,6 +31,24 @@ class PolicyApplierTest {
     private val inventory = Inventory(snapshot.installed)
 
     @Test
+    fun everyRestrictionKeyIsTheOneAndroidUses() {
+        // The logic module is free of Android, so it spells the keys out; this keeps those spellings honest.
+        val expected = mapOf(
+            Restrictions.DEBUGGING to UserManager.DISALLOW_DEBUGGING_FEATURES,
+            Restrictions.SAFE_BOOT to UserManager.DISALLOW_SAFE_BOOT,
+            Restrictions.FACTORY_RESET to UserManager.DISALLOW_FACTORY_RESET,
+            Restrictions.CONFIG_DATE_TIME to UserManager.DISALLOW_CONFIG_DATE_TIME,
+            Restrictions.ADD_USER to UserManager.DISALLOW_ADD_USER,
+            Restrictions.ADD_MANAGED_PROFILE to UserManager.DISALLOW_ADD_MANAGED_PROFILE,
+            Restrictions.CONFIG_VPN to UserManager.DISALLOW_CONFIG_VPN,
+            Restrictions.INSTALL_UNKNOWN_SOURCES_GLOBALLY to UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES_GLOBALLY,
+            Restrictions.CONFIG_PRIVATE_DNS to UserManager.DISALLOW_CONFIG_PRIVATE_DNS,
+        )
+        for ((ours, androids) in expected) assertEquals(androids, ours)
+        if (android.os.Build.VERSION.SDK_INT >= 35) assertEquals(UserManager.DISALLOW_ADD_PRIVATE_PROFILE, Restrictions.ADD_PRIVATE_PROFILE)
+    }
+
+    @Test
     fun theAppIsDeviceOwner() {
         assertTrue("run `dpm set-device-owner app.lockmein/.AdminReceiver` first", dpm.isDeviceOwnerApp(context.packageName))
     }
