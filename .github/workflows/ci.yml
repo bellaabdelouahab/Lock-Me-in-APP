@@ -41,6 +41,10 @@ jobs:
           target: google_apis
           disable-animations: true
           script: |
+            adb shell "ping -c 1 -W 3 8.8.8.8; echo ping_rc=\$?"
+            adb shell "echo | toybox nc -w 5 8.8.8.8 853; echo dot_8888_rc=\$?"
+            adb shell "echo | toybox nc -w 5 1.1.1.1 853; echo dot_1111_rc=\$?"
+            adb shell "nslookup dns.google 2>&1 | head -4"
             ./gradlew :app:installDebug --console=plain
             adb shell dpm set-device-owner app.lockmein/.AdminReceiver
             ./gradlew :app:connectedDebugAndroidTest --console=plain
