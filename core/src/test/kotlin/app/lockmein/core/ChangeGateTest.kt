@@ -81,6 +81,25 @@ class ChangeGateTest {
     }
 
     @Test
+    fun `asking for the same browser again does not restart the wait`() {
+        val approval = BrowserApproval(schedule)
+        val first = approval.requested(emptyMap(), "org.mozilla.firefox", at("2026-11-02", "10:00"))
+        val again = approval.requested(first, "org.mozilla.firefox", at("2026-11-02", "10:20"))
+        assertEquals(first, again)
+        assertEquals(at("2026-11-02", "10:00"), again.getValue("org.mozilla.firefox"))
+    }
+
+    @Test
+    fun `only the browsers whose wait is over are due`() {
+        val approval = BrowserApproval(schedule)
+        val requests = mapOf("a" to at("2026-11-02", "10:00"), "b" to at("2026-11-02", "10:20"), "c" to at("2026-11-02", "21:00"))
+        assertEquals(setOf("a"), approval.due(requests, at("2026-11-02", "10:35")))
+        assertEquals(setOf("a", "b"), approval.due(requests, at("2026-11-02", "11:00")))
+        assertEquals(setOf("a", "b"), approval.due(requests, at("2026-11-03", "05:29")))
+        assertEquals(setOf("a", "b", "c"), approval.due(requests, at("2026-11-03", "05:30")))
+    }
+
+    @Test
     fun `a friend code opens an emergency window once only`() {
         val secret = "12345678901234567890".toByteArray()
         val emergency = Emergency(secret)

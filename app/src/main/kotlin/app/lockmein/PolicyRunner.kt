@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import app.lockmein.core.AstronomicalFajr
+import app.lockmein.core.BrowserApproval
 import app.lockmein.core.BuildMode
 import app.lockmein.core.FajrConfig
 import app.lockmein.core.Inventory
@@ -29,6 +30,7 @@ class PolicyRunner(private val context: Context) {
         val snapshot = DeviceInventory(context).read()
         val state = LockState(context)
         state.noteInstalled(snapshot.installed)
+        BrowserApproval(schedule).due(state.browserRequests, now).forEach(state::approveBrowser)
 
         val rules = OwnerRules.forDevice(snapshot, context.packageName)
         val mode = if (BuildConfig.DEBUG) BuildMode.TEST else BuildMode.SEALED

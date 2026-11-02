@@ -1,6 +1,7 @@
 package app.lockmein
 
 import android.content.Context
+import java.time.Instant
 
 /**
  * What the app remembers between runs: the apps it already knew when it started, the ones that arrived since (quarantined until
@@ -28,6 +29,11 @@ class LockState(context: Context) {
         }
     }
 
+    /** Browsers the owner asked for and when (the wait runs from the first request). */
+    var browserRequests: Map<String, Instant>
+        get() = prefs.getStringSet(REQUESTS, emptySet()).orEmpty().associate { it.substringBefore('=') to Instant.ofEpochMilli(it.substringAfter('=').toLong()) }
+        set(value) = prefs.edit().putStringSet(REQUESTS, value.map { (pkg, at) -> "$pkg=${at.toEpochMilli()}" }.toSet()).apply()
+
     fun approveBrowser(packageName: String) = prefs.edit().putStringSet(APPROVED, approvedBrowsers + packageName).apply()
 
     /** Reviewed in the open window: the app is released. */
@@ -39,5 +45,6 @@ class LockState(context: Context) {
         const val KNOWN = "known"
         const val QUARANTINED = "quarantined"
         const val APPROVED = "approved_browsers"
+        const val REQUESTS = "browser_requests"
     }
 }

@@ -40,4 +40,11 @@ class BrowserApproval(private val schedule: Schedule, private val wait: Duration
     fun approvalTime(requestedAt: Instant): Instant = schedule.nextDaytime(requestedAt.plus(wait))
 
     fun isApproved(requestedAt: Instant, now: Instant): Boolean = now >= approvalTime(requestedAt)
+
+    /** The packages whose wait is over. */
+    fun due(requests: Map<String, Instant>, now: Instant): Set<String> = requests.filterValues { isApproved(it, now) }.keys
+
+    /** Asking again never restarts the wait: the first request counts. */
+    fun requested(requests: Map<String, Instant>, packageName: String, now: Instant): Map<String, Instant> =
+        if (packageName in requests) requests else requests + (packageName to now)
 }
