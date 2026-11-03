@@ -178,6 +178,7 @@ class ChangeManager(private val context: Context) {
 
     /** Turns the protection on. Needs the device-owner role, valid settings and a friend code. */
     fun startProtection(now: Instant = Instant.now()): Outcome {
+        if (BuildConfig.PREVIEW) return Outcome.Refused("This is the preview build: it is for looking at the screens and cannot start protection. Install the test build for that.")
         if (!dpm.isDeviceOwnerApp(context.packageName)) return Outcome.Refused("This app is not the device owner yet. Finish the first setup step.")
         val config = store.load() ?: return Outcome.Refused("Finish the setup first.")
         ConfigRules.problems(config).firstOrNull()?.let { return Outcome.Refused(it) }

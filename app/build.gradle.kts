@@ -4,6 +4,9 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// -Ppreview=true builds an APK that installs from the phone's own installer, to look at the screens. It cannot start protection.
+val preview = providers.gradleProperty("preview").orNull == "true"
+
 android {
     namespace = "app.lockmein"
     compileSdk = 35
@@ -12,18 +15,20 @@ android {
         applicationId = "app.lockmein"
         minSdk = 30
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.2.0"
+        versionCode = 2
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         debug {
             // A test-only app can be removed over USB (adb shell dpm remove-active-admin), the way back during the first nights.
-            manifestPlaceholders["testOnly"] = "true"
+            manifestPlaceholders["testOnly"] = if (preview) "false" else "true"
+            buildConfigField("boolean", "PREVIEW", preview.toString())
         }
         release {
             manifestPlaceholders["testOnly"] = "false"
+            buildConfigField("boolean", "PREVIEW", "false")
             isMinifyEnabled = false
         }
     }

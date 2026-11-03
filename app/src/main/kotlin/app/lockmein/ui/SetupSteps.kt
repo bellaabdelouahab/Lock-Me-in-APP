@@ -47,6 +47,10 @@ fun OwnerStep(onChanged: () -> Unit) {
     var owner by remember { mutableStateOf(isDeviceOwner(context)) }
     val command = "adb shell dpm set-device-owner ${context.packageName}/.AdminReceiver"
     Heading("1. Make this app the device owner")
+    if (BuildConfig.PREVIEW) {
+        Note("This is the preview build. Look around, change the settings, try the steps. It cannot become the device owner and cannot start protection. Do not run the adb command for it: install the test build for the real thing.")
+        return
+    }
     Note("Android's own management layer keeps the rules in force even when this app is closed. It can only be switched on from a computer, once, over USB.")
     if (owner) {
         Note("Done: this app is the device owner.")
