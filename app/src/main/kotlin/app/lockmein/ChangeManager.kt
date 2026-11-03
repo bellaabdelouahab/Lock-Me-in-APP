@@ -178,7 +178,12 @@ class ChangeManager(private val context: Context) {
 
     /** Turns the protection on. Needs the device-owner role, valid settings and a friend code. */
     fun startProtection(now: Instant = Instant.now()): Outcome {
-        if (BuildConfig.PREVIEW) return Outcome.Refused("This is the preview build: it is for looking at the screens and cannot start protection. Install the test build for that.")
+        if (BuildConfig.PREVIEW) {
+            // The preview shows the finished app without touching the phone: nothing is applied, nothing can be locked.
+            store.protectionActive = true
+            events.add(EventKind.PROTECTION_STARTED, "preview", now)
+            return Outcome.Done("Preview: the app now looks as it will when protection is on. Nothing was applied to this phone.")
+        }
         if (!dpm.isDeviceOwnerApp(context.packageName)) return Outcome.Refused("This app is not the device owner yet. Finish the first setup step.")
         val config = store.load() ?: return Outcome.Refused("Finish the setup first.")
         ConfigRules.problems(config).firstOrNull()?.let { return Outcome.Refused(it) }
@@ -205,14 +210,15 @@ class ChangeManager(private val context: Context) {
         if (decision is Decision.Denied) return refused(decision.why, "remove protection", now)
         if (check is CodeCheck.Accepted) state.lastCodeCounter = check.counter
 
-        val everything = DeviceInventory(context).read().installed
-        PolicyApplier(context).release(everything)
-        PolicyRunner(context).cancelAlarm()
+        if (!BuildConfig.PREVIEW) {
+            PolicyApplier(context).release(DeviceInventory(context).read().installed)
+            PolicyRunner(context).cancelAlarm()
+        }
         store.protectionActive = false
         events.add(EventKind.PROTECTION_REMOVED, "", now)
         state.clearUnblocks()
         state.requests = emptyList()
-        dpm.clearDeviceOwnerApp(context.packageName)
+        if (!BuildConfig.PREVIEW) dpm.clearDeviceOwnerApp(context.packageName)
         return Outcome.Done("Protection removed. This app is no longer the device owner and can be uninstalled.")
     }
 }

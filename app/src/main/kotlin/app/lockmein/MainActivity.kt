@@ -10,6 +10,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -31,18 +32,26 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
-                Surface(Modifier.fillMaxSize()) { LockApp() }
+            app.lockmein.ui.LockTheme {
+                Surface(Modifier.fillMaxSize()) { LockApp(intent?.getStringExtra("screen")) }
             }
         }
     }
 }
 
+private fun intent(context: android.content.Context): android.content.Intent? = (context as? android.app.Activity)?.intent
+
 @Composable
-private fun LockApp() {
+private fun LockApp(requested: String?) {
     val context = androidx.compose.ui.platform.LocalContext.current
     // A first launch goes straight into the guided setup; after that the home screen.
-    var screen by rememberSaveable { mutableStateOf(if (ConfigStore(context).protectionActive) Screen.HOME else Screen.SETUP) }
+    // The preview build can be opened on a screen with sample data (adb shell am start --es screen WINDOW --ez demo true), which is how the screens are photographed.
+    val first = remember {
+        if (BuildConfig.PREVIEW && intent(context)?.getBooleanExtra("demo", false) == true) PreviewDemo.seed(context)
+        requested?.let { name -> Screen.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+            ?: if (ConfigStore(context).protectionActive) Screen.HOME else Screen.SETUP
+    }
+    var screen by rememberSaveable { mutableStateOf(first) }
     val home = { screen = Screen.HOME }
     Navigation(navigate = { screen = it }) {
         when (screen) {

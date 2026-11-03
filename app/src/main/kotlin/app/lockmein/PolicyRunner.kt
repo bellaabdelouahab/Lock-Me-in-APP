@@ -30,6 +30,8 @@ class PolicyRunner(private val context: Context) {
     }
 
     fun run(config: LockConfig, now: Instant = Instant.now()): RunResult {
+        // The preview build only shows the screens: it is never the device owner and applies nothing.
+        if (BuildConfig.PREVIEW) return RunResult(ApplyReport(emptyList()), now.plus(CHECK_EVERY))
         val schedule = Rules.schedule(config)
         val snapshot = DeviceInventory(context).read()
         val state = LockState(context)

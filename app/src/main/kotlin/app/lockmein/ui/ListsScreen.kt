@@ -76,7 +76,8 @@ private fun Listing(title: String, note: String, packages: Set<String>, inventor
     if (packages.isEmpty()) Note("None.")
     packages.sorted().forEach { pkg ->
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(inventory.label(pkg), Modifier.weight(1f))
+            AppIcon(pkg, 34.dp)
+            Text(inventory.label(pkg), Modifier.weight(1f).padding(start = 12.dp))
             TextButton(onClick = { onRemove(pkg) }) { Text("Remove") }
         }
     }

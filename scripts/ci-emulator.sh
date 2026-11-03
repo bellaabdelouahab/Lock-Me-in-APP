@@ -45,4 +45,18 @@ if adb logcat -d | grep -q "FATAL EXCEPTION"; then
   adb logcat -d | grep -A25 "FATAL EXCEPTION" | head -60
   status=1
 fi
+
+# Photograph every screen of the preview build (sample data, nothing applied) so the design can be looked at.
+adb uninstall app.lockmein >/dev/null 2>&1
+./gradlew :app:installRelease -Ppreview=true --console=plain || exit 1
+mkdir -p app/build/reports/androidTests/shots
+shot() { # name, extras...
+  name=$1; shift
+  adb shell am force-stop app.lockmein
+  adb shell am start -W -n app.lockmein/.MainActivity "$@" >/dev/null
+  sleep 3
+  adb exec-out screencap -p > "app/build/reports/androidTests/shots/$name.png"
+}
+for n in 0 1 2 3 4 5 6; do shot "setup-$n" --ei step $n; done
+for s in HOME WINDOW LISTS BROWSERS EMERGENCY REPORT SETTINGS REMOVE; do shot "$(echo $s | tr A-Z a-z)" --es screen $s --ez demo true; done
 exit "$status"
