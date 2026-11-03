@@ -11,12 +11,10 @@ for _ in $(seq 1 30); do
 done
 adb shell "echo | toybox nc -w 5 8.8.8.8 853; echo dot_rc=\$?"
 
-# The shrunk release build, made test-only so it can be removed again: this is the file that ships, so this is what is tested.
-FLAGS="-PtestOnly=true -PtestRelease=true"
-./gradlew :app:installRelease $FLAGS --console=plain || exit 1
+./gradlew :app:installDebug --console=plain || exit 1
 adb shell dpm set-device-owner app.lockmein/.AdminReceiver || exit 1
 
-./gradlew :app:connectedReleaseAndroidTest $FLAGS --console=plain
+./gradlew :app:connectedDebugAndroidTest --console=plain
 status=$?
 
 if [ "$status" -ne 0 ]; then
@@ -26,5 +24,25 @@ if [ "$status" -ne 0 ]; then
   adb shell dumpsys connectivity | grep -iE "private dns|validated|dns" | head -30
   adb shell settings get global private_dns_mode
   adb shell settings get global private_dns_specifier
+fi
+
+# The shipped file is the shrunk release build, which the debug tests above do not cover. Install it as the test build, open it,
+# and fail on a crash. A screenshot is kept so the first screen can be looked at.
+mkdir -p app/build/reports/androidTests
+adb uninstall app.lockmein >/dev/null 2>&1
+./gradlew :app:installRelease -PtestOnly=true --console=plain || exit 1
+adb logcat -c
+adb shell am start -W -n app.lockmein/.MainActivity
+sleep 8
+adb exec-out screencap -p > app/build/reports/androidTests/first-screen.png
+if ! adb shell pidof app.lockmein >/dev/null; then
+  echo "=== the shrunk build is not running after launch ==="
+  adb logcat -d | grep -E "AndroidRuntime|FATAL|app.lockmein" | tail -60
+  status=1
+fi
+if adb logcat -d | grep -q "FATAL EXCEPTION"; then
+  echo "=== crash in the shrunk build ==="
+  adb logcat -d | grep -A25 "FATAL EXCEPTION" | head -60
+  status=1
 fi
 exit "$status"
