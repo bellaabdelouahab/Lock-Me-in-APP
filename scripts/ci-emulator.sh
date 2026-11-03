@@ -11,10 +11,12 @@ for _ in $(seq 1 30); do
 done
 adb shell "echo | toybox nc -w 5 8.8.8.8 853; echo dot_rc=\$?"
 
-./gradlew :app:installDebug --console=plain || exit 1
+# The shrunk release build, made test-only so it can be removed again: this is the file that ships, so this is what is tested.
+FLAGS="-PtestOnly=true -PtestRelease=true"
+./gradlew :app:installRelease $FLAGS --console=plain || exit 1
 adb shell dpm set-device-owner app.lockmein/.AdminReceiver || exit 1
 
-./gradlew :app:connectedDebugAndroidTest --console=plain
+./gradlew :app:connectedReleaseAndroidTest $FLAGS --console=plain
 status=$?
 
 if [ "$status" -ne 0 ]; then

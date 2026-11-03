@@ -32,7 +32,7 @@ fun HomeScreen() {
         InfoCard {
             Text(if (active) "Protection is on." else "Protection is off.")
             Text(if (owner) "This app is the device owner." else "This app is not the device owner yet.")
-            Text(if (BuildConfig.PREVIEW) "Preview build: for looking only." else if (BuildConfig.DEBUG) "Test build: can be removed over USB." else "Sealed build.")
+            Text(if (BuildConfig.PREVIEW) "Preview build: for looking only." else if (BuildConfig.TEST_BUILD) "Test build: can be removed over USB." else "Sealed build.")
             if (active && config != null) {
                 val schedule = Rules.schedule(config)
                 val phase = schedule.phaseAt(now)

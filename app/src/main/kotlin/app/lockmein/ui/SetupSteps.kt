@@ -3,6 +3,8 @@ package app.lockmein.ui
 import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.content.Intent
+import android.provider.Settings
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +16,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,33 +38,89 @@ import app.lockmein.core.ConfigRules
 import app.lockmein.core.FriendCode
 import app.lockmein.core.LockConfig
 import java.time.Instant
+import kotlinx.coroutines.delay
 
 /** The apps a setup step can offer, read once from the phone. */
 data class SetupApps(val browsers: List<AppInfo>, val launchable: List<AppInfo>, val suggestedNight: Set<String>)
 
 private fun isDeviceOwner(context: Context) = context.getSystemService(DevicePolicyManager::class.java).isDeviceOwnerApp(context.packageName)
 
+private fun openSettings(context: Context, action: String) {
+    // Some phones (HyperOS among them) hide or rename these pages, so a missing one falls back to Settings itself.
+    val opened = runCatching { context.startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+    if (!opened) runCatching { context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+}
+
+/** One thing to do, with a tick the person sets and a button that opens the page where it is done. */
 @Composable
-fun OwnerStep(onChanged: () -> Unit) {
+private fun Chore(number: Int, text: String, ticked: Boolean, onTick: (Boolean) -> Unit, button: String? = null, onButton: (() -> Unit)? = null) {
+    InfoCard {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(ticked, onCheckedChange = onTick)
+            Text("$number. $text", Modifier.padding(start = 4.dp))
+        }
+        if (button != null && onButton != null) SecondaryButton(button, onButton)
+    }
+}
+
+/**
+ * Step 1, guided. Android allows the device-owner role only from a computer, so the app cannot do it itself; what it does is take the
+ * person to each settings page in turn, show the exact command, and notice by itself the moment the command has worked.
+ */
+@Composable
+fun OwnerStep(onBecameOwner: () -> Unit) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
-    var owner by remember { mutableStateOf(isDeviceOwner(context)) }
+    val wasOwner = remember { isDeviceOwner(context) }
+    var owner by remember { mutableStateOf(wasOwner) }
+    var backup by rememberSaveable { mutableStateOf(false) }
+    var accounts by rememberSaveable { mutableStateOf(false) }
+    var developer by rememberSaveable { mutableStateOf(false) }
+    var usb by rememberSaveable { mutableStateOf(false) }
     val command = "adb shell dpm set-device-owner ${context.packageName}/.AdminReceiver"
+
+    // Checks every two seconds, and moves on by itself once the command has worked.
+    LaunchedEffect(Unit) {
+        if (BuildConfig.PREVIEW || wasOwner) return@LaunchedEffect
+        while (!owner) {
+            delay(2_000)
+            owner = isDeviceOwner(context)
+        }
+        onBecameOwner()
+    }
+
     Heading("1. Make this app the device owner")
     if (BuildConfig.PREVIEW) {
-        Note("This is the preview build. Look around, change the settings, try the steps. It cannot become the device owner and cannot start protection. Do not run the adb command for it: install the test build for the real thing.")
+        InfoCard {
+            Text("Preview build")
+            Text("This is the preview build, for looking around. It cannot become the device owner and cannot start protection, so this step is skipped. Tap Next and try the other steps; nothing is applied to your phone.")
+        }
         return
     }
-    Note("Android's own management layer keeps the rules in force even when this app is closed. It can only be switched on from a computer, once, over USB.")
+    Note("Android's own management layer keeps the rules in force even when this app is closed. Only a computer can switch it on, once, over USB. This page walks you through it; it moves on by itself when it works.")
     if (owner) {
-        Note("Done: this app is the device owner.")
+        InfoCard { Text("Done: this app is the device owner.") }
         return
     }
-    Note("Before you start: back up your phone, remove every account (Settings, Accounts) and turn off Second Space and Dual Apps. Android refuses while accounts exist. You add them back afterwards.")
-    Note("Then turn on USB debugging (on Xiaomi also \"USB debugging (Security settings)\"), plug the phone into a computer with adb installed and run:")
-    InfoCard { Text(command, style = androidx.compose.material3.MaterialTheme.typography.bodyMedium) }
-    SecondaryButton("Copy the command", { clipboard.setText(AnnotatedString(command)) })
-    SecondaryButton("I ran it: check again", { owner = isDeviceOwner(context); onChanged() })
+    Chore(1, "Back up your phone (photos, files, and move your authenticator codes somewhere safe).", backup, { backup = it })
+    Chore(2, "Remove every account (Google, Xiaomi, others) and turn off Second Space and Dual Apps. Android refuses while accounts exist. You add them back afterwards.", accounts, { accounts = it },
+        "Open Accounts", { openSettings(context, Settings.ACTION_SYNC_SETTINGS) })
+    Chore(3, "Switch on developer options: open About phone and tap the OS or MIUI version seven times.", developer, { developer = it },
+        "Open About phone", { openSettings(context, Settings.ACTION_DEVICE_INFO_SETTINGS) })
+    Chore(4, "In Developer options turn on USB debugging, and on Xiaomi also \"USB debugging (Security settings)\".", usb, { usb = it },
+        "Open Developer options", { openSettings(context, Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS) })
+    val ready = backup && accounts && developer && usb
+    InfoCard {
+        Text("5. Plug the phone into a computer that has adb, allow the USB prompt on the phone, and run this one line:")
+        Text(command, style = MaterialTheme.typography.bodyMedium)
+        SecondaryButton("Copy the command", { clipboard.setText(AnnotatedString(command)) }, enabled = ready)
+        if (!ready) Text("Tick the four things above first. Skipping them can lose data or make the command fail.", style = MaterialTheme.typography.bodySmall)
+    }
+    InfoCard {
+        Text("Waiting for the command...")
+        Text("This page checks every two seconds. If the computer says \"accounts on the device\" or \"users\", go back to chore 2.", style = MaterialTheme.typography.bodySmall)
+        SecondaryButton("Check now", { owner = isDeviceOwner(context); if (owner) onBecameOwner() })
+    }
 }
 
 @Composable
@@ -161,7 +221,7 @@ fun ReviewStep(draft: LockConfig, apps: SetupApps?, friendVerified: Boolean, out
         Text("Night starts ${draft.nightStart}; weekly window on day ${draft.windowDay} (1 = Monday) ${draft.windowStart} to ${draft.windowEnd}")
         Text("Fajr from ${draft.latitude}, ${draft.longitude} at ${draft.sunAngleDegrees} degrees")
         Text("Friend's code: ${if (friendVerified) "confirmed" else "not confirmed"}")
-        Text(if (BuildConfig.DEBUG) "Build: test (can be removed over USB)" else "Build: sealed (USB debugging and factory reset are blocked)")
+        Text(if (BuildConfig.TEST_BUILD) "Build: test (can be removed over USB)" else "Build: sealed (USB debugging and factory reset are blocked)")
     }
     problems.forEach { Problem(it) }
     if (!friendVerified) Problem("Confirm the friend's code first.")

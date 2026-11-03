@@ -37,7 +37,7 @@ class PolicyRunner(private val context: Context) {
         state.noteInstalled(snapshot.installed).forEach { events.add(EventKind.APP_QUARANTINED, it, now) }
         val unblocks = state.unblocks(now)
 
-        val mode = if (BuildConfig.DEBUG) BuildMode.TEST else BuildMode.SEALED
+        val mode = if (BuildConfig.TEST_BUILD) BuildMode.TEST else BuildMode.SEALED
         val plan = PolicyPlanner(Rules.forDevice(snapshot, context.packageName, config), config.dnsHost).plan(
             schedule.phaseAt(now),
             mode,

@@ -40,7 +40,9 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun LockApp() {
-    var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // A first launch goes straight into the guided setup; after that the home screen.
+    var screen by rememberSaveable { mutableStateOf(if (ConfigStore(context).protectionActive) Screen.HOME else Screen.SETUP) }
     val home = { screen = Screen.HOME }
     Navigation(navigate = { screen = it }) {
         when (screen) {

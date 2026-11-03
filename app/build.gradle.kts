@@ -4,12 +4,21 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-// -Ppreview=true builds an APK that installs from the phone's own installer, to look at the screens. It cannot start protection.
+// Three kinds of APK:
+//   -Ppreview=true   installs from the phone's own installer, to look at the screens; cannot start protection.
+//   -PtestOnly=true  the real thing for the first nights: test-only, so it can be removed over USB (adb install -t).
+//   neither          the sealed build.
+// Release builds are shrunk (R8), which is what keeps the APK a few MB instead of 24.
 val preview = providers.gradleProperty("preview").orNull == "true"
+val testBuild = providers.gradleProperty("testOnly").orNull == "true"
+require(!(preview && testBuild)) { "choose either -Ppreview=true or -PtestOnly=true" }
 
 android {
     namespace = "app.lockmein"
     compileSdk = 35
+
+    // -PtestRelease=true runs the instrumented tests against the shrunk release build, so CI checks the file that is actually shipped.
+    if (providers.gradleProperty("testRelease").orNull == "true") testBuildType = "release"
 
     defaultConfig {
         applicationId = "app.lockmein"
@@ -18,18 +27,25 @@ android {
         versionCode = 2
         versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testProguardFiles("proguard-rules.pro")
     }
 
     buildTypes {
         debug {
-            // A test-only app can be removed over USB (adb shell dpm remove-active-admin), the way back during the first nights.
+            // The instrumented tests run on this one. Test-only, like the test build.
             manifestPlaceholders["testOnly"] = if (preview) "false" else "true"
             buildConfigField("boolean", "PREVIEW", preview.toString())
+            buildConfigField("boolean", "TEST_BUILD", (!preview).toString())
         }
         release {
-            manifestPlaceholders["testOnly"] = "false"
-            buildConfigField("boolean", "PREVIEW", "false")
-            isMinifyEnabled = false
+            manifestPlaceholders["testOnly"] = testBuild.toString()
+            buildConfigField("boolean", "PREVIEW", preview.toString())
+            buildConfigField("boolean", "TEST_BUILD", testBuild.toString())
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Signed with the debug key so the file installs on a phone; a key of your own is the next step for a build you share.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

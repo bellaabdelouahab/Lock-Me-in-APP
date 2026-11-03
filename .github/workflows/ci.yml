@@ -60,11 +60,11 @@ jobs:
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
       # The test build: a test-only APK (removable over USB) for the real device-owner setup. Install with `adb install -t`.
-      - run: ./gradlew :app:assembleDebug --console=plain
-      - run: mkdir -p dist && cp app/build/outputs/apk/debug/app-debug.apk dist/lock-me-in-test-build.apk
+      - run: ./gradlew :app:assembleRelease -PtestOnly=true --console=plain
+      - run: mkdir -p dist && cp app/build/outputs/apk/release/app-release.apk dist/lock-me-in-test-build.apk
       # The preview build: installs from the phone's own installer, to look at the screens. It cannot start protection.
-      - run: ./gradlew :app:assembleDebug -Ppreview=true --console=plain
-      - run: cp app/build/outputs/apk/debug/app-debug.apk dist/lock-me-in-preview.apk
+      - run: ./gradlew :app:assembleRelease -Ppreview=true --console=plain
+      - run: cp app/build/outputs/apk/release/app-release.apk dist/lock-me-in-preview.apk
       - uses: actions/upload-artifact@v4
         with:
           name: lock-me-in-phone-test-apk
