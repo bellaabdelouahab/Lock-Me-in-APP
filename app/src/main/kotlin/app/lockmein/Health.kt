@@ -45,11 +45,13 @@ class Health(private val context: Context) {
             },
         )
 
-        val missing = plan.restrictions.filterNot { restrictions.getBoolean(it) }
+        // Private space (and its restriction) exists from Android 15; older versions have nothing to close.
+        val applicable = plan.restrictions.filterNot { it == Restrictions.ADD_PRIVATE_PROFILE && android.os.Build.VERSION.SDK_INT < 35 }
+        val missing = applicable.filterNot { restrictions.getBoolean(it) }
         items += HealthItem(
             "Phone restrictions",
             missing.isEmpty(),
-            if (missing.isEmpty()) "${plan.restrictions.size} restrictions in force (VPN, users, unknown apps, safe mode...)." else "Not in force: ${missing.joinToString { it.removePrefix("no_").removePrefix("disallow_").replace('_', ' ') }}.",
+            if (missing.isEmpty()) "${applicable.size} restrictions in force (VPN, users, unknown apps, safe mode...)." else "Not in force: ${missing.joinToString { it.removePrefix("no_").removePrefix("disallow_").replace('_', ' ') }}.",
         )
 
         val time = dpm.getAutoTimeEnabled(admin) && dpm.getAutoTimeZoneEnabled(admin)
