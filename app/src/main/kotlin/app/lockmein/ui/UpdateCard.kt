@@ -51,7 +51,7 @@ fun UpdateCard(onlyIfNewer: Boolean = false) {
         Note(
             when {
                 !checked -> "Checking GitHub for a newer version..."
-                latest == null -> "Can't reach GitHub right now. This is version ${BuildConfig.VERSION_NAME} (${Updater.kind} build)."
+                latest == null -> "No release found on GitHub (none published yet, or you are offline). This is version ${BuildConfig.VERSION_NAME} (${Updater.kind} build)."
                 newer -> latest!!.notes.ifBlank { "A newer build of the ${Updater.kind} kind." } + "  You have ${BuildConfig.VERSION_NAME}."
                 else -> "This is the newest version (${Updater.kind} build)."
             },

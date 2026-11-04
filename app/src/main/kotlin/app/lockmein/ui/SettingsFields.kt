@@ -50,8 +50,8 @@ fun DnsFields(config: LockConfig, onChange: (LockConfig) -> Unit) {
                 DnsHost.normalise(it)?.let { host -> onChange(config.copy(dnsHost = host)) }
             },
             label = { Text("Private DNS host") },
-            supportingText = { Text(DnsHost.problem(DnsHost.normalise(typed) ?: typed) ?: "Will use ${DnsHost.normalise(typed)}") },
-            isError = DnsHost.normalise(typed) == null,
+            supportingText = { Text(if (typed.isBlank()) "Like abc123.dns.nextdns.io, or just the 6-character NextDNS id." else DnsHost.problem(DnsHost.normalise(typed) ?: typed) ?: "Will use ${DnsHost.normalise(typed)}") },
+            isError = typed.isNotBlank() && DnsHost.normalise(typed) == null, // nothing typed yet is not a mistake
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
