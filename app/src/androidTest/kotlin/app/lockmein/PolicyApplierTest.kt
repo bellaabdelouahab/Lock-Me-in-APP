@@ -63,12 +63,15 @@ class PolicyApplierTest {
         events.clear()
         state.clear()
         store.protectionActive = false
+        // These tests are about a finished setup: rules locked once protection is on. (Before completion every change is free.)
+        store.setupComplete = true
         store.save(config)
     }
 
     @After
     fun tidy() {
         store.protectionActive = false
+        store.setupComplete = false
         state.clear()
         if (dpm.isDeviceOwnerApp(context.packageName)) PolicyApplier(context).release(snapshot.installed)
     }
@@ -383,6 +386,17 @@ class PolicyApplierTest {
         val failed = Health(context).check(monday).filter { !it.ok }.map { it.title }
         assertTrue("restrictions: $failed", "Phone restrictions" in failed)
         assertTrue("uninstall: $failed", "Can't be uninstalled" in failed)
+    }
+
+    @Test
+    fun y3_beforeTheSetupIsCompleteAChangeWorksAtOnce() {
+        store.setupComplete = false
+        store.protectionActive = true
+        val app = anAppToSuspend()
+        val outcome = ChangeManager(context).editList(AppList.NIGHT_ALLOWED, ListOp.ADD, app)
+        assertTrue("$outcome", outcome is Outcome.Done)
+        assertTrue(app in store.load()!!.nightAllowlist)
+        assertTrue("no request queued", state.requests.isEmpty())
     }
 
     @Test
