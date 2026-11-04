@@ -41,12 +41,41 @@ fun ResetSetup(onReset: () -> Unit) {
     OutcomeText(outcome)
 }
 
-/** On home: a protection that was started but never passed every check. Says so and offers the reset. */
+/**
+ * On home: a protection that was started but never passed every check. Until it does, lists and settings change at once, so this
+ * is the moment to pick the night apps. "Finish the setup" applies the rules again and completes the setup only if Android
+ * confirms every check; otherwise it lists what is still not in force.
+ */
 @Composable
 fun UnfinishedSetupBanner(onReset: () -> Unit) {
     val context = LocalContext.current
-    if (remember { ConfigStore(context).setupComplete }) return
+    val scope = rememberCoroutineScope()
+    var complete by remember { mutableStateOf(ConfigStore(context).setupComplete) }
+    if (complete) return
+    var working by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf<List<app.lockmein.HealthItem>?>(null) }
+    var outcome by remember { mutableStateOf<Outcome?>(null) }
     Text("SETUP NOT FINISHED", style = MaterialTheme.typography.labelLarge, color = Palette.Locked)
-    Note("Protection was started but not every check passed. Fix it from \"Is it working?\", or reset and do the setup again.")
+    Note("Until the setup is complete, every change works at once. Pick your night apps now (Apps): once it is complete, adding one waits 7 days. Then finish: the rules are applied again and the setup completes only if every check passes.")
+    MenuButton(if (working) "Checking..." else "Finish the setup", enabled = !working) {
+        working = true
+        outcome = null
+        scope.background({
+            val result = ChangeManager(context).startProtection()
+            result to if (result is Outcome.Done) app.lockmein.Health(context).check() else null
+        }) { (result, health) ->
+            working = false
+            val bad = health.orEmpty().filter { !it.ok }
+            if (result is Outcome.Done && health != null && bad.isEmpty()) {
+                ConfigStore(context).setupComplete = true
+                complete = true
+            } else {
+                outcome = result.takeIf { it is Outcome.Refused }
+                failed = bad
+            }
+        }
+    }
+    OutcomeText(outcome)
+    failed?.forEach { CheckRow(it.title, CheckState.FAIL, it.detail) }
     ResetSetup(onReset)
 }
