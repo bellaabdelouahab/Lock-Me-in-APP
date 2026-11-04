@@ -154,10 +154,14 @@ fun SetupScreen(onExit: () -> Unit) {
                     working = false
                     outcome = result
                     afterStart = health
-                    if (result is Outcome.Done && (BuildConfig.PREVIEW || health.orEmpty().all { it.ok })) navigate(Screen.HOME)
+                    if (result is Outcome.Done && (BuildConfig.PREVIEW || health.orEmpty().all { it.ok })) {
+                        store.setupComplete = true
+                        navigate(Screen.HOME)
+                    }
                 }
             }
         }
+        ResetSetup(onReset = { step = 0; draft = LockConfig(dnsHost = ""); friendVerified = false; dnsChecked = null; browserChosen = false; afterStart = null; outcome = null })
         afterStart?.filter { !it.ok }?.takeIf { it.isNotEmpty() && !BuildConfig.PREVIEW }?.let { failed ->
             Heading("Not in force yet")
             failed.forEach { CheckRow(it.title, CheckState.FAIL, it.detail) }

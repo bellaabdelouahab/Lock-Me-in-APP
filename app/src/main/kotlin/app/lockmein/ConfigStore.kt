@@ -18,7 +18,16 @@ class ConfigStore(context: Context) {
         get() = prefs.getBoolean(ACTIVE, false)
         set(value) = prefs.edit().putBoolean(ACTIVE, value).apply()
 
+    /**
+     * True once the setup finished with every check read back from Android passing. Until then the setup can be reset to the
+     * phone's defaults at any time (a setup that went wrong must never leave the phone stuck); after it, only the removal path.
+     */
+    var setupComplete: Boolean
+        get() = prefs.getBoolean(COMPLETE, false)
+        set(value) = prefs.edit().putBoolean(COMPLETE, value).apply()
+
     private companion object {
+        const val COMPLETE = "setup_complete"
         const val CONFIG = "config_json"
         const val ACTIVE = "protection_active"
     }

@@ -141,6 +141,7 @@ private fun Welcome(owner: Boolean, onSetup: () -> Unit) {
     CheckRow("This phone", if (owner) CheckState.PASS else CheckState.CONFIRM, if (owner) "Lock Me In is the device owner." else "Not the device owner yet: step 1 walks you through it.")
     MenuButton("Start the setup", onClick = onSetup)
     UpdateCard(onlyIfNewer = true)
+    ResetSetup(onReset = {})
 }
 
 @Composable
@@ -232,6 +233,7 @@ private fun Dashboard(config: LockConfig, state: LockState, owner: Boolean) {
     // Not what the app thinks, what Android says.
     val health by produceState<List<HealthItem>?>(null, config) { value = withContext(Dispatchers.IO) { Health(context).check() } }
     HealthBadge(health) { navigate(Screen.HEALTH) }
+    UnfinishedSetupBanner { navigate(Screen.SETUP) }
     UpdateCard(onlyIfNewer = true)
 
     Rule()

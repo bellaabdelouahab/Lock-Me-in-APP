@@ -192,7 +192,45 @@ class ChangeManager(private val context: Context) {
         store.protectionActive = true
         events.add(EventKind.PROTECTION_STARTED, "", now)
         val result = PolicyRunner(context).run(config, now)
+        // A private DNS server the phone can't use (a typo, or a network that blocks the secure DNS port) cuts the whole
+        // internet. Check right away; if the phone is offline with it, take everything back off and say so.
+        if (!onlineAfterDns()) {
+            PolicyApplier(context).release(DeviceInventory(context).read().installed)
+            PolicyRunner(context).cancelAlarm()
+            store.protectionActive = false
+            events.add(EventKind.PASS_FAILED, "no internet with ${config.dnsHost}; undone", now)
+            return Outcome.Refused("With ${config.dnsHost} as private DNS this phone could not reach the internet, so everything was undone and the internet is back. Check the host in step 2, or try on another network (some block secure DNS).")
+        }
         return if (result.report.ok) Outcome.Done("Protection is on.") else Outcome.Done("Protection is on, but not everything could be applied: ${result.report.failed.joinToString("; ")}")
+    }
+
+    /**
+     * Back to square one while the setup is not finished: every policy taken off (DNS back to automatic, restrictions cleared,
+     * apps released, alarm stopped) and the settings, requests, friend secret and log wiped. The app stays device owner, so the
+     * computer step does not have to be done again. Refused once the setup completed: then only the removal path opens the phone.
+     */
+    fun resetSetup(): Outcome {
+        if (store.setupComplete) return Outcome.Refused("The setup is complete, so the protection can only be removed through a request and your friend's code.")
+        if (!BuildConfig.PREVIEW && dpm.isDeviceOwnerApp(context.packageName)) {
+            val report = PolicyApplier(context).release(DeviceInventory(context).read().installed)
+            if (!report.ok) return Outcome.Refused("Could not undo everything: ${report.failed.joinToString("; ")}")
+        }
+        PolicyRunner(context).cancelAlarm()
+        store.protectionActive = false
+        context.getSharedPreferences("lock_config", Context.MODE_PRIVATE).edit().clear().apply()
+        state.clear()
+        secrets.clear()
+        events.clear()
+        return Outcome.Done("Reset. Private DNS is back to automatic, nothing is blocked, and the setup starts again from the beginning.")
+    }
+
+    /** Up to about 20 seconds for the internet to answer through the new DNS (the network re-validates after the switch). */
+    private fun onlineAfterDns(): Boolean {
+        repeat(5) {
+            Thread.sleep(4_000)
+            if (NetworkClock.now() != null) return true
+        }
+        return false
     }
 
     /** Asks to take the protection off. It waits like every opening; the friend's code is needed when it is carried out. */
