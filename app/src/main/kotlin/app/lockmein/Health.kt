@@ -104,6 +104,13 @@ class Health(private val context: Context) {
             },
         )
 
+        val keptOpen = LockState(context).unsuspendable.filter { it in DeviceInventory(context).read().installed }
+        if (keptOpen.isNotEmpty()) items += HealthItem(
+            "Kept open by Android",
+            true,
+            "Android doesn't let any app close these system apps: ${keptOpen.joinToString { DeviceInventory(context).label(it) }}. New apps are still held back when installed.",
+        )
+
         if (plan.managedChrome) {
             val chrome = !dpm.getApplicationRestrictions(admin, ChromePolicy.PACKAGE).isEmpty
             items += HealthItem("Chrome settings", chrome, if (chrome) "Private windows off, safe search on, YouTube strict." else "Chrome is not configured: private windows and its own DNS work.")

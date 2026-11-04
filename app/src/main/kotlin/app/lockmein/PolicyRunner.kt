@@ -38,6 +38,7 @@ class PolicyRunner(private val context: Context) {
         state.noteInstalled(DeviceInventory(context).read().installed).forEach { events.add(EventKind.APP_QUARANTINED, it, now) }
         val unblocks = state.unblocks(now)
         val report = PolicyApplier(context).apply(planFor(config, now))
+        state.noteUnsuspendable(report.unsuspendable)
         events.add(if (report.ok) EventKind.PASS_OK else EventKind.PASS_FAILED, report.failed.joinToString("; "), now)
 
         val next = listOfNotNull(schedule.nextTransition(now), now.plus(CHECK_EVERY), unblocks.values.minOrNull()).min()
@@ -50,7 +51,7 @@ class PolicyRunner(private val context: Context) {
         val snapshot = DeviceInventory(context).read()
         val state = LockState(context)
         val mode = if (BuildConfig.TEST_BUILD) BuildMode.TEST else BuildMode.SEALED
-        return PolicyPlanner(Rules.forDevice(snapshot, context.packageName, config), config.dnsHost).plan(
+        return PolicyPlanner(Rules.forDevice(snapshot, context.packageName, config, state.unsuspendable), config.dnsHost).plan(
             Rules.schedule(config).phaseAt(now),
             mode,
             Inventory(snapshot.installed, state.approvedBrowsers, state.quarantined, state.unblocks(now).keys),

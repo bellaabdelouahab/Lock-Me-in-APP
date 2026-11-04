@@ -51,7 +51,9 @@ fun ListsScreen(onBack: () -> Unit) {
         }
     }
 
+    val open = !ConfigStore(context).setupComplete
     Page("Night and blocked apps", onBack) {
+        if (open) Note("The setup is not complete yet, so every change here works at once. Once it is complete, opening anything up waits 7 days.")
         OutcomeText(outcome)
         Listing("Apps allowed at night", "Adding one opens the phone up: it is a request that waits 7 days, then you carry it out in the weekly window. Removing one works at once.", config.nightAllowlist, inventory,
             onRemove = { change(AppList.NIGHT_ALLOWED, ListOp.REMOVE, it) }, onAdd = { picking = AppList.NIGHT_ALLOWED })

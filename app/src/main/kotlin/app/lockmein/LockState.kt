@@ -59,6 +59,12 @@ class LockState(context: Context) {
     fun approveBrowser(packageName: String) = prefs.edit().putStringSet(APPROVED, approvedBrowsers + packageName).apply()
 
     /** Reviewed in the open window: the app is released. */
+    /** System apps Android refuses to let any app suspend (on Xiaomi: Security, the Play Store). Left alone, reported in the check. */
+    val unsuspendable: Set<String> get() = read(UNSUSPENDABLE)
+    fun noteUnsuspendable(packages: Collection<String>) {
+        if (packages.isNotEmpty()) prefs.edit().putStringSet(UNSUSPENDABLE, unsuspendable + packages).apply()
+    }
+
     fun release(packageName: String) = prefs.edit().putStringSet(QUARANTINED, quarantined - packageName).apply()
 
     /** Forgets everything, for a fresh start after the protection is removed. */
@@ -69,6 +75,7 @@ class LockState(context: Context) {
     private companion object {
         const val KNOWN = "known"
         const val QUARANTINED = "quarantined"
+        const val UNSUSPENDABLE = "unsuspendable"
         const val APPROVED = "approved_browsers"
         const val REQUESTS = "change_requests"
         const val UNBLOCKS = "temporary_unblocks"

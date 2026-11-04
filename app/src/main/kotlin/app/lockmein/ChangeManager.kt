@@ -42,6 +42,9 @@ class ChangeManager(private val context: Context) {
     private val dpm = context.getSystemService(DevicePolicyManager::class.java)
     private val editor = AppListEditor()
 
+    /** The rules are locked only once the setup completed with every check passing; before that, every change is free. */
+    private val locked get() = store.protectionActive && store.setupComplete
+
     private fun config(): LockConfig = checkNotNull(store.load()) { "the setup has not been finished" }
 
     private fun gate(config: LockConfig) = ChangeGate(Rules.schedule(config), wait = Duration.ofDays(config.loosenWaitDays.toLong()))
@@ -105,7 +108,7 @@ class ChangeManager(private val context: Context) {
         if (packageName in untouchable) return Outcome.Refused("This app keeps the phone working and cannot be listed.")
 
         val loosens = editor.kindOf(list, op) == ChangeKind.LOOSEN
-        if (store.protectionActive && loosens) return ask(editor.requestKind(list), packageName, now)
+        if (locked && loosens) return ask(editor.requestKind(list), packageName, now)
 
         val newList: Set<String> = if (op == ListOp.ADD) current + packageName else current - packageName
         val updated = if (list == AppList.NIGHT_ALLOWED) config.copy(nightAllowlist = newList) else config.copy(alwaysBlocked = newList)
@@ -119,7 +122,7 @@ class ChangeManager(private val context: Context) {
     /** Saves changed settings (DNS host, browser, rhythm, location). After protection starts every change is a request that waits. */
     fun saveSettings(updated: LockConfig, now: Instant = TrustedClock(context).now()): Outcome {
         ConfigRules.problems(updated).firstOrNull()?.let { return Outcome.Refused(it) }
-        if (store.protectionActive) {
+        if (locked) {
             if (config() == updated) return Outcome.Done("Nothing changed.")
             return ask(RequestKind.SETTINGS, "settings", now, updated)
         }
@@ -129,7 +132,12 @@ class ChangeManager(private val context: Context) {
     }
 
     /** A new app held back since it was installed: asking to let it through is a request that waits. */
-    fun releaseApp(packageName: String, now: Instant = TrustedClock(context).now()): Outcome = ask(RequestKind.RELEASE_APP, packageName, now)
+    fun releaseApp(packageName: String, now: Instant = TrustedClock(context).now()): Outcome {
+        if (locked) return ask(RequestKind.RELEASE_APP, packageName, now)
+        state.release(packageName)
+        PolicyRunner(context).runIfActive(now)
+        return Outcome.Done("Let through: the setup is not complete yet, so this works at once.")
+    }
 
     /** Ask for a closed browser. A browser is a new door, so it waits like every other opening. */
     fun requestBrowser(packageName: String, now: Instant = TrustedClock(context).now()): Outcome {

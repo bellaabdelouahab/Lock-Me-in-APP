@@ -9,7 +9,7 @@ import app.lockmein.core.PolicyPlan
 import app.lockmein.core.Restrictions
 
 /** What the phone refused or could not do, for the log. Empty means the plan is in force. */
-data class ApplyReport(val failed: List<String>) {
+data class ApplyReport(val failed: List<String>, val unsuspendable: List<String> = emptyList()) {
     val ok get() = failed.isEmpty()
 }
 
@@ -21,6 +21,7 @@ class PolicyApplier(context: Context) {
     private val dpm = context.getSystemService(DevicePolicyManager::class.java)
     private val admin = ComponentName(context, AdminReceiver::class.java)
     private val packageName = context.packageName
+    private val pm = context.packageManager
 
     fun apply(plan: PolicyPlan): ApplyReport {
         check(dpm.isDeviceOwnerApp(packageName)) { "this app is not the device owner" }
@@ -45,9 +46,13 @@ class PolicyApplier(context: Context) {
         for (pkg in plan.uninstallBlocked) dpm.setUninstallBlocked(admin, pkg, true)
         dpm.setUserControlDisabledPackages(admin, plan.userControlDisabled.toList())
 
-        failed += dpm.setPackagesSuspended(admin, plan.suspended.toTypedArray(), true).map { "suspend $it" }
+        // Android refuses to suspend some system apps for any app (on Xiaomi: Security, the Play Store). That is a limit of the
+        // phone, not a failure of the rules: noted apart, and left out of the next plans. Any other refusal is a failure.
+        val refused = dpm.setPackagesSuspended(admin, plan.suspended.toTypedArray(), true).toList()
+        val (system, other) = refused.partition { isSystemApp(it) }
+        failed += other.map { "suspend $it" }
         failed += dpm.setPackagesSuspended(admin, plan.unsuspended.toTypedArray(), false).map { "unsuspend $it" }
-        return ApplyReport(failed)
+        return ApplyReport(failed, system)
     }
 
     /**
@@ -65,6 +70,10 @@ class PolicyApplier(context: Context) {
         if (suspended.isNotEmpty()) failed += dpm.setPackagesSuspended(admin, suspended.toTypedArray(), false).map { "unsuspend $it" }
         return ApplyReport(failed)
     }
+
+    private fun isSystemApp(pkg: String) = runCatching {
+        pm.getApplicationInfo(pkg, 0).flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM != 0
+    }.getOrDefault(false)
 
     private fun chromeBundle() = Bundle().apply {
         ChromePolicy.STRINGS.forEach(::putString)
