@@ -4,7 +4,9 @@ import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -74,13 +76,13 @@ private fun devOptionsOn(context: Context) = Settings.Global.getInt(context.cont
 private fun usbDebuggingOn(context: Context) = Settings.Global.getInt(context.contentResolver, Settings.Global.ADB_ENABLED, 0) == 1
 private const val BACKUP_PHRASE = "I backed up"
 
-/** The top of every step: a big icon, the step's name, and one sentence about it. */
+/** The top of every step, poster-style: the icon, the step's name big and to the left, one sentence about it. */
 @Composable
 fun StepHeader(icon: ImageVector, title: String, subtitle: String) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        IconCircle(icon, Palette.Bar, 72.dp)
-        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+    Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Icon(icon, null, tint = Palette.Signal, modifier = Modifier.size(36.dp))
+        Text(title, style = MaterialTheme.typography.headlineMedium)
+        Text(subtitle, style = MaterialTheme.typography.bodyLarge, color = Palette.Muted)
     }
 }
 
@@ -95,8 +97,8 @@ private fun openSettings(context: Context, action: String) {
 private fun Chore(number: Int, text: String, ticked: Boolean, onTick: (Boolean) -> Unit, button: String? = null, onButton: (() -> Unit)? = null) {
     InfoCard {
         Row(Modifier.fillMaxWidth().clickable { onTick(!ticked) }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.size(32.dp).clip(CircleShape).background(if (ticked) Palette.Day else Palette.Bar), contentAlignment = Alignment.Center) {
-                if (ticked) Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(18.dp)) else Text("$number", color = Color.White, fontWeight = FontWeight.Bold)
+            Box(Modifier.size(32.dp).background(if (ticked) Palette.Day else Color.Transparent).border(2.dp, if (ticked) Palette.Day else Palette.Ink), contentAlignment = Alignment.Center) {
+                if (ticked) Icon(Icons.Filled.Check, null, tint = Palette.Paper, modifier = Modifier.size(20.dp)) else Text("$number", color = Palette.Ink, fontWeight = FontWeight.Black)
             }
             Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
         }
@@ -172,11 +174,11 @@ fun OwnerStep(onBecameOwner: () -> Unit) {
         Text("5. On a computer with adb", fontWeight = FontWeight.SemiBold)
         Text("Plug the phone in, allow the USB prompt on the phone, and run this one line:", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFF1B1B1B)).padding(start = 12.dp),
+            Modifier.fillMaxWidth().background(Palette.Ink).padding(start = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(command, Modifier.weight(1f), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, color = if (ready) Color.White else Palette.Muted)
-            IconButton(onClick = { clipboard.setText(AnnotatedString(command)) }, enabled = ready) { Icon(Icons.Filled.ContentCopy, "Copy the command") }
+            Text(command, Modifier.weight(1f), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, color = if (ready) Palette.Paper else Palette.Muted)
+            IconButton(onClick = { clipboard.setText(AnnotatedString(command)) }, enabled = ready) { Icon(Icons.Filled.ContentCopy, "Copy the command", tint = if (ready) Palette.Paper else Palette.Muted) }
         }
         if (!ready) Text("The command unlocks once the four steps above are done: ${listOfNotNull("backup".takeIf { !backup }, "accounts".takeIf { !accounts }, "developer options".takeIf { !developer }, "USB debugging".takeIf { !usb }).joinToString()} still missing.", color = Palette.Open, style = MaterialTheme.typography.bodySmall)
     }
@@ -224,14 +226,15 @@ fun DnsStep(draft: LockConfig, onChange: (LockConfig) -> Unit, onChecked: (Strin
 private fun PickRow(selected: Boolean, label: String, tag: String? = null, packageName: String? = null, onSelect: () -> Unit) {
     Card(
         Modifier.fillMaxWidth().clickable(onClick = onSelect),
-        colors = CardDefaults.cardColors(containerColor = if (selected) Palette.RuleDark else MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(containerColor = if (selected) Palette.RuleDark else Color.Transparent),
+        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) Palette.Ink else Palette.Line),
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             RadioButton(selected, onClick = onSelect)
             if (packageName != null) AppIcon(packageName, 36.dp)
             Column(Modifier.weight(1f)) {
                 Text(label, fontWeight = FontWeight.Medium)
-                if (tag != null) Text(tag, color = Palette.Open, style = MaterialTheme.typography.bodySmall)
+                if (tag != null) Text(tag, color = Palette.Signal, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -258,13 +261,14 @@ fun NightStep(draft: LockConfig, apps: SetupApps?, onChange: (LockConfig) -> Uni
         val on = app.packageName in draft.nightAllowlist
         Card(
             Modifier.fillMaxWidth().clickable { onChange(toggle(draft, app.packageName, !on)) },
-            colors = CardDefaults.cardColors(containerColor = if (on) Palette.RuleDark else MaterialTheme.colorScheme.surfaceVariant),
+            colors = CardDefaults.cardColors(containerColor = if (on) Palette.RuleDark else Color.Transparent),
+        border = BorderStroke(if (on) 2.dp else 1.dp, if (on) Palette.Ink else Palette.Line),
         ) {
             Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 AppIcon(app.packageName, 36.dp)
                 Column(Modifier.weight(1f)) {
                     Text(app.label, fontWeight = FontWeight.Medium)
-                    NightRisk.warning(app.packageName)?.let { Text(it, color = Palette.Open, style = MaterialTheme.typography.bodySmall) }
+                    NightRisk.warning(app.packageName)?.let { Text(it, color = Palette.Locked, style = MaterialTheme.typography.bodySmall) }
                 }
                 Checkbox(on, onCheckedChange = { onChange(toggle(draft, app.packageName, it)) })
             }
@@ -285,7 +289,7 @@ fun RhythmStep(draft: LockConfig, onChange: (LockConfig) -> Unit) {
 @Composable
 private fun HowItWorks(number: Int, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(Modifier.size(28.dp).clip(CircleShape).background(Palette.Bar), contentAlignment = Alignment.Center) { Text("$number", color = Color.White, fontWeight = FontWeight.Bold) }
+        Text("0$number", style = MaterialTheme.typography.titleLarge, color = Palette.Signal)
         Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
     }
 }
@@ -318,7 +322,7 @@ fun FriendStep(manager: ChangeManager, verified: Boolean, onVerified: () -> Unit
     }
     SecretScreen()
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        Box(Modifier.clip(RoundedCornerShape(16.dp)).background(Color.White).padding(10.dp)) { QrImage(FriendCode.otpauthUri(shown)) }
+        Box(Modifier.background(Color.White).border(3.dp, Palette.Ink).padding(14.dp)) { QrImage(FriendCode.otpauthUri(shown)) }
     }
     Note("Your friend scans this, then reads you the current 6-digit code. Type it below. The QR code disappears once it matches.")
     OutlinedTextField(

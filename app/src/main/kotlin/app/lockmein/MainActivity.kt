@@ -37,11 +37,25 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            // The look follows the schedule: paper by day, dimmed from the night's start. Checked every minute.
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                while (true) {
+                    app.lockmein.ui.Palette.night = isNight()
+                    kotlinx.coroutines.delay(60_000)
+                }
+            }
             app.lockmein.ui.LockTheme {
                 Surface(Modifier.fillMaxSize()) { LockApp(intent?.getStringExtra("screen")) }
             }
         }
     }
+}
+
+private fun android.content.Context.isNight(): Boolean {
+    val config = ConfigStore(this).load()
+    if (config != null) return runCatching { Rules.schedule(config).phaseAt(java.time.Instant.now()) == app.lockmein.core.Phase.NIGHT }.getOrDefault(false)
+    val hour = java.time.LocalTime.now().hour
+    return hour >= 22 || hour < 6
 }
 
 private fun intent(context: android.content.Context): android.content.Intent? = (context as? android.app.Activity)?.intent

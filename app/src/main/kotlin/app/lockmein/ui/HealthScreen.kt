@@ -46,33 +46,28 @@ import java.time.format.DateTimeFormatter
 
 private val AT = DateTimeFormatter.ofPattern("HH:mm:ss")
 
-/** The one-line verdict: verified, broken (how many), or still asking Android. Tapping it opens the full check. */
+/** The verdict as a solid block: green VERIFIED, red with the count of problems, or still asking Android. Tapping it opens the full check. */
 @Composable
 fun HealthBadge(items: List<HealthItem>?, onClick: (() -> Unit)?) {
     val problems = items?.count { !it.ok } ?: 0
     val (color, icon, title, detail) = when {
-        items == null -> Quad(Palette.Muted, Icons.Filled.GppMaybe, "Checking the phone...", "Reading back what Android really enforces.")
-        BuildConfig.PREVIEW -> Quad(Palette.Open, Icons.Filled.GppMaybe, "Preview: not protecting", "This build shows the screens only. Nothing is enforced.")
-        problems == 0 -> Quad(Palette.Day, Icons.Filled.GppGood, "Protection verified", "All ${items.size} checks read back from Android pass.")
-        else -> Quad(Palette.Locked, Icons.Filled.GppBad, "$problems problem${if (problems > 1) "s" else ""}: not fully protected", items.first { !it.ok }.let { "${it.title}: ${it.detail}" })
+        items == null -> Quad(Palette.Muted, Icons.Filled.GppMaybe, "Checking", "Reading back what Android really enforces.")
+        BuildConfig.PREVIEW -> Quad(Palette.Open, Icons.Filled.GppMaybe, "Not protecting", "Preview build: it shows the screens only. Nothing is enforced.")
+        problems == 0 -> Quad(Palette.Day, Icons.Filled.GppGood, "Verified", "${items.size}/${items.size} checks read back from Android pass.")
+        else -> Quad(Palette.Locked, Icons.Filled.GppBad, "$problems problem${if (problems > 1) "s" else ""}", items.first { !it.ok }.let { "${it.title}: ${it.detail}" })
     }
-    Card(
-        Modifier.fillMaxWidth().let { if (onClick != null) it.clickable(onClick = onClick) else it },
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = Palette.Card),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.5f)),
+    val text = if (color == Palette.Open) Palette.Ink else Palette.Paper
+    Row(
+        Modifier.fillMaxWidth().background(color).let { if (onClick != null) it.clickable(onClick = onClick) else it }.padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Box(Modifier.size(44.dp).clip(CircleShape).background(color.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-                if (items == null) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = color)
-                else Icon(icon, null, tint = color, modifier = Modifier.size(26.dp))
-            }
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, color = color)
-                Text(detail, style = MaterialTheme.typography.bodySmall, color = Palette.Muted, maxLines = 2)
-            }
-            if (onClick != null) Icon(Icons.Filled.ChevronRight, null, tint = Palette.Muted)
+        if (items == null) CircularProgressIndicator(Modifier.size(26.dp), strokeWidth = 3.dp, color = text)
+        else Icon(icon, null, tint = text, modifier = Modifier.size(30.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title.uppercase(), style = MaterialTheme.typography.titleLarge, color = text)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = text.copy(alpha = 0.85f), maxLines = 2)
         }
+        if (onClick != null) Text("\u2192", style = MaterialTheme.typography.headlineSmall, color = text)
     }
 }
 

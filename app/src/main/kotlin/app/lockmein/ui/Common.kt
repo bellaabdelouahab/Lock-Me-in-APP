@@ -1,5 +1,12 @@
 package app.lockmein.ui
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -70,7 +77,11 @@ val LocalNavigate = compositionLocalOf<(Screen) -> Unit> { {} }
 @Composable
 fun Navigation(navigate: (Screen) -> Unit, content: @Composable () -> Unit) = CompositionLocalProvider(LocalNavigate provides navigate, content = content)
 
-/** A page: blue top bar with an optional back arrow and actions, then scrolling content. */
+/** A thick ink rule: the poster's way of separating things instead of boxes. */
+@Composable
+fun Rule(thick: Boolean = true) = Box(Modifier.fillMaxWidth().height(if (thick) 3.dp else 1.dp).background(if (thick) Palette.Ink else Palette.Line))
+
+/** A page: the title in capitals with a thick rule under it, an optional back arrow and actions, then scrolling content. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Page(
@@ -82,81 +93,96 @@ fun Page(
 ) {
     if (onBack != null) BackHandler(onBack = onBack)
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Palette.Paper,
         topBar = {
-            TopAppBar(
-                title = { Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1) },
-                navigationIcon = {
-                    if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-                },
-                actions = actions,
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background, titleContentColor = Color.White, navigationIconContentColor = Color.White, actionIconContentColor = Palette.Muted),
-            )
+            Column(Modifier.background(Palette.Paper).statusBarsPadding()) {
+                TopAppBar(
+                    title = { Text(title.uppercase(), style = MaterialTheme.typography.titleLarge, maxLines = 1) },
+                    navigationIcon = {
+                        if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    },
+                    actions = actions,
+                    windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Palette.Paper, titleContentColor = Palette.Ink, navigationIconContentColor = Palette.Ink, actionIconContentColor = Palette.Ink),
+                )
+                Box(Modifier.padding(horizontal = 20.dp)) { Rule() }
+            }
         },
         bottomBar = bottomBar,
     ) { padding ->
         Column(
-            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 8.dp).padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp).padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             content = content,
         )
     }
 }
 
+/** A section label: small capitals, then a thin rule. */
 @Composable
-fun Heading(text: String) = Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = Palette.Muted, modifier = Modifier.padding(top = 10.dp, start = 4.dp))
+fun Heading(text: String) = Column(Modifier.fillMaxWidth().padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = Palette.Ink)
+    Rule(thick = false)
+}
 
 @Composable
-fun Note(text: String) = Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+fun Note(text: String) = Text(text, style = MaterialTheme.typography.bodyMedium, color = Palette.Muted)
 
 @Composable
 fun Problem(text: String?) {
-    if (text != null) Text(text, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+    if (text != null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+        Box(Modifier.padding(top = 5.dp).size(8.dp).background(Palette.Locked))
+        Text(text, color = Palette.Locked, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+    }
 }
 
 /** The sentence an outcome came to, in the colour that fits. */
 @Composable
 fun OutcomeText(outcome: Outcome?) = when (outcome) {
-    is Outcome.Done -> Text(outcome.message, color = Palette.Day)
-    is Outcome.Refused -> Text(outcome.reason, color = MaterialTheme.colorScheme.error)
+    is Outcome.Done -> Text(outcome.message, color = Palette.Day, fontWeight = FontWeight.SemiBold)
+    is Outcome.Refused -> Problem(outcome.reason)
     null -> Unit
 }
 
+/** No box: the content sits on the paper with a thick rule on its left, like a margin note on a poster. */
 @Composable
-fun InfoCard(content: @Composable ColumnScope.() -> Unit) = Card(
-    Modifier.fillMaxWidth(),
-    shape = MaterialTheme.shapes.large,
-    colors = CardDefaults.cardColors(containerColor = Palette.Card),
-    border = BorderStroke(1.dp, Palette.Line),
-) {
-    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+fun InfoCard(content: @Composable ColumnScope.() -> Unit) = Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+    Box(Modifier.fillMaxHeight().width(3.dp).background(Palette.Ink))
+    Column(Modifier.weight(1f).padding(start = 14.dp, top = 2.dp, bottom = 2.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
 }
 
+/** The main action: a square ink block with capitals. */
 @Composable
 fun MenuButton(label: String, enabled: Boolean = true, onClick: () -> Unit) =
-    Button(onClick = onClick, enabled = enabled, shape = CircleShape, modifier = Modifier.fillMaxWidth().height(54.dp)) { Text(label, style = MaterialTheme.typography.titleMedium) }
+    Button(
+        onClick = onClick, enabled = enabled, shape = RectangleShape, modifier = Modifier.fillMaxWidth().height(58.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Palette.Ink, contentColor = Palette.Paper, disabledContainerColor = Palette.Line, disabledContentColor = Palette.Muted),
+    ) { Text(label.uppercase(), style = MaterialTheme.typography.labelLarge) }
 
+/** A second action: a square ink outline. */
 @Composable
 fun SecondaryButton(label: String, onClick: () -> Unit, enabled: Boolean = true) =
-    OutlinedButton(onClick = onClick, enabled = enabled, shape = CircleShape, border = BorderStroke(1.dp, Palette.Line), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text(label, color = if (enabled) Palette.Bar else Palette.Muted) }
+    OutlinedButton(onClick = onClick, enabled = enabled, shape = RectangleShape, border = BorderStroke(2.dp, if (enabled) Palette.Ink else Palette.Line), modifier = Modifier.fillMaxWidth().height(52.dp)) {
+        Text(label.uppercase(), style = MaterialTheme.typography.labelLarge, color = if (enabled) Palette.Ink else Palette.Muted)
+    }
 
 /** Small buttons for rows: the chosen one is filled, the others outlined. */
 @Composable
 fun RowScope.MenuButtonSmall(label: String, onClick: () -> Unit) =
-    Button(onClick = onClick, modifier = Modifier.weight(1f)) { Text(label, maxLines = 1) }
+    Button(onClick = onClick, shape = RectangleShape, colors = ButtonDefaults.buttonColors(containerColor = Palette.Ink, contentColor = Palette.Paper), modifier = Modifier.weight(1f)) { Text(label.uppercase(), maxLines = 1, style = MaterialTheme.typography.labelMedium) }
 
 @Composable
 fun RowScope.SecondaryButtonSmall(label: String, onClick: () -> Unit) =
-    OutlinedButton(onClick = onClick, modifier = Modifier.weight(1f)) { Text(label, maxLines = 1) }
+    OutlinedButton(onClick = onClick, shape = RectangleShape, border = BorderStroke(2.dp, Palette.Ink), modifier = Modifier.weight(1f)) { Text(label.uppercase(), maxLines = 1, color = Palette.Ink, style = MaterialTheme.typography.labelMedium) }
 
 @Composable
 fun ButtonRow(content: @Composable RowScope.() -> Unit) =
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), content = content)
 
-/** A soft circle of [color] with the icon in that colour (or [tint]). */
+/** One of the few round things: a solid dot of [color] with the icon on it in paper. */
 @Composable
-fun IconCircle(icon: ImageVector, color: Color, size: Dp = 56.dp, tint: Color = color) {
-    Box(Modifier.size(size).clip(CircleShape).background(color.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+fun IconCircle(icon: ImageVector, color: Color, size: Dp = 56.dp, tint: Color = Palette.Paper) {
+    Box(Modifier.size(size).clip(Dot).background(color), contentAlignment = Alignment.Center) {
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size * 0.5f))
     }
 }
@@ -175,25 +201,24 @@ fun AppIcon(packageName: String, size: Dp = 36.dp) {
             out.asImageBitmap()
         }.getOrNull()
     }
-    if (bitmap != null) Image(bitmap, contentDescription = null, modifier = Modifier.size(size).clip(CircleShape))
+    if (bitmap != null) Image(bitmap, contentDescription = null, modifier = Modifier.size(size).clip(Dot))
     else IconCircle(Icons.Filled.Apps, Palette.Muted, size)
 }
 
-/** M T W T F S S, with the chosen days filled in, like the rule cards of a lockout app. [days] are ISO numbers, 1 = Monday. */
+/** M T W T F S S as squares: filled ink for the chosen days. [days] are ISO numbers, 1 = Monday. */
 @Composable
-fun DayCircles(days: Set<Int>) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+fun DayCircles(days: Set<Int>, on: Color = Palette.Ink, off: Color = Palette.Line, onText: Color = Palette.Paper) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         "MTWTFSS".forEachIndexed { index, letter ->
-            val on = (index + 1) in days
-            Box(
-                Modifier.size(34.dp).clip(CircleShape).background(if (on) Color.White else Color.White.copy(alpha = 0.08f)),
-                contentAlignment = Alignment.Center,
-            ) { Text(letter.toString(), color = if (on) Palette.RuleDark else Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.Bold) }
+            val chosen = (index + 1) in days
+            Box(Modifier.weight(1f).height(30.dp).background(if (chosen) on else Color.Transparent).border(1.dp, if (chosen) on else off), contentAlignment = Alignment.Center) {
+                Text(letter.toString(), color = if (chosen) onText else Palette.Muted, fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelMedium)
+            }
         }
     }
 }
 
-/** A blue rule card: title, small icons, the time range, the days, and an optional progress bar. */
+/** A rule as a poster block: a solid slab of [color] (ink by default), the name in capitals, the time huge, the days, a square progress bar. */
 @Composable
 fun RuleCard(
     title: String,
@@ -202,46 +227,42 @@ fun RuleCard(
     days: Set<Int>,
     progress: Float? = null,
     caption: String? = null,
-    color: Color = Palette.Rule,
+    color: Color = Palette.Ink,
     onClick: (() -> Unit)? = null,
 ) {
-    Card(
-        Modifier.fillMaxWidth().let { if (onClick != null) it.clickable(onClick = onClick) else it },
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        border = BorderStroke(1.dp, Palette.Line),
+    val slab = if (color == Palette.Signal || color == Palette.Rule) Palette.Signal else Palette.Ink
+    Column(
+        Modifier.fillMaxWidth().background(slab).let { if (onClick != null) it.clickable(onClick = onClick) else it }.padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(Modifier.background(Palette.glow(color)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                icons.forEach { Icon(it, contentDescription = null, tint = Color.White, modifier = Modifier.padding(start = 8.dp).size(20.dp)) }
-            }
-            Text(time, color = Color.White.copy(alpha = 0.9f), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
-            DayCircles(days)
-            if (progress != null) LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth(), color = Color.White, trackColor = Color.White.copy(alpha = 0.3f))
-            if (caption != null) Text(caption, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title.uppercase(), color = Palette.Paper, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            icons.forEach { Icon(it, contentDescription = null, tint = Palette.Paper, modifier = Modifier.padding(start = 8.dp).size(18.dp)) }
+            if (onClick != null) Text("  \u2192", color = Palette.Paper, style = MaterialTheme.typography.titleLarge)
         }
+        Text(time, color = Palette.Paper, style = MaterialTheme.typography.headlineMedium)
+        DayCircles(days, on = Palette.Paper, off = Palette.Paper.copy(alpha = 0.35f), onText = slab)
+        if (progress != null) Box(Modifier.fillMaxWidth().height(6.dp).background(Palette.Paper.copy(alpha = 0.25f))) {
+            Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).height(6.dp).background(Palette.Paper))
+        }
+        if (caption != null) Text(caption, color = Palette.Paper.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall)
     }
 }
 
-/** A grey section card with a title, an optional icon row of apps, and a line of text. Tapping it opens the matching screen. */
+/** A row on the paper, no box: icon, the name in bold, a line of text, app icons, an arrow; a thin rule under it. */
 @Composable
 fun SectionCard(title: String, subtitle: String, packages: List<String> = emptyList(), leading: ImageVector? = null, onClick: (() -> Unit)? = null) {
-    Card(
-        Modifier.fillMaxWidth().let { if (onClick != null) it.clickable(onClick = onClick) else it },
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = Palette.Card),
-        border = BorderStroke(1.dp, Palette.Line),
-    ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            if (leading != null) IconCircle(leading, Palette.Bar, 44.dp)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
-                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                if (packages.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) { packages.take(6).forEach { AppIcon(it, 30.dp) } }
+    Column(Modifier.fillMaxWidth().let { if (onClick != null) it.clickable(onClick = onClick) else it }) {
+        Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            if (leading != null) Icon(leading, null, tint = Palette.Ink, modifier = Modifier.size(26.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(subtitle, color = Palette.Muted, style = MaterialTheme.typography.bodySmall)
+                if (packages.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) { packages.take(6).forEach { AppIcon(it, 26.dp) } }
             }
-            if (onClick != null) Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (onClick != null) Text("\u2192", style = MaterialTheme.typography.headlineSmall, color = Palette.Ink)
         }
+        Rule(thick = false)
     }
 }
 
@@ -257,8 +278,8 @@ fun <T> CoroutineScope.background(work: () -> T, done: (T) -> Unit) {
 enum class CheckState { PASS, FAIL, CHECKING, CONFIRM }
 
 /**
- * One requirement, with its live state: a mint tick once the phone itself confirms it, coral while it does not hold, a spinner
- * while it is being checked. [detail] says what was found or what to do; [action] goes to where it is fixed.
+ * One requirement, with its live state, as a line on the paper: a round status dot (green once the phone itself confirms it,
+ * red while it does not hold, yellow when only you can confirm it), the name, what was found; a thin rule under it.
  */
 @Composable
 fun CheckRow(title: String, state: CheckState, detail: String? = null, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
@@ -268,28 +289,25 @@ fun CheckRow(title: String, state: CheckState, detail: String? = null, actionLab
         CheckState.CHECKING -> Palette.Muted
         CheckState.CONFIRM -> Palette.Open
     }
-    Card(
-        Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = Palette.Card),
-        border = BorderStroke(1.dp, if (state == CheckState.PASS) Palette.Day.copy(alpha = 0.45f) else Palette.Line),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(Modifier.size(34.dp).clip(CircleShape).background(color.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-                    when (state) {
-                        CheckState.CHECKING -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = color)
-                        CheckState.PASS -> Icon(Icons.Filled.CheckCircle, null, tint = color, modifier = Modifier.size(22.dp))
-                        CheckState.FAIL -> Icon(Icons.Filled.ErrorOutline, null, tint = color, modifier = Modifier.size(22.dp))
-                        CheckState.CONFIRM -> Icon(Icons.Filled.Info, null, tint = color, modifier = Modifier.size(22.dp))
-                    }
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    if (detail != null) Text(detail, style = MaterialTheme.typography.bodySmall, color = if (state == CheckState.FAIL) Palette.Locked.copy(alpha = 0.9f) else Palette.Muted)
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Box(Modifier.padding(top = 2.dp).size(22.dp), contentAlignment = Alignment.Center) {
+                if (state == CheckState.CHECKING) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.5.dp, color = Palette.Ink)
+                else Box(Modifier.size(16.dp).clip(Dot).background(color))
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                if (detail != null) Text(detail, style = MaterialTheme.typography.bodySmall, color = if (state == CheckState.FAIL) Palette.Locked else Palette.Muted)
+                if (actionLabel != null && onAction != null && state != CheckState.PASS) {
+                    Text("${actionLabel.uppercase()}  \u2192", style = MaterialTheme.typography.labelLarge, color = Palette.Signal,
+                        modifier = Modifier.padding(top = 6.dp).clickable(onClick = onAction))
                 }
             }
-            if (actionLabel != null && onAction != null && state != CheckState.PASS) SecondaryButton(actionLabel, onAction)
+            Text(
+                when (state) { CheckState.PASS -> "OK"; CheckState.FAIL -> "NO"; CheckState.CHECKING -> "..."; CheckState.CONFIRM -> "YOU" },
+                style = MaterialTheme.typography.labelLarge, color = if (state == CheckState.CHECKING) Palette.Muted else color,
+            )
         }
+        Rule(thick = false)
     }
 }

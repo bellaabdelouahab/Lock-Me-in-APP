@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -102,36 +103,40 @@ fun SetupScreen(onExit: () -> Unit) {
     }
 
     Page(
-        "Set up (${step + 1} of ${LAST_STEP + 1})",
+        "Setup",
         onBack = { if (step == 0) onExit() else step-- },
         bottomBar = {
-            Surface(tonalElevation = 3.dp, color = MaterialTheme.colorScheme.surfaceVariant) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.fillMaxWidth().background(Palette.Paper).navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Rule()
+                    // Seven square segments: filled for the steps done, the current one in the signal colour.
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         STEP_TITLES.indices.forEach { index ->
-                            Box(Modifier.padding(3.dp).size(if (index == step) 10.dp else 7.dp).clip(CircleShape).background(if (index <= step) Palette.Rule else Palette.Muted.copy(alpha = 0.4f)))
+                            Box(Modifier.weight(1f).height(6.dp).background(when { index < step -> Palette.Ink; index == step -> Palette.Signal; else -> Palette.Line }))
                         }
                     }
                     if (step < LAST_STEP) {
-                        if (!canContinue && hint != null) Text(hint, color = Palette.Open, style = MaterialTheme.typography.bodySmall)
+                        if (!canContinue && hint != null) Text(hint, color = Palette.Signal, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
                         ButtonRow {
-                            if (step > 0) OutlinedButton(onClick = { step-- }, modifier = Modifier.weight(1f).height(48.dp)) { Text("Back") }
+                            if (step > 0) SecondaryButtonSmall("Back") { step-- }
                             Button(
+                                shape = androidx.compose.ui.graphics.RectangleShape,
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Palette.Ink, contentColor = Palette.Paper, disabledContainerColor = Palette.Line, disabledContentColor = Palette.Muted),
                                 onClick = {
                                     if (DnsHost.problem(draft.dnsHost) == null) store.save(draft)
                                     step++
                                 },
                                 enabled = canContinue,
-                                modifier = Modifier.weight(1f).height(48.dp),
-                            ) { Text("Next") }
+                                modifier = Modifier.weight(1f),
+                            ) { Text("NEXT  \u2192", style = MaterialTheme.typography.labelLarge) }
                         }
                     }
-                }
             }
         },
     ) {
-        LinearProgressIndicator(progress = { (step + 1f) / (LAST_STEP + 1) }, modifier = Modifier.fillMaxWidth(), color = Palette.Rule, trackColor = Palette.Card)
-        Text(STEP_TITLES[step], color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
+        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("0${step + 1}", style = MaterialTheme.typography.displayMedium, color = Palette.Signal)
+            Text("/ 0${LAST_STEP + 1}  ${STEP_TITLES[step].uppercase()}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(bottom = 10.dp))
+        }
         when (step) {
             0 -> OwnerStep { ownerChecked++; if (step == 0) step = 1 }
             1 -> DnsStep(draft, { draft = it }, { dnsChecked = it })
