@@ -22,7 +22,7 @@ class Health(private val context: Context) {
     private val dpm = context.getSystemService(DevicePolicyManager::class.java)
     private val admin = ComponentName(context, AdminReceiver::class.java)
 
-    fun check(now: Instant = Instant.now()): List<HealthItem> {
+    fun check(now: Instant = TrustedClock(context).now()): List<HealthItem> {
         val config = ConfigStore(context).load() ?: return listOf(HealthItem("Setup", false, "The setup is not finished."))
         if (BuildConfig.PREVIEW) return listOf(HealthItem("Preview build", false, "This build only shows the screens. Nothing is enforced on this phone."))
         val owner = dpm.isDeviceOwnerApp(context.packageName)
@@ -56,6 +56,18 @@ class Health(private val context: Context) {
 
         val time = dpm.getAutoTimeEnabled(admin) && dpm.getAutoTimeZoneEnabled(admin)
         items += HealthItem("Automatic time", time, if (time) "Time and zone come from the network." else "Automatic time or zone is off: the schedule can be fooled.")
+
+        val clock = TrustedClock(context)
+        val drift = clock.drift()
+        items += HealthItem(
+            "Network time",
+            drift != null && drift < Duration.ofMinutes(5),
+            when {
+                drift == null -> "No network time since the phone started: the rules follow the phone's clock until it is online."
+                drift >= Duration.ofMinutes(5) -> "The phone's clock is ${drift.toMinutes()} min off. The rules ignore it and follow network time."
+                else -> "The rules follow network time; the phone's clock agrees."
+            },
+        )
 
         val uninstall = dpm.isUninstallBlocked(admin, context.packageName)
         items += HealthItem("Can't be uninstalled", uninstall, if (uninstall) "The uninstall button is blocked for Lock Me In." else "Lock Me In can be uninstalled right now.")

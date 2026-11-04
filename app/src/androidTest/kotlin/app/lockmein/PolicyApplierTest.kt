@@ -364,6 +364,8 @@ class PolicyApplierTest {
     @Test
     fun y1_theHealthCheckReadsBackEveryRuleAfterAPass() {
         store.protectionActive = true
+        TrustedClock(context).renewIfStale()
+        assertTrue("the emulator is online, so network time is known", TrustedClock(context).trustedNow() != null)
         val result = PolicyRunner(context).run(config, monday)
         assertEquals(emptyList<String>(), result.report.failed)
         val health = Health(context).check(monday)

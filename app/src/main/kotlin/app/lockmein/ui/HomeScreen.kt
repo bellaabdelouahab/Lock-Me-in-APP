@@ -187,7 +187,7 @@ private fun Dashboard(config: LockConfig, state: LockState, owner: Boolean) {
     val context = LocalContext.current
     val navigate = LocalNavigate.current
     val zone = ZoneId.systemDefault()
-    val now = Instant.now()
+    val now = app.lockmein.TrustedClock(context).now()
     val schedule = remember(config) { Rules.schedule(config, zone) }
     val fajr = remember(config) { AstronomicalFajr(config.fajrConfig(), zone) }
     val phase = schedule.phaseAt(now)

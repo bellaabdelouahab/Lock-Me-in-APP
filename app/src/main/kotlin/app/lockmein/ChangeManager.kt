@@ -66,14 +66,14 @@ class ChangeManager(private val context: Context) {
     fun requests(): List<ChangeRequest> = state.requests.sortedBy { it.requestedAtMillis }
 
     /** Gives up a waiting request. This closes things, so it is always allowed. */
-    fun cancelRequest(id: String, now: Instant = Instant.now()): Outcome {
+    fun cancelRequest(id: String, now: Instant = TrustedClock(context).now()): Outcome {
         state.requests = Requests.cancel(state.requests, id)
         events.add(EventKind.REQUEST_CANCELLED, id, now)
         return Outcome.Done("Cancelled.")
     }
 
     /** Carries out a waiting request, if its wait is over and the open window is running. */
-    fun applyRequest(id: String, now: Instant = Instant.now(), networkTime: Instant? = NetworkClock.now()): Outcome {
+    fun applyRequest(id: String, now: Instant = TrustedClock(context).now(), networkTime: Instant? = NetworkClock.now()): Outcome {
         val request = state.requests.firstOrNull { it.id == id } ?: return Outcome.Refused("That request is gone.")
         val config = config()
         val decision = gate(config).decideApply(request, now, networkTime)
@@ -98,7 +98,7 @@ class ChangeManager(private val context: Context) {
     }
 
     /** Add or remove an app on the night list or the always-blocked list. Before protection starts these are free. */
-    fun editList(list: AppList, op: ListOp, packageName: String, now: Instant = Instant.now()): Outcome {
+    fun editList(list: AppList, op: ListOp, packageName: String, now: Instant = TrustedClock(context).now()): Outcome {
         val config = config()
         val current = if (list == AppList.NIGHT_ALLOWED) config.nightAllowlist else config.alwaysBlocked
         val untouchable = DeviceInventory(context).read().protectedPackages + context.packageName
@@ -117,7 +117,7 @@ class ChangeManager(private val context: Context) {
     }
 
     /** Saves changed settings (DNS host, browser, rhythm, location). After protection starts every change is a request that waits. */
-    fun saveSettings(updated: LockConfig, now: Instant = Instant.now()): Outcome {
+    fun saveSettings(updated: LockConfig, now: Instant = TrustedClock(context).now()): Outcome {
         ConfigRules.problems(updated).firstOrNull()?.let { return Outcome.Refused(it) }
         if (store.protectionActive) {
             if (config() == updated) return Outcome.Done("Nothing changed.")
@@ -129,10 +129,10 @@ class ChangeManager(private val context: Context) {
     }
 
     /** A new app held back since it was installed: asking to let it through is a request that waits. */
-    fun releaseApp(packageName: String, now: Instant = Instant.now()): Outcome = ask(RequestKind.RELEASE_APP, packageName, now)
+    fun releaseApp(packageName: String, now: Instant = TrustedClock(context).now()): Outcome = ask(RequestKind.RELEASE_APP, packageName, now)
 
     /** Ask for a closed browser. A browser is a new door, so it waits like every other opening. */
-    fun requestBrowser(packageName: String, now: Instant = Instant.now()): Outcome {
+    fun requestBrowser(packageName: String, now: Instant = TrustedClock(context).now()): Outcome {
         events.add(EventKind.BROWSER_REQUESTED, packageName, now)
         return ask(RequestKind.BROWSER, packageName, now)
     }
@@ -140,7 +140,7 @@ class ChangeManager(private val context: Context) {
     /**
      * The friend's code unblocks one app for 60 minutes, then it closes again by itself. It changes no setting and no list.
      */
-    fun redeemEmergency(code: String, packageName: String, now: Instant = Instant.now()): Outcome {
+    fun redeemEmergency(code: String, packageName: String, now: Instant = TrustedClock(context).now()): Outcome {
         if (packageName.isBlank()) return Outcome.Refused("Choose the app to unblock.")
         val untouchable = DeviceInventory(context).read().protectedPackages + context.packageName
         if (packageName in untouchable) return Outcome.Refused("That app is never blocked.")
@@ -161,7 +161,7 @@ class ChangeManager(private val context: Context) {
      * Checks a code while the friend is on the phone during setup, to prove the secret reached them. The counter is remembered so the
      * same code cannot be used for an unblock a moment later.
      */
-    fun verifyEnrolment(code: String, now: Instant = Instant.now()): Boolean {
+    fun verifyEnrolment(code: String, now: Instant = TrustedClock(context).now()): Boolean {
         val secret = secrets.load() ?: return false
         val check = CodeChecker(secret).check(code, now, state.lastCodeCounter)
         if (check is CodeCheck.Accepted) state.lastCodeCounter = check.counter
@@ -177,7 +177,7 @@ class ChangeManager(private val context: Context) {
     val hasFriendSecret: Boolean get() = secrets.hasSecret
 
     /** Turns the protection on. Needs the device-owner role, valid settings and a friend code. */
-    fun startProtection(now: Instant = Instant.now()): Outcome {
+    fun startProtection(now: Instant = TrustedClock(context).now()): Outcome {
         if (BuildConfig.PREVIEW) {
             // The preview shows the finished app without touching the phone: nothing is applied, nothing can be locked.
             store.protectionActive = true
@@ -185,6 +185,7 @@ class ChangeManager(private val context: Context) {
             return Outcome.Done("Preview: the app now looks as it will when protection is on. Nothing was applied to this phone.")
         }
         if (!dpm.isDeviceOwnerApp(context.packageName)) return Outcome.Refused("This app is not the device owner yet. Finish the first setup step.")
+        TrustedClock(context).renewIfStale()
         val config = store.load() ?: return Outcome.Refused("Finish the setup first.")
         ConfigRules.problems(config).firstOrNull()?.let { return Outcome.Refused(it) }
         if (!secrets.hasSecret) return Outcome.Refused("Set up the friend's code first.")
@@ -195,10 +196,10 @@ class ChangeManager(private val context: Context) {
     }
 
     /** Asks to take the protection off. It waits like every opening; the friend's code is needed when it is carried out. */
-    fun requestRemoval(now: Instant = Instant.now()): Outcome = ask(RequestKind.REMOVE_PROTECTION, "", now)
+    fun requestRemoval(now: Instant = TrustedClock(context).now()): Outcome = ask(RequestKind.REMOVE_PROTECTION, "", now)
 
     /** Takes the protection off: the request has waited, the open window is running, and the friend's code is fresh. */
-    fun removeProtection(code: String, now: Instant = Instant.now(), networkTime: Instant? = NetworkClock.now()): Outcome {
+    fun removeProtection(code: String, now: Instant = TrustedClock(context).now(), networkTime: Instant? = NetworkClock.now()): Outcome {
         val config = config()
         val secret = secrets.load() ?: return Outcome.Refused("No friend code is set up.")
         val request = state.requests.firstOrNull { it.kind == RequestKind.REMOVE_PROTECTION }

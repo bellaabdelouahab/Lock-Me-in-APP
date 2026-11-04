@@ -15,6 +15,8 @@ class ReapplyReceiver : BroadcastReceiver() {
         // The DNS step blocks, so the pass runs off the main thread.
         thread(name = "lock-me-in-run") {
             try {
+                // The rules follow network time, not the phone's clock: renew it first (no-op when fresh or offline).
+                TrustedClock(context.applicationContext).renewIfStale()
                 val result = PolicyRunner(context.applicationContext).runIfActive()
                 if (result != null && !result.report.ok) Log.w(TAG, "policy pass left problems: ${result.report.failed}")
             } finally {

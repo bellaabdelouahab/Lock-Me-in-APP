@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
 
 private fun android.content.Context.isNight(): Boolean {
     val config = ConfigStore(this).load()
-    if (config != null) return runCatching { Rules.schedule(config).phaseAt(java.time.Instant.now()) == app.lockmein.core.Phase.NIGHT }.getOrDefault(false)
+    if (config != null) return runCatching { Rules.schedule(config).phaseAt(TrustedClock(this).now()) == app.lockmein.core.Phase.NIGHT }.getOrDefault(false)
     val hour = java.time.LocalTime.now().hour
     return hour >= 22 || hour < 6
 }

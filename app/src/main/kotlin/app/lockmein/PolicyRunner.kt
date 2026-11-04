@@ -23,14 +23,14 @@ class PolicyRunner(private val context: Context) {
     private val events = EventLog(context)
 
     /** The pass the alarms and the boot receiver call: does nothing unless protection was started. */
-    fun runIfActive(now: Instant = Instant.now()): RunResult? {
+    fun runIfActive(now: Instant = TrustedClock(context).now()): RunResult? {
         val store = ConfigStore(context)
         val config = store.load()
         if (!store.protectionActive || config == null) return null
         return run(config, now)
     }
 
-    fun run(config: LockConfig, now: Instant = Instant.now()): RunResult {
+    fun run(config: LockConfig, now: Instant = TrustedClock(context).now()): RunResult {
         // The preview build only shows the screens: it is never the device owner and applies nothing.
         if (BuildConfig.PREVIEW) return RunResult(ApplyReport(emptyList()), now.plus(CHECK_EVERY))
         val schedule = Rules.schedule(config)
@@ -41,12 +41,12 @@ class PolicyRunner(private val context: Context) {
         events.add(if (report.ok) EventKind.PASS_OK else EventKind.PASS_FAILED, report.failed.joinToString("; "), now)
 
         val next = listOfNotNull(schedule.nextTransition(now), now.plus(CHECK_EVERY), unblocks.values.minOrNull()).min()
-        scheduleAt(next)
+        scheduleAt(next, now)
         return RunResult(report, next)
     }
 
     /** The policy that should be in force right now. The health check compares the phone against it. */
-    fun planFor(config: LockConfig, now: Instant = Instant.now()): PolicyPlan {
+    fun planFor(config: LockConfig, now: Instant = TrustedClock(context).now()): PolicyPlan {
         val snapshot = DeviceInventory(context).read()
         val state = LockState(context)
         val mode = if (BuildConfig.TEST_BUILD) BuildMode.TEST else BuildMode.SEALED
@@ -57,7 +57,8 @@ class PolicyRunner(private val context: Context) {
         )
     }
 
-    private fun scheduleAt(at: Instant) {
+    /** Set on the time-since-boot clock, which can't be changed by hand, as a delay from the trusted [now]. */
+    private fun scheduleAt(at: Instant, now: Instant) {
         val alarms = context.getSystemService(AlarmManager::class.java)
         val intent = PendingIntent.getBroadcast(
             context,
@@ -65,11 +66,11 @@ class PolicyRunner(private val context: Context) {
             Intent(context, ReapplyReceiver::class.java).setAction(ReapplyReceiver.ACTION_RUN),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val millis = at.toEpochMilli()
+        val millis = android.os.SystemClock.elapsedRealtime() + Duration.between(now, at).toMillis().coerceAtLeast(1_000)
         if (alarms.canScheduleExactAlarms()) {
-            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, intent)
+            alarms.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, millis, intent)
         } else {
-            alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, intent)
+            alarms.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, millis, intent)
         }
     }
 

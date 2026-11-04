@@ -49,7 +49,7 @@ fun WindowScreen(onBack: () -> Unit) {
 
     val schedule = Rules.schedule(config)
     val gate = ChangeGate(schedule, wait = Duration.ofDays(config.loosenWaitDays.toLong()))
-    val now = Instant.now()
+    val now = app.lockmein.TrustedClock(context).now()
     val zone = ZoneId.systemDefault()
     val open = schedule.phaseAt(now) == Phase.OPEN_WINDOW
     val waiting = remember(version) { manager.requests() }
