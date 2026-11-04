@@ -215,7 +215,7 @@ private fun Dashboard(config: LockConfig, state: LockState, owner: Boolean) {
             Text("NOW", style = MaterialTheme.typography.labelSmall)
         }
         Text(headline.uppercase(), style = MaterialTheme.typography.displaySmall, color = color)
-        Text(shortLength(Duration.between(now, next)), style = MaterialTheme.typography.displayLarge, maxLines = 1)
+        Text(shortLength(Duration.between(now, next)), style = MaterialTheme.typography.displayMedium, maxLines = 1, softWrap = false)
         Text("LEFT, UNTIL ${DAY_TIME.format(next.atZone(zone)).uppercase()}", style = MaterialTheme.typography.labelSmall, color = Palette.Muted)
     }
     Box(Modifier.fillMaxWidth().height(10.dp).background(Palette.Line)) {
