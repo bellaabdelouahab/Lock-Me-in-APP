@@ -70,6 +70,9 @@ import kotlinx.coroutines.delay
 data class SetupApps(val browsers: List<AppInfo>, val launchable: List<AppInfo>, val suggestedNight: Set<String>)
 
 private fun isDeviceOwner(context: Context) = context.getSystemService(DevicePolicyManager::class.java).isDeviceOwnerApp(context.packageName)
+private fun devOptionsOn(context: Context) = Settings.Global.getInt(context.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1
+private fun usbDebuggingOn(context: Context) = Settings.Global.getInt(context.contentResolver, Settings.Global.ADB_ENABLED, 0) == 1
+private const val BACKUP_PHRASE = "I backed up"
 
 /** The top of every step: a big icon, the step's name, and one sentence about it. */
 @Composable
@@ -111,10 +114,12 @@ fun OwnerStep(onBecameOwner: () -> Unit) {
     val clipboard = LocalClipboardManager.current
     val wasOwner = remember { isDeviceOwner(context) }
     var owner by remember { mutableStateOf(wasOwner) }
-    var backup by rememberSaveable { mutableStateOf(false) }
+    var backupPhrase by rememberSaveable { mutableStateOf("") }
     var accounts by rememberSaveable { mutableStateOf(false) }
-    var developer by rememberSaveable { mutableStateOf(false) }
-    var usb by rememberSaveable { mutableStateOf(false) }
+    // Read from the phone's own settings, so these two tick themselves (and untick if switched off again).
+    var developer by remember { mutableStateOf(devOptionsOn(context)) }
+    var usb by remember { mutableStateOf(usbDebuggingOn(context)) }
+    val backup = backupPhrase.trim().equals(BACKUP_PHRASE, ignoreCase = true)
     val command = "adb shell dpm set-device-owner ${context.packageName}/.AdminReceiver"
 
     // Checks every two seconds, and moves on by itself once the command has worked.
@@ -122,6 +127,8 @@ fun OwnerStep(onBecameOwner: () -> Unit) {
         if (BuildConfig.PREVIEW || wasOwner) return@LaunchedEffect
         while (!owner) {
             delay(2_000)
+            developer = devOptionsOn(context)
+            usb = usbDebuggingOn(context)
             owner = isDeviceOwner(context)
         }
         onBecameOwner()
@@ -144,13 +151,22 @@ fun OwnerStep(onBecameOwner: () -> Unit) {
         }
         return
     }
-    Chore(1, "Back up your phone. Photos, files, and move your authenticator codes somewhere safe.", backup, { backup = it })
-    Chore(2, "Remove every account (Google, Xiaomi, others) and turn off Second Space and Dual Apps. Android refuses while accounts exist. You add them back afterwards.", accounts, { accounts = it },
+    InfoCard {
+        Text("1. Back up your phone", fontWeight = FontWeight.SemiBold)
+        Text("Photos, files and your authenticator codes. The phone can't check this, so type \"$BACKUP_PHRASE\" once it is done.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        OutlinedTextField(backupPhrase, { backupPhrase = it }, label = { Text("Type: $BACKUP_PHRASE") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            trailingIcon = { if (backup) Icon(Icons.Filled.CheckCircle, null, tint = Palette.Day) })
+    }
+    Chore(2, "Remove every account (Google, Xiaomi, others) and turn off Second Space and Dual Apps. Android refuses the command while accounts exist; you add them back afterwards.", accounts, { accounts = it },
         "Open Accounts", { openSettings(context, Settings.ACTION_SYNC_SETTINGS) })
-    Chore(3, "Switch on developer options: open About phone and tap the OS or MIUI version seven times.", developer, { developer = it },
-        "Open About phone", { openSettings(context, Settings.ACTION_DEVICE_INFO_SETTINGS) })
-    Chore(4, "In Developer options turn on USB debugging. On Xiaomi also turn on \"USB debugging (Security settings)\".", usb, { usb = it },
-        "Open Developer options", { openSettings(context, Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS) })
+    CheckRow("3. Developer options", if (developer) CheckState.PASS else CheckState.FAIL,
+        if (developer) "On. Checked on the phone." else "Off. Open About phone and tap the OS or MIUI version seven times.", "Open About phone") { openSettings(context, Settings.ACTION_DEVICE_INFO_SETTINGS) }
+    CheckRow("4. USB debugging", if (usb) CheckState.PASS else if (developer) CheckState.FAIL else CheckState.CONFIRM,
+        when {
+            usb -> "On. Checked on the phone."
+            !developer -> "Switch on developer options first."
+            else -> "Off. In Developer options turn on USB debugging (on Xiaomi also \"USB debugging (Security settings)\")."
+        }, if (developer) "Open Developer options" else null) { openSettings(context, Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS) }
     val ready = backup && accounts && developer && usb
     InfoCard {
         Text("5. On a computer with adb", fontWeight = FontWeight.SemiBold)
@@ -162,7 +178,7 @@ fun OwnerStep(onBecameOwner: () -> Unit) {
             Text(command, Modifier.weight(1f), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, color = if (ready) Color.White else Palette.Muted)
             IconButton(onClick = { clipboard.setText(AnnotatedString(command)) }, enabled = ready) { Icon(Icons.Filled.ContentCopy, "Copy the command") }
         }
-        if (!ready) Text("Tick the four steps above first. Skipping them can lose data or make the command fail.", color = Palette.Open, style = MaterialTheme.typography.bodySmall)
+        if (!ready) Text("The command unlocks once the four steps above are done: ${listOfNotNull("backup".takeIf { !backup }, "accounts".takeIf { !accounts }, "developer options".takeIf { !developer }, "USB debugging".takeIf { !usb }).joinToString()} still missing.", color = Palette.Open, style = MaterialTheme.typography.bodySmall)
     }
     InfoCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -176,10 +192,32 @@ fun OwnerStep(onBecameOwner: () -> Unit) {
     }
 }
 
+/** The DNS host, checked for real: the app connects to it the way Android will, and only a server that answers lets the setup go on. */
 @Composable
-fun DnsStep(draft: LockConfig, onChange: (LockConfig) -> Unit) {
+fun DnsStep(draft: LockConfig, onChange: (LockConfig) -> Unit, onChecked: (String?) -> Unit) {
     StepHeader(Icons.Filled.Shield, "Private DNS", "Every app and browser asks this server before it loads a site. It blocks adult sites at the source, and the setting is locked afterwards.")
     InfoCard { DnsFields(draft, onChange) }
+    val host = draft.dnsHost
+    var result by remember(host) { mutableStateOf<String?>(null) }
+    var checking by remember(host) { mutableStateOf(false) }
+    var problem by remember(host) { mutableStateOf<String?>(null) }
+    LaunchedEffect(host) {
+        onChecked(null)
+        if (app.lockmein.core.DnsHost.problem(host) != null) return@LaunchedEffect
+        delay(700) // wait for typing to stop
+        checking = true
+        val found = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app.lockmein.DnsProbe.problem(host) }
+        checking = false
+        problem = found
+        result = if (found == null) host else null
+        onChecked(result)
+    }
+    when {
+        app.lockmein.core.DnsHost.problem(host) != null -> Unit
+        checking -> CheckRow("Asking $host", CheckState.CHECKING, "Connecting on the secure DNS port, as Android will.")
+        result == host -> CheckRow("$host answers", CheckState.PASS, "A working secure DNS server with a valid certificate.")
+        problem != null -> CheckRow("Not working yet", CheckState.FAIL, problem)
+    }
 }
 
 @Composable
@@ -200,15 +238,15 @@ private fun PickRow(selected: Boolean, label: String, tag: String? = null, packa
 }
 
 @Composable
-fun BrowserStep(draft: LockConfig, apps: SetupApps?, onChange: (LockConfig) -> Unit) {
+fun BrowserStep(draft: LockConfig, apps: SetupApps?, onChange: (LockConfig) -> Unit, onChosen: () -> Unit = {}) {
     StepHeader(Icons.Filled.Language, "One browser stays open", "Every other browser is closed: their private windows and own secure DNS can go around the filter.")
     if (apps == null) return Note("Reading your apps...")
     apps.browsers.sortedByDescending { it.packageName == KnownBrowsers.CHROME }.forEach { app ->
         PickRow(draft.allowedBrowser == app.packageName, app.label, if (app.packageName == KnownBrowsers.CHROME) "Recommended: the app locks its private windows, secure DNS and safe search" else null, app.packageName) {
-            onChange(draft.copy(allowedBrowser = app.packageName, alwaysBlocked = draft.alwaysBlocked - app.packageName))
+            onChange(draft.copy(allowedBrowser = app.packageName, alwaysBlocked = draft.alwaysBlocked - app.packageName)); onChosen()
         }
     }
-    PickRow(draft.allowedBrowser == null, "No browser stays open") { onChange(draft.copy(allowedBrowser = null)) }
+    PickRow(draft.allowedBrowser == null, "No browser stays open") { onChange(draft.copy(allowedBrowser = null)); onChosen() }
     Note("A closed browser can be requested later. It waits 7 days and opens in the weekly window.")
 }
 

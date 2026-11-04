@@ -1,7 +1,25 @@
 package app.lockmein.ui
 
 import android.app.admin.DevicePolicyManager
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Sos
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import app.lockmein.Health
+import app.lockmein.HealthItem
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -100,19 +118,55 @@ fun HomeScreen() {
 
 @Composable
 private fun Welcome(owner: Boolean, onSetup: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        IconCircle(Icons.Filled.Lock, Palette.Bar, 96.dp)
-        Text("No fight at night", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text(
-            "You choose the rules while you are calm. At night the phone keeps them, and opening anything up has to wait a week.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(horizontal = 12.dp),
-        )
+    Box(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.extraLarge).background(Palette.glow(Palette.Bar)).padding(24.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            IconCircle(Icons.Filled.NightsStay, Color.White, 64.dp)
+            Text("No fight at night", style = MaterialTheme.typography.headlineLarge)
+            Text("You choose the rules while you are calm. At night the phone keeps them, and opening anything up has to wait a week.", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyLarge)
+        }
     }
-    SectionCard("Set it up once", "Seven short steps, about ten minutes. The app guides you and moves on by itself.", leading = Icons.Filled.Shield)
-    SectionCard("This phone", if (owner) "This app is the device owner." else "This app is not the device owner yet. Step 1 will help.", leading = Icons.Filled.Settings)
+    Heading("How it works")
+    Step(1, "Set it up once", "Seven steps. Each one is checked on the phone before you can go on.")
+    Step(2, "The night closes the phone", "From your cut-off until fajr only your night apps run.")
+    Step(3, "Opening up waits a week", "Closing more is instant. Opening is a request carried out in the weekly window.")
+    CheckRow("This phone", if (owner) CheckState.PASS else CheckState.CONFIRM, if (owner) "Lock Me In is the device owner." else "Not the device owner yet: step 1 walks you through it.")
     MenuButton("Start the setup", onClick = onSetup)
+}
+
+@Composable
+private fun Step(number: Int, title: String, text: String) {
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Box(Modifier.size(32.dp).clip(CircleShape).background(Palette.Bar.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+            Text("$number", color = Palette.Bar, fontWeight = FontWeight.Bold)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(text, style = MaterialTheme.typography.bodySmall, color = Palette.Muted)
+        }
+    }
+}
+
+/** A square shortcut: icon, name, one line, an optional count badge. */
+@Composable
+private fun RowScope.Tile(icon: ImageVector, color: Color, title: String, line: String, badge: Int = 0, onClick: () -> Unit) {
+    Card(
+        Modifier.weight(1f).clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = Palette.Card),
+        border = BorderStroke(1.dp, Palette.Line),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconCircle(icon, color, 40.dp)
+                Spacer(Modifier.weight(1f))
+                if (badge > 0) Box(Modifier.clip(CircleShape).background(Palette.Open).padding(horizontal = 8.dp, vertical = 2.dp)) {
+                    Text("$badge", color = Palette.Night, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                }
+            }
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(line, style = MaterialTheme.typography.bodySmall, color = Palette.Muted, maxLines = 2)
+        }
+    }
 }
 
 @Composable
@@ -141,21 +195,18 @@ private fun Dashboard(config: LockConfig, state: LockState, owner: Boolean) {
         Phase.DAY -> Five(ZonedDateTime.of(local.toLocalDate(), fajr.fajr(local.toLocalDate()), zone).toInstant(), "Day", "Social apps run until ${config.nightStart}. YouTube stays blocked.", Palette.Day, Icons.Filled.WbSunny)
     }
 
-    // Status card.
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), elevation = CardDefaults.cardElevation(4.dp)) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                IconCircle(icon, color, 56.dp)
-                Column(Modifier.weight(1f)) {
-                    Text(headline, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                }
+    // The hero: where the day is, and how long until it changes.
+    Box(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.extraLarge).background(Palette.glow(color)).padding(22.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                IconCircle(icon, color, 40.dp)
+                Text("NOW", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f))
             }
-            LinearProgressIndicator(progress = { progressOf(phaseStart, now, next) }, modifier = Modifier.fillMaxWidth(), color = color, trackColor = color.copy(alpha = 0.25f))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("${lengthOf(Duration.between(now, next))} remaining", fontWeight = FontWeight.Medium)
-                Text("until ${DAY_TIME.format(next.atZone(zone))}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            Text(headline, style = MaterialTheme.typography.headlineLarge)
+            Text(detail, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium)
+            Text(lengthOf(Duration.between(now, next)), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold, color = Color.White)
+            LinearProgressIndicator(progress = { progressOf(phaseStart, now, next) }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape), color = color, trackColor = Color.White.copy(alpha = 0.12f))
+            Text("until ${DAY_TIME.format(next.atZone(zone))}", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
             unblocks.forEach { (pkg, until) ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     AppIcon(pkg, 28.dp)
@@ -165,13 +216,17 @@ private fun Dashboard(config: LockConfig, state: LockState, owner: Boolean) {
         }
     }
 
-    // Emergency.
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Emergency", fontWeight = FontWeight.SemiBold)
-            Text("Your friend's code opens one app for 60 minutes. It closes again by itself and changes nothing else.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-            MenuButton("Emergency") { navigate(Screen.EMERGENCY) }
-        }
+    // Not what the app thinks, what Android says.
+    val health by produceState<List<HealthItem>?>(null, config) { value = withContext(Dispatchers.IO) { Health(context).check() } }
+    HealthBadge(health) { navigate(Screen.HEALTH) }
+
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Tile(Icons.Filled.Sos, Palette.Locked, "Emergency", "Friend's code opens one app for an hour.") { navigate(Screen.EMERGENCY) }
+        Tile(Icons.Filled.EventAvailable, Palette.Open, "Requests", if (waiting.isEmpty()) "Nothing waiting." else "${waiting.size} waiting for the window.", waiting.size) { navigate(Screen.WINDOW) }
+    }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Tile(Icons.Filled.Apps, Palette.Bar, "Apps", "${config.nightAllowlist.size} at night, ${config.alwaysBlocked.size} always blocked.") { navigate(Screen.LISTS) }
+        Tile(Icons.Filled.Language, Palette.Day, "Browser", config.allowedBrowser?.let { inventory.label(it) } ?: "None stays open.") { navigate(Screen.BROWSERS) }
     }
 
     Heading("Rules")
@@ -202,13 +257,10 @@ private fun Dashboard(config: LockConfig, state: LockState, owner: Boolean) {
         onClick = { navigate(Screen.WINDOW) },
     )
 
-    SectionCard("Allowed at night", if (config.nightAllowlist.isEmpty()) "Nothing but the phone's essentials." else "${config.nightAllowlist.size} app(s)", config.nightAllowlist.toList(), Icons.Filled.NightsStay) { navigate(Screen.LISTS) }
-    SectionCard("Blocked all the time", if (config.alwaysBlocked.isEmpty()) "None yet. YouTube is always blocked." else "${config.alwaysBlocked.size} app(s), and YouTube", config.alwaysBlocked.toList(), Icons.Filled.Block) { navigate(Screen.LISTS) }
-    val browser = config.allowedBrowser
-    SectionCard("Browser", if (browser == null) "No browser stays open." else "${inventory.label(browser)} stays open. All others are closed.", listOfNotNull(browser), Icons.Filled.Language) { navigate(Screen.BROWSERS) }
     SectionCard("Private DNS", config.dnsHost, leading = Icons.Filled.Shield)
     if (state.quarantined.isNotEmpty()) SectionCard("New apps held back", "${state.quarantined.size} app(s) wait for your review.", state.quarantined.toList(), Icons.Filled.Apps) { navigate(Screen.WINDOW) }
 
+    Spacer(Modifier.height(4.dp))
     Text(
         when {
             BuildConfig.PREVIEW -> "Preview build: nothing is applied to this phone."

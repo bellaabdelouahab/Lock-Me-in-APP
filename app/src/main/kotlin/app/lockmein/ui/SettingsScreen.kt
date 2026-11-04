@@ -1,7 +1,14 @@
 package app.lockmein.ui
 
 import android.content.Intent
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,7 +37,29 @@ fun SettingsScreen(onBack: () -> Unit) {
     var importText by remember { mutableStateOf("") }
     val current = draft ?: return Page("Settings", onBack) { Note("Finish the setup first.") }
 
+    var hideRecents by remember { mutableStateOf(app.lockmein.Recents.hidden(context)) }
+
     Page("Settings", onBack) {
+        Heading("Recent apps")
+        InfoCard {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Hide from recent apps", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        if (store.protectionActive) "Lock Me In stays out of the recent apps screen, so it can't be swiped away or opened into App info. It can't be switched off while protection is on."
+                        else "Lock Me In stays out of the recent apps screen, so it can't be swiped away or opened into App info.",
+                        style = MaterialTheme.typography.bodySmall, color = Palette.Muted,
+                    )
+                }
+                Switch(hideRecents, onCheckedChange = { want ->
+                    if (app.lockmein.Recents.setHidden(context, want)) {
+                        hideRecents = want
+                        (context as? android.app.Activity)?.let(app.lockmein.Recents::apply)
+                    } else outcome = Outcome.Refused("Hiding from recent apps is part of the protection, so it stays on until the protection is removed.")
+                })
+            }
+        }
+        Heading("Rules")
         Note(if (store.protectionActive) "Changes here open the phone up, so they work only in the open window or with an emergency." else "Protection is not on yet, so everything can change freely.")
         DnsFields(current) { draft = it }
         RhythmFields(current) { draft = it }

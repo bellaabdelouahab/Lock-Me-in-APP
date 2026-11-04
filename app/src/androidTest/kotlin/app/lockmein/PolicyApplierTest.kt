@@ -362,6 +362,28 @@ class PolicyApplierTest {
     }
 
     @Test
+    fun y1_theHealthCheckReadsBackEveryRuleAfterAPass() {
+        store.protectionActive = true
+        val result = PolicyRunner(context).run(config, monday)
+        assertEquals(emptyList<String>(), result.report.failed)
+        val health = Health(context).check(monday)
+        assertEquals("every check passes once the rules are in force", emptyList<String>(), health.filter { !it.ok }.map { "${it.title}: ${it.detail}" })
+        assertTrue(health.any { it.title == "Private DNS" } && health.any { it.title == "Can't be stopped or wiped" })
+    }
+
+    @Test
+    fun y2_theHealthCheckSeesARuleThatWasUndone() {
+        // An app that says it works while a rule was taken off is worse than none: undo one behind the app's back and look.
+        store.protectionActive = true
+        PolicyRunner(context).run(config, monday)
+        dpm.clearUserRestriction(admin, Restrictions.CONFIG_VPN)
+        dpm.setUninstallBlocked(admin, context.packageName, false)
+        val failed = Health(context).check(monday).filter { !it.ok }.map { it.title }
+        assertTrue("restrictions: $failed", "Phone restrictions" in failed)
+        assertTrue("uninstall: $failed", "Can't be uninstalled" in failed)
+    }
+
+    @Test
     fun z_removingTheProtectionNeedsARequestTheWindowAndTheCodeAndThenEndsDeviceOwnership() {
         val manager = ChangeManager(context)
         val secret = manager.newFriendSecret()

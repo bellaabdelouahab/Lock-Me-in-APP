@@ -8,6 +8,7 @@ import app.lockmein.core.BuildMode
 import app.lockmein.core.EventKind
 import app.lockmein.core.Inventory
 import app.lockmein.core.LockConfig
+import app.lockmein.core.PolicyPlan
 import app.lockmein.core.PolicyPlanner
 import java.time.Duration
 import java.time.Instant
@@ -33,24 +34,27 @@ class PolicyRunner(private val context: Context) {
         // The preview build only shows the screens: it is never the device owner and applies nothing.
         if (BuildConfig.PREVIEW) return RunResult(ApplyReport(emptyList()), now.plus(CHECK_EVERY))
         val schedule = Rules.schedule(config)
-        val snapshot = DeviceInventory(context).read()
         val state = LockState(context)
-
-        state.noteInstalled(snapshot.installed).forEach { events.add(EventKind.APP_QUARANTINED, it, now) }
+        state.noteInstalled(DeviceInventory(context).read().installed).forEach { events.add(EventKind.APP_QUARANTINED, it, now) }
         val unblocks = state.unblocks(now)
-
-        val mode = if (BuildConfig.TEST_BUILD) BuildMode.TEST else BuildMode.SEALED
-        val plan = PolicyPlanner(Rules.forDevice(snapshot, context.packageName, config), config.dnsHost).plan(
-            schedule.phaseAt(now),
-            mode,
-            Inventory(snapshot.installed, state.approvedBrowsers, state.quarantined, unblocks.keys),
-        )
-        val report = PolicyApplier(context).apply(plan)
+        val report = PolicyApplier(context).apply(planFor(config, now))
         events.add(if (report.ok) EventKind.PASS_OK else EventKind.PASS_FAILED, report.failed.joinToString("; "), now)
 
         val next = listOfNotNull(schedule.nextTransition(now), now.plus(CHECK_EVERY), unblocks.values.minOrNull()).min()
         scheduleAt(next)
         return RunResult(report, next)
+    }
+
+    /** The policy that should be in force right now. The health check compares the phone against it. */
+    fun planFor(config: LockConfig, now: Instant = Instant.now()): PolicyPlan {
+        val snapshot = DeviceInventory(context).read()
+        val state = LockState(context)
+        val mode = if (BuildConfig.TEST_BUILD) BuildMode.TEST else BuildMode.SEALED
+        return PolicyPlanner(Rules.forDevice(snapshot, context.packageName, config), config.dnsHost).plan(
+            Rules.schedule(config).phaseAt(now),
+            mode,
+            Inventory(snapshot.installed, state.approvedBrowsers, state.quarantined, state.unblocks(now).keys),
+        )
     }
 
     private fun scheduleAt(at: Instant) {

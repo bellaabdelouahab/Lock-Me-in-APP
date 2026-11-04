@@ -3,46 +3,76 @@ package app.lockmein.ui
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
-/** The palette: dark grey surfaces, blue rule cards and top bar, red for locked, amber for the open window, green for day. */
+/**
+ * Night sky: deep navy surfaces, a violet accent for what you do, and three signal colours that always mean the same thing:
+ * mint = checked and working (and day), coral = locked or broken, amber = the open window or something to look at.
+ * The old names stay (Bar, Rule...) so every screen takes the new look at once.
+ */
 object Palette {
-    val Bar = Color(0xFF1976D2)
-    val Rule = Color(0xFF0288D1)
-    val RuleDark = Color(0xFF01579B)
-    val Surface = Color(0xFF262626)
-    val Card = Color(0xFF353535)
-    val Locked = Color(0xFFE53935)
-    val Open = Color(0xFFFFB300)
-    val Day = Color(0xFF43A047)
-    val Muted = Color(0xFFB0B0B0)
+    val Night = Color(0xFF0B1020)
+    val Surface = Color(0xFF0B1020)
+    val Card = Color(0xFF161D33)
+    val CardHigh = Color(0xFF1F2844)
+    val Line = Color(0xFF2A3454)
+    val Bar = Color(0xFF7C83FF)
+    val Rule = Color(0xFF5B63E6)
+    val RuleDark = Color(0xFF2B3170)
+    val Locked = Color(0xFFFF5C6C)
+    val Open = Color(0xFFFFB547)
+    val Day = Color(0xFF3DDC97)
+    val Muted = Color(0xFF98A2C3)
+
+    /** The hero cards: a slow fade from a signal colour into the night. */
+    fun glow(color: Color) = Brush.linearGradient(listOf(color.copy(alpha = 0.45f), RuleDark.copy(alpha = 0.85f), Card))
 }
 
 private val Scheme = darkColorScheme(
-    primary = Color(0xFF2196F3),
-    onPrimary = Color.White,
-    primaryContainer = Palette.Rule,
+    primary = Palette.Bar,
+    onPrimary = Color(0xFF0B1020),
+    primaryContainer = Palette.RuleDark,
     onPrimaryContainer = Color.White,
-    secondary = Color(0xFF64B5F6),
-    background = Palette.Surface,
-    onBackground = Color.White,
-    surface = Palette.Surface,
-    onSurface = Color.White,
+    secondary = Palette.Day,
+    background = Palette.Night,
+    onBackground = Color(0xFFEEF1FF),
+    surface = Palette.Night,
+    onSurface = Color(0xFFEEF1FF),
     surfaceVariant = Palette.Card,
     onSurfaceVariant = Palette.Muted,
-    error = Color(0xFFEF5350),
-    outline = Color(0xFF6E6E6E),
+    surfaceContainerHighest = Palette.CardHigh,
+    error = Palette.Locked,
+    outline = Palette.Line,
+    outlineVariant = Palette.Line,
 )
 
 private val Rounded = Shapes(
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(18.dp),
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(18.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(28.dp),
 )
+
+private val Type = Typography().run {
+    copy(
+        headlineLarge = headlineLarge.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.5).sp),
+        headlineMedium = headlineMedium.copy(fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.5).sp),
+        headlineSmall = headlineSmall.copy(fontWeight = FontWeight.Bold),
+        titleLarge = titleLarge.copy(fontWeight = FontWeight.Bold),
+        titleMedium = titleMedium.copy(fontWeight = FontWeight.SemiBold),
+        labelLarge = labelLarge.copy(fontWeight = FontWeight.SemiBold),
+        labelSmall = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp),
+    )
+}
 
 /** Dark on purpose: this app is for the night, and a bright screen at 2am defeats it. */
 @Composable
-fun LockTheme(content: @Composable () -> Unit) = MaterialTheme(colorScheme = Scheme, shapes = Rounded, content = content)
+fun LockTheme(content: @Composable () -> Unit) = MaterialTheme(colorScheme = Scheme, shapes = Rounded, typography = Type, content = content)

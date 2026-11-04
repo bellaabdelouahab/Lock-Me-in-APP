@@ -60,6 +60,10 @@ fun SetupScreen(onExit: () -> Unit) {
     var step by rememberSaveable { mutableIntStateOf(if (BuildConfig.PREVIEW) ((context as? android.app.Activity)?.intent?.getIntExtra("step", 0) ?: 0).coerceIn(0, LAST_STEP) else 0) }
     var draft by remember { mutableStateOf(store.load() ?: LockConfig(dnsHost = "")) }
     var friendVerified by rememberSaveable { mutableStateOf(false) }
+    // The host the DNS step reached for real (null until it answers), and whether a browser was picked on purpose.
+    var dnsChecked by rememberSaveable { mutableStateOf<String?>(null) }
+    var browserChosen by rememberSaveable { mutableStateOf(false) }
+    var afterStart by remember { mutableStateOf<List<app.lockmein.HealthItem>?>(null) }
     var ownerChecked by remember { mutableIntStateOf(0) }
     var outcome by remember { mutableStateOf<Outcome?>(null) }
     var working by remember { mutableStateOf(false) }
@@ -80,7 +84,8 @@ fun SetupScreen(onExit: () -> Unit) {
     val owner = context.getSystemService(DevicePolicyManager::class.java).isDeviceOwnerApp(context.packageName)
     val canContinue = when (step) {
         0 -> owner || BuildConfig.PREVIEW
-        1 -> DnsHost.problem(draft.dnsHost) == null
+        1 -> DnsHost.problem(draft.dnsHost) == null && dnsChecked == draft.dnsHost
+        2 -> browserChosen
         // Everything but the DNS host, which has its own step, must be valid.
         4 -> ConfigRules.problems(draft.copy(dnsHost = "valid.example.com")).isEmpty()
         5 -> friendVerified
@@ -89,7 +94,8 @@ fun SetupScreen(onExit: () -> Unit) {
 
     val hint = when (step) {
         0 -> "This page moves on by itself once the computer command has worked."
-        1 -> "Enter a valid private DNS host to continue."
+        1 -> if (DnsHost.problem(draft.dnsHost) != null) "Enter a private DNS host to continue." else "Next unlocks once the DNS server answers."
+        2 -> "Pick the browser that stays open, or none."
         4 -> "Fix the highlighted fields to continue."
         5 -> "Enter your friend's code to continue."
         else -> null
@@ -128,8 +134,8 @@ fun SetupScreen(onExit: () -> Unit) {
         Text(STEP_TITLES[step], color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
         when (step) {
             0 -> OwnerStep { ownerChecked++; if (step == 0) step = 1 }
-            1 -> DnsStep(draft) { draft = it }
-            2 -> BrowserStep(draft, apps) { draft = it }
+            1 -> DnsStep(draft, { draft = it }, { dnsChecked = it })
+            2 -> BrowserStep(draft, apps, { draft = it }, { browserChosen = true })
             3 -> NightStep(draft, apps) { draft = it }
             4 -> RhythmStep(draft) { draft = it }
             5 -> FriendStep(manager, friendVerified) { friendVerified = true }
@@ -137,12 +143,20 @@ fun SetupScreen(onExit: () -> Unit) {
                 working = true
                 outcome = null
                 store.save(draft)
-                scope.background({ manager.startProtection() }) { result ->
+                afterStart = null
+                // Started is not enough: Android is asked whether every rule really holds before the setup says it is done.
+                scope.background({ manager.startProtection().let { it to if (it is Outcome.Done) app.lockmein.Health(context).check() else null } }) { (result, health) ->
                     working = false
                     outcome = result
-                    if (result is Outcome.Done) navigate(Screen.HOME)
+                    afterStart = health
+                    if (result is Outcome.Done && (BuildConfig.PREVIEW || health.orEmpty().all { it.ok })) navigate(Screen.HOME)
                 }
             }
+        }
+        afterStart?.filter { !it.ok }?.takeIf { it.isNotEmpty() && !BuildConfig.PREVIEW }?.let { failed ->
+            Heading("Not in force yet")
+            failed.forEach { CheckRow(it.title, CheckState.FAIL, it.detail) }
+            SecondaryButton("Open the full check", { navigate(Screen.HEALTH) })
         }
     }
 }

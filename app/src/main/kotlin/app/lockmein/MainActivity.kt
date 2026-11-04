@@ -29,6 +29,11 @@ import app.lockmein.ui.SetupScreen
 import app.lockmein.ui.WindowScreen
 
 class MainActivity : ComponentActivity() {
+    override fun onResume() {
+        super.onResume()
+        Recents.apply(this)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -64,6 +69,7 @@ private fun LockApp(requested: String?) {
             Screen.REPORT -> ReportScreen(onBack = home)
             Screen.SETTINGS -> SettingsScreen(onBack = home)
             Screen.REMOVE -> RemoveScreen(onBack = home, onRemoved = home)
+            Screen.HEALTH -> app.lockmein.ui.HealthScreen(onBack = home)
         }
     }
 }

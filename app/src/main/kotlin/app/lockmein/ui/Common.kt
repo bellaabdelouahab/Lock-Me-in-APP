@@ -1,7 +1,12 @@
 package app.lockmein.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -57,7 +62,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class Screen { HOME, SETUP, LISTS, BROWSERS, WINDOW, EMERGENCY, REPORT, SETTINGS, REMOVE }
+enum class Screen { HOME, SETUP, LISTS, BROWSERS, WINDOW, EMERGENCY, REPORT, SETTINGS, REMOVE, HEALTH }
 
 /** Where a screen can send the person. */
 val LocalNavigate = compositionLocalOf<(Screen) -> Unit> { {} }
@@ -80,26 +85,26 @@ fun Page(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(title, fontWeight = FontWeight.Medium, maxLines = 1) },
+                title = { Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1) },
                 navigationIcon = {
                     if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
                 actions = actions,
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Palette.Bar, titleContentColor = Color.White, navigationIconContentColor = Color.White, actionIconContentColor = Color.White),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background, titleContentColor = Color.White, navigationIconContentColor = Color.White, actionIconContentColor = Palette.Muted),
             )
         },
         bottomBar = bottomBar,
     ) { padding ->
         Column(
-            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 8.dp).padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
             content = content,
         )
     }
 }
 
 @Composable
-fun Heading(text: String) = Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+fun Heading(text: String) = Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = Palette.Muted, modifier = Modifier.padding(top = 10.dp, start = 4.dp))
 
 @Composable
 fun Note(text: String) = Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -120,18 +125,20 @@ fun OutcomeText(outcome: Outcome?) = when (outcome) {
 @Composable
 fun InfoCard(content: @Composable ColumnScope.() -> Unit) = Card(
     Modifier.fillMaxWidth(),
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    shape = MaterialTheme.shapes.large,
+    colors = CardDefaults.cardColors(containerColor = Palette.Card),
+    border = BorderStroke(1.dp, Palette.Line),
 ) {
-    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
 }
 
 @Composable
 fun MenuButton(label: String, enabled: Boolean = true, onClick: () -> Unit) =
-    Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text(label, fontWeight = FontWeight.Medium) }
+    Button(onClick = onClick, enabled = enabled, shape = CircleShape, modifier = Modifier.fillMaxWidth().height(54.dp)) { Text(label, style = MaterialTheme.typography.titleMedium) }
 
 @Composable
 fun SecondaryButton(label: String, onClick: () -> Unit, enabled: Boolean = true) =
-    OutlinedButton(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().height(46.dp)) { Text(label) }
+    OutlinedButton(onClick = onClick, enabled = enabled, shape = CircleShape, border = BorderStroke(1.dp, Palette.Line), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text(label, color = if (enabled) Palette.Bar else Palette.Muted) }
 
 /** Small buttons for rows: the chosen one is filled, the others outlined. */
 @Composable
@@ -146,10 +153,10 @@ fun RowScope.SecondaryButtonSmall(label: String, onClick: () -> Unit) =
 fun ButtonRow(content: @Composable RowScope.() -> Unit) =
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), content = content)
 
-/** A coloured circle with an icon in it. */
+/** A soft circle of [color] with the icon in that colour (or [tint]). */
 @Composable
-fun IconCircle(icon: ImageVector, color: Color, size: Dp = 56.dp, tint: Color = Color.White) {
-    Box(Modifier.size(size).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
+fun IconCircle(icon: ImageVector, color: Color, size: Dp = 56.dp, tint: Color = color) {
+    Box(Modifier.size(size).clip(CircleShape).background(color.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size * 0.5f))
     }
 }
@@ -179,7 +186,7 @@ fun DayCircles(days: Set<Int>) {
         "MTWTFSS".forEachIndexed { index, letter ->
             val on = (index + 1) in days
             Box(
-                Modifier.size(34.dp).clip(CircleShape).background(if (on) Color.White else Color.Transparent),
+                Modifier.size(34.dp).clip(CircleShape).background(if (on) Color.White else Color.White.copy(alpha = 0.08f)),
                 contentAlignment = Alignment.Center,
             ) { Text(letter.toString(), color = if (on) Palette.RuleDark else Color.White.copy(alpha = 0.7f), fontWeight = FontWeight.Bold) }
         }
@@ -200,10 +207,11 @@ fun RuleCard(
 ) {
     Card(
         Modifier.fillMaxWidth().let { if (onClick != null) it.clickable(onClick = onClick) else it },
-        colors = CardDefaults.cardColors(containerColor = color),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = BorderStroke(1.dp, Palette.Line),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.background(Palette.glow(color)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 icons.forEach { Icon(it, contentDescription = null, tint = Color.White, modifier = Modifier.padding(start = 8.dp).size(20.dp)) }
@@ -221,7 +229,9 @@ fun RuleCard(
 fun SectionCard(title: String, subtitle: String, packages: List<String> = emptyList(), leading: ImageVector? = null, onClick: (() -> Unit)? = null) {
     Card(
         Modifier.fillMaxWidth().let { if (onClick != null) it.clickable(onClick = onClick) else it },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = Palette.Card),
+        border = BorderStroke(1.dp, Palette.Line),
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             if (leading != null) IconCircle(leading, Palette.Bar, 44.dp)
@@ -240,5 +250,46 @@ fun <T> CoroutineScope.background(work: () -> T, done: (T) -> Unit) {
     launch {
         val result = withContext(Dispatchers.IO) { work() }
         done(result)
+    }
+}
+
+/** Where one requirement stands: checked by the app (PASS or FAIL), being checked, or one only the person can confirm. */
+enum class CheckState { PASS, FAIL, CHECKING, CONFIRM }
+
+/**
+ * One requirement, with its live state: a mint tick once the phone itself confirms it, coral while it does not hold, a spinner
+ * while it is being checked. [detail] says what was found or what to do; [action] goes to where it is fixed.
+ */
+@Composable
+fun CheckRow(title: String, state: CheckState, detail: String? = null, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
+    val color = when (state) {
+        CheckState.PASS -> Palette.Day
+        CheckState.FAIL -> Palette.Locked
+        CheckState.CHECKING -> Palette.Muted
+        CheckState.CONFIRM -> Palette.Open
+    }
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = Palette.Card),
+        border = BorderStroke(1.dp, if (state == CheckState.PASS) Palette.Day.copy(alpha = 0.45f) else Palette.Line),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.size(34.dp).clip(CircleShape).background(color.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+                    when (state) {
+                        CheckState.CHECKING -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = color)
+                        CheckState.PASS -> Icon(Icons.Filled.CheckCircle, null, tint = color, modifier = Modifier.size(22.dp))
+                        CheckState.FAIL -> Icon(Icons.Filled.ErrorOutline, null, tint = color, modifier = Modifier.size(22.dp))
+                        CheckState.CONFIRM -> Icon(Icons.Filled.Info, null, tint = color, modifier = Modifier.size(22.dp))
+                    }
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    if (detail != null) Text(detail, style = MaterialTheme.typography.bodySmall, color = if (state == CheckState.FAIL) Palette.Locked.copy(alpha = 0.9f) else Palette.Muted)
+                }
+            }
+            if (actionLabel != null && onAction != null && state != CheckState.PASS) SecondaryButton(actionLabel, onAction)
+        }
     }
 }
