@@ -67,7 +67,8 @@ private fun scheme() = if (Palette.night) darkColorScheme(
 )
 
 // Square everywhere; only the small things (dots, switches, app icons) are round.
-private val Hard = Shapes(extraSmall = RectangleShape, small = RectangleShape, medium = RectangleShape, large = RectangleShape, extraLarge = RectangleShape)
+private val Square = androidx.compose.foundation.shape.RoundedCornerShape(0)
+private val Hard = Shapes(extraSmall = Square, small = Square, medium = Square, large = Square, extraLarge = Square)
 
 /** One heavy grotesk, tight and big for numbers and names, capitals with air for labels. */
 private val Grotesk = FontFamily.SansSerif
