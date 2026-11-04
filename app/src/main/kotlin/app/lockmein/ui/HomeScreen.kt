@@ -131,6 +131,7 @@ private fun Welcome(owner: Boolean, onSetup: () -> Unit) {
     Step(3, "Opening up waits a week", "Closing more is instant. Opening is a request carried out in the weekly window.")
     CheckRow("This phone", if (owner) CheckState.PASS else CheckState.CONFIRM, if (owner) "Lock Me In is the device owner." else "Not the device owner yet: step 1 walks you through it.")
     MenuButton("Start the setup", onClick = onSetup)
+    UpdateCard(onlyIfNewer = true)
 }
 
 @Composable
@@ -219,6 +220,7 @@ private fun Dashboard(config: LockConfig, state: LockState, owner: Boolean) {
     // Not what the app thinks, what Android says.
     val health by produceState<List<HealthItem>?>(null, config) { value = withContext(Dispatchers.IO) { Health(context).check() } }
     HealthBadge(health) { navigate(Screen.HEALTH) }
+    UpdateCard(onlyIfNewer = true)
 
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Tile(Icons.Filled.Sos, Palette.Locked, "Emergency", "Friend's code opens one app for an hour.") { navigate(Screen.EMERGENCY) }

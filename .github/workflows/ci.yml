@@ -59,17 +59,51 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
+      # Every APK is signed with the one release key from the repo's secrets, so the in-app updater can install it over the last one.
+      - name: Release key
+        env:
+          KEY_B64: ${{ secrets.LMI_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEY_B64" ]; then echo "$KEY_B64" | base64 -d > "$RUNNER_TEMP/lockmein.jks"; echo "LMI_KEYSTORE=$RUNNER_TEMP/lockmein.jks" >> "$GITHUB_ENV"; fi
       # The test build: a test-only APK (removable over USB) for the real device-owner setup. Install with `adb install -t`.
       - run: ./gradlew :app:assembleRelease -PtestOnly=true --console=plain
+        env:
+          LMI_KEYSTORE_PASSWORD: ${{ secrets.LMI_KEYSTORE_PASSWORD }}
       - run: mkdir -p dist && cp app/build/outputs/apk/release/app-release.apk dist/lock-me-in-test-build.apk
       # The preview build: installs from the phone's own installer, to look at the screens. It cannot start protection.
       - run: ./gradlew :app:assembleRelease -Ppreview=true --console=plain
+        env:
+          LMI_KEYSTORE_PASSWORD: ${{ secrets.LMI_KEYSTORE_PASSWORD }}
       - run: cp app/build/outputs/apk/release/app-release.apk dist/lock-me-in-preview.apk
+      # The sealed build: blocks USB debugging and factory reset. Only after the test nights.
+      - run: ./gradlew :app:assembleRelease --console=plain
+        env:
+          LMI_KEYSTORE_PASSWORD: ${{ secrets.LMI_KEYSTORE_PASSWORD }}
+      - run: cp app/build/outputs/apk/release/app-release.apk dist/lock-me-in-sealed.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: lock-me-in-phone-test-apk
-          path: dist/lock-me-in-test-build.apk
-      - uses: actions/upload-artifact@v4
+          name: lock-me-in-apks
+          path: dist/
+
+  # Publishes the APKs as the latest GitHub release, which the app's updater reads. Only from main, and only when the
+  # emulator tests passed: a build that fails them never reaches a phone.
+  release:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [debug-apk, device-owner-emulator]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: lock-me-in-preview-apk
-          path: dist/lock-me-in-preview.apk
+          name: lock-me-in-apks
+          path: dist
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          code=$((100 + GITHUB_RUN_NUMBER)); name="0.4.$GITHUB_RUN_NUMBER"
+          notes=$(git log -1 --pretty=%s)
+          jq -n --argjson code "$code" --arg name "$name" --arg notes "$notes" '{versionCode: $code, versionName: $name, notes: $notes}' > dist/version.json
+          gh release create "v$name" dist/* --title "Lock Me In $name" --notes "$notes" --latest

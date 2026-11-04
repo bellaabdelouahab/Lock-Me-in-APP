@@ -24,10 +24,24 @@ android {
         applicationId = "app.lockmein"
         minSdk = 30
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.3.0"
+        // Every CI build is a new version (the run number), so the in-app updater can tell newer from older.
+        val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0
+        versionCode = 100 + run
+        versionName = "0.4.$run"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testProguardFiles("proguard-rules.pro")
+    }
+
+    // One release key for every build (kept in the repo's secrets), so an update installs over the version before it.
+    // Without it (a local build) the debug key is used, and that build can't update or be updated.
+    val keystore = System.getenv("LMI_KEYSTORE")?.let(::file)?.takeIf { it.exists() }
+    signingConfigs {
+        if (keystore != null) create("lockmein") {
+            storeFile = keystore
+            storePassword = System.getenv("LMI_KEYSTORE_PASSWORD")
+            keyAlias = "lockmein"
+            keyPassword = System.getenv("LMI_KEYSTORE_PASSWORD")
+        }
     }
 
     buildTypes {
@@ -44,8 +58,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signed with the debug key so the file installs on a phone; a key of your own is the next step for a build you share.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (keystore != null) "lockmein" else "debug")
         }
     }
 

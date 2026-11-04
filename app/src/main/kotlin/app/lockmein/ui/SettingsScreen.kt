@@ -40,6 +40,8 @@ fun SettingsScreen(onBack: () -> Unit) {
     var hideRecents by remember { mutableStateOf(app.lockmein.Recents.hidden(context)) }
 
     Page("Settings", onBack) {
+        Heading("Updates")
+        UpdateCard()
         Heading("Recent apps")
         InfoCard {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
