@@ -246,9 +246,15 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Icon(phaseIcon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-            Text(phaseName, style = MaterialTheme.typography.titleLarge)
+            Text(phaseName, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             Spacer(Modifier.weight(1f))
-            StatusBadge(kind = statusKind, label = if (phase == Phase.OPEN_WINDOW) "Window open" else "Protected")
+            // The badge never claims more than Android confirms: open setup or a failing check is not "Protected".
+            when {
+                healthItems == null -> StatusBadge(kind = StatusKind.ATTENTION, label = "Checking")
+                failingHealth > 0 -> StatusBadge(kind = StatusKind.ATTENTION, label = "Not fully protected")
+                !ConfigStore(context).setupComplete -> StatusBadge(kind = StatusKind.ATTENTION, label = "Setup open")
+                else -> StatusBadge(kind = statusKind, label = if (phase == Phase.OPEN_WINDOW) "Window open" else "Protected")
+            }
         }
 
         Text(
