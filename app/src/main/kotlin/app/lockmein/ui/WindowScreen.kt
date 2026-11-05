@@ -130,7 +130,7 @@ fun WindowScreen(onBack: () -> Unit) {
                 )
             }
             Text(
-                if (open) "The weekly window is open until " + TIME.format(schedule.nextWindowEnd(now).atZone(zone)) + "."
+                if (open) "The weekly window is open until ${config.windowEnd}."
                 else "Next open window: " + TIME.format(schedule.nextWindowStart(now).atZone(zone)) + ".",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
