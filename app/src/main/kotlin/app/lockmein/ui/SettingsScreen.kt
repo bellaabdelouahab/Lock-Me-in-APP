@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import app.lockmein.AppInfo
 import app.lockmein.BuildConfig
 import app.lockmein.ChangeManager
 import app.lockmein.ConfigStore

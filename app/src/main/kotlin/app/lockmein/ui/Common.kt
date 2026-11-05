@@ -268,15 +268,14 @@ fun InfoCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() 
 @Composable
 fun PrimaryButton(
     label: String,
+    modifier: Modifier = Modifier.fillMaxWidth().height(52.dp),
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) = Button(
     onClick = onClick,
     enabled = enabled,
     shape = ButtonShape,
-    modifier = Modifier
-        .fillMaxWidth()
-        .height(52.dp),
+    modifier = modifier,
     colors = ButtonDefaults.buttonColors(
         containerColor = MaterialTheme.colorScheme.primary,
         contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -292,22 +291,24 @@ fun MenuButton(label: String, enabled: Boolean = true, onClick: () -> Unit) =
 
 /** Secondary action: full-width outlined button. */
 @Composable
-fun SecondaryButton(label: String, onClick: () -> Unit, enabled: Boolean = true) =
-    OutlinedButton(
-        onClick = onClick,
-        enabled = enabled,
-        shape = ButtonShape,
-        border = BorderStroke(1.dp, if (enabled) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp),
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
+fun SecondaryButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth().height(48.dp),
+    enabled: Boolean = true,
+) = OutlinedButton(
+    onClick = onClick,
+    enabled = enabled,
+    shape = ButtonShape,
+    modifier = modifier,
+    border = BorderStroke(1.dp, if (enabled) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant),
+) {
+    Text(
+        label,
+        style = MaterialTheme.typography.labelLarge,
+        color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
 
 @Composable
 fun RowScope.MenuButtonSmall(label: String, onClick: () -> Unit) =

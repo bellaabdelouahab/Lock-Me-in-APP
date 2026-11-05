@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -35,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,7 +60,9 @@ import androidx.compose.ui.unit.dp
 import app.lockmein.AppInfo
 import app.lockmein.BuildConfig
 import app.lockmein.ChangeManager
+import app.lockmein.Outcome
 import app.lockmein.core.ConfigRules
+import app.lockmein.core.DnsHost
 import app.lockmein.core.FriendCode
 import app.lockmein.core.KnownBrowsers
 import app.lockmein.core.LockConfig

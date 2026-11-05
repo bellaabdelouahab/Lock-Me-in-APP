@@ -191,24 +191,22 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
                     else latestRelease?.notes?.ifBlank { "A newer version is ready to install." } ?: "A newer version is ready to install.",
                     style = MaterialTheme.typography.bodySmall,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (setupIncomplete) {
-                        PrimaryButton(
-                            label = if (store.redoing) "Go through steps" else "Finish setup",
-                            onClick = { navigate(Screen.SETUP) },
-                            modifier = Modifier.height(44.dp),
-                        )
-                    } else if (hasUpdate) {
-                        PrimaryButton(
-                            label = "Update now",
-                            onClick = {
-                                scope.launch {
-                                    withContext(Dispatchers.IO) { Updater.install(context) {} }
-                                }
-                            },
-                            modifier = Modifier.height(44.dp),
-                        )
-                    }
+                if (setupIncomplete) {
+                    PrimaryButton(
+                        label = if (store.redoing) "Go through steps" else "Finish setup",
+                        onClick = { navigate(Screen.SETUP) },
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                    )
+                } else if (hasUpdate) {
+                    PrimaryButton(
+                        label = "Update now",
+                        onClick = {
+                            scope.launch {
+                                withContext(Dispatchers.IO) { Updater.install(context) {} }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                    )
                 }
             }
         }
