@@ -42,6 +42,12 @@ object Updater {
         }
         saveResult(context, "")
         val id = installer.createSession(params)
+        // A broken download must not leave a half-written session behind.
+        try { write(context, installer, id, progress) } catch (e: Exception) { runCatching { installer.abandonSession(id) }; throw e }
+        null
+    }.getOrElse { "The update could not be downloaded: ${it.message ?: "no connection"}" }
+
+    private fun write(context: Context, installer: PackageInstaller, id: Int, progress: (Float) -> Unit) {
         installer.openSession(id).use { session ->
             val connection = open("$BASE/lock-me-in-$kind.apk")
             val total = connection.contentLengthLong.takeIf { it > 0 }
@@ -62,8 +68,7 @@ object Updater {
             val done = PendingIntent.getBroadcast(context, id, Intent(context, UpdateReceiver::class.java), PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             session.commit(done.intentSender)
         }
-        null
-    }.getOrElse { "The update could not be downloaded: ${it.message ?: "no connection"}" }
+    }
 
     private fun open(url: String): HttpURLConnection = (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = 10_000
