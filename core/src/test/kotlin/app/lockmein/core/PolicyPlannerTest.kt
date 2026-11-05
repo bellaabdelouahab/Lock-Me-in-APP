@@ -72,7 +72,7 @@ class PolicyPlannerTest {
     fun `an app the friend unblocked for an hour is let through, and nothing else`() {
         val night = planner.plan(Phase.NIGHT, BuildMode.SEALED, inventory.copy(temporarilyAllowed = setOf(instagram)))
         assertFalse(instagram in night.suspended)
-        assertTrue(bank in night.suspended)
+        assertTrue(music in night.suspended)
         assertTrue(youtube in planner.plan(Phase.DAY, BuildMode.SEALED, inventory.copy(temporarilyAllowed = setOf(instagram))).suspended)
     }
 
