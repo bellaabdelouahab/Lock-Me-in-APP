@@ -76,10 +76,10 @@ fun SetupScreen(onExit: () -> Unit) {
             SetupApps(browsers, inventory.launchableApps(), inventory.suggestedNightApps())
         }
     }
-    // On a first setup, pre-tick the clock and authenticator apps once the list of apps is known.
+    // On a first setup, pre-tick the feed and video apps once the list of apps is known.
     LaunchedEffect(apps) {
         val suggested = apps?.suggestedNight.orEmpty()
-        if (suggested.isNotEmpty() && draft.nightAllowlist.isEmpty() && store.load() == null) draft = draft.copy(nightAllowlist = suggested)
+        if (suggested.isNotEmpty() && draft.nightClosed.isEmpty() && store.load() == null) draft = draft.copy(nightClosed = suggested)
     }
 
     val owner = context.getSystemService(DevicePolicyManager::class.java).isDeviceOwnerApp(context.packageName)

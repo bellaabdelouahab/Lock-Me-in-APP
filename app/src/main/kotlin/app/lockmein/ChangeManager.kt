@@ -83,7 +83,8 @@ class ChangeManager(private val context: Context) {
         if (decision is Decision.Denied) return refused(decision.why, "apply ${request.id}", now)
 
         val updated: LockConfig = when (request.kind) {
-            RequestKind.NIGHT_ADD -> config.copy(nightAllowlist = config.nightAllowlist + request.target, alwaysBlocked = config.alwaysBlocked - request.target)
+            RequestKind.NIGHT_ADD -> config
+            RequestKind.NIGHT_REMOVE -> config.copy(nightClosed = config.nightClosed - request.target)
             RequestKind.BLOCKED_REMOVE -> config.copy(alwaysBlocked = config.alwaysBlocked - request.target)
             RequestKind.SETTINGS -> request.settings ?: return Outcome.Refused("That request holds no settings.")
             RequestKind.BROWSER -> { state.approveBrowser(request.target); config }
@@ -103,7 +104,7 @@ class ChangeManager(private val context: Context) {
     /** Add or remove an app on the night list or the always-blocked list. Before protection starts these are free. */
     fun editList(list: AppList, op: ListOp, packageName: String, now: Instant = TrustedClock(context).now()): Outcome {
         val config = config()
-        val current = if (list == AppList.NIGHT_ALLOWED) config.nightAllowlist else config.alwaysBlocked
+        val current = if (list == AppList.NIGHT_CLOSED) config.nightClosed else config.alwaysBlocked
         val untouchable = DeviceInventory(context).read().protectedPackages + context.packageName
         if (packageName in untouchable) return Outcome.Refused("This app keeps the phone working and cannot be listed.")
 
@@ -111,7 +112,7 @@ class ChangeManager(private val context: Context) {
         if (locked && loosens) return ask(editor.requestKind(list), packageName, now)
 
         val newList: Set<String> = if (op == ListOp.ADD) current + packageName else current - packageName
-        val updated = if (list == AppList.NIGHT_ALLOWED) config.copy(nightAllowlist = newList) else config.copy(alwaysBlocked = newList)
+        val updated = if (list == AppList.NIGHT_CLOSED) config.copy(nightClosed = newList) else config.copy(alwaysBlocked = newList)
         ConfigRules.problems(updated).firstOrNull()?.let { return Outcome.Refused(it) }
         store.save(updated)
         if (store.protectionActive) events.add(EventKind.TIGHTENED, "$op $packageName on $list", now)

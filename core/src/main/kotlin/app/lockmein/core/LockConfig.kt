@@ -16,7 +16,8 @@ data class LockConfig(
     val dnsHost: String,
     /** The one browser that stays open; every other browser is closed until requested. Null closes them all. */
     val allowedBrowser: String? = null,
-    val nightAllowlist: Set<String> = emptySet(),
+    /** Apps closed from the night start until fajr. Everything else keeps running. (The old `nightAllowlist`, the reverse, is ignored on load.) */
+    val nightClosed: Set<String> = emptySet(),
     val alwaysBlocked: Set<String> = emptySet(),
     /** Start of the night and end of social-app time, "HH:mm". */
     val nightStart: String = "22:00",
@@ -79,7 +80,5 @@ object ConfigRules {
         if (config.sunAngleDegrees !in 10.0..25.0) add("The sun angle for fajr must be between 10 and 25 degrees.")
         if (config.fajrOffsetMinutes !in -60..60) add("The fajr offset must be within an hour.")
         if (config.allowedBrowser != null && config.allowedBrowser in config.alwaysBlocked) add("The allowed browser cannot also be blocked.")
-        val both = config.nightAllowlist intersect config.alwaysBlocked
-        if (both.isNotEmpty()) add("${both.first()} is on both the night list and the blocked list.")
     }
 }

@@ -37,7 +37,7 @@ object ChromePolicy {
     val BOOLEANS: Map<String, Boolean> = mapOf(FORCE_GOOGLE_SAFE_SEARCH to true)
 }
 
-/** Apps that carry video or open-ended feeds under an audio name. A warning, not a ban: the person decides. */
+/** Apps that carry video or open-ended feeds, some under an audio name: suggested for the night list, with the reason. The person decides. */
 object NightRisk {
     private val VIDEO_CAPABLE = mapOf(
         "com.google.android.youtube" to "YouTube plays video.",

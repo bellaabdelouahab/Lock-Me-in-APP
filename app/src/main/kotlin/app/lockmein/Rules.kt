@@ -12,7 +12,7 @@ object Rules {
         appPackage = appPackage,
         allowedBrowser = config.allowedBrowser,
         browsers = snapshot.browsers,
-        nightAllowlist = config.nightAllowlist,
+        nightClosed = config.nightClosed,
         protectedPackages = snapshot.protectedPackages + unsuspendable,
         alwaysBlocked = config.alwaysBlocked,
     )

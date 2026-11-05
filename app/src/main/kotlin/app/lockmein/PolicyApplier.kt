@@ -31,10 +31,17 @@ class PolicyApplier(context: Context) {
             if (key in plan.restrictions) dpm.addUserRestriction(admin, key) else dpm.clearUserRestriction(admin, key)
         }
 
-        // The DNS call is refused while the Private DNS restriction is on, so the host is set first.
-        dpm.clearUserRestriction(admin, Restrictions.CONFIG_PRIVATE_DNS)
-        val dns = setDnsHost(plan.privateDnsHost)
-        if (dns != DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR) failed += "private dns host ${plan.privateDnsHost}: code $dns"
+        // Already pinned to the host: nothing to set. Setting it again makes Android test the server, which fails whenever the phone
+        // is offline (asleep at night, no Wi-Fi) and reported a failure every pass while the DNS was in fact in force.
+        val pinned = dpm.getGlobalPrivateDnsMode(admin) == DevicePolicyManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME &&
+            dpm.getGlobalPrivateDnsHost(admin) == plan.privateDnsHost
+        if (!pinned) {
+            // The DNS call is refused while the Private DNS restriction is on, so the host is set first.
+            dpm.clearUserRestriction(admin, Restrictions.CONFIG_PRIVATE_DNS)
+            val dns = setDnsHost(plan.privateDnsHost)
+            if (dns == DevicePolicyManager.PRIVATE_DNS_SET_ERROR_HOST_NOT_SERVING) failed += "private DNS ${plan.privateDnsHost} did not answer (offline?), tried again at the next pass"
+            else if (dns != DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR) failed += "private DNS ${plan.privateDnsHost}: Android refused (code $dns)"
+        }
         if (Restrictions.CONFIG_PRIVATE_DNS in plan.restrictions) dpm.addUserRestriction(admin, Restrictions.CONFIG_PRIVATE_DNS)
 
         // The clock and the zone come from the network and cannot be changed by hand (the restriction above closes the Settings page).

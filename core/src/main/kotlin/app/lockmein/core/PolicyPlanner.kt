@@ -26,9 +26,8 @@ data class AppRules(
     val browsers: Set<String>,
     /** YouTube is blocked in every phase, the open window included. The window is for changing rules, not for using apps. */
     val youtubeApp: String = "com.google.android.youtube",
-    val youtubeMusic: String = "com.google.android.apps.youtube.music",
-    /** Phone, Messages, Clock, Authenticator and the local audio player: the only apps that run at night. */
-    val nightAllowlist: Set<String>,
+    /** The apps the owner picked to close at night. Everything else keeps running. */
+    val nightClosed: Set<String>,
     /** Launcher, keyboard, SystemUI, Settings, dialer: never suspended, in any phase. */
     val protectedPackages: Set<String>,
     /** Apps the owner blocked for good: suspended in every phase, the open window included. */
@@ -92,9 +91,8 @@ class PolicyPlanner(private val rules: AppRules, private val privateDnsHost: Str
         val otherBrowsers = ((rules.browsers + KnownBrowsers.ALL) - setOfNotNull(rules.allowedBrowser) - inventory.approvedBrowsers).intersect(managed)
         val quarantined = inventory.quarantined.intersect(managed)
         val youtube = setOf(rules.youtubeApp).intersect(managed)
-        val nightOnly = if (phase == Phase.NIGHT) managed - rules.nightAllowlist else emptySet()
-        val musicAtNight = if (phase == Phase.NIGHT) setOf(rules.youtubeMusic).intersect(managed) else emptySet()
+        val nightOnly = if (phase == Phase.NIGHT) rules.nightClosed.intersect(managed) else emptySet()
         val blocked = rules.alwaysBlocked.intersect(managed)
-        return (otherBrowsers + quarantined + youtube + nightOnly + musicAtNight + blocked) - inventory.temporarilyAllowed
+        return (otherBrowsers + quarantined + youtube + nightOnly + blocked) - inventory.temporarilyAllowed
     }
 }

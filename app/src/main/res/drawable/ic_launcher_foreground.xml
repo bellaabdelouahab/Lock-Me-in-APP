@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Swiss poster mark: a heavy square padlock in ink with the signal-orange dot. Drawn inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:strokeColor="#111111" android:strokeWidth="8" android:fillColor="#00000000"
+        android:pathData="M42,52 L42,42 A12,12 0 0 1 66,42 L66,52" />
+    <path android:fillColor="#111111" android:pathData="M32,50 L76,50 L76,82 L32,82 Z" />
+    <path android:fillColor="#FF4F00" android:pathData="M48,66 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0 Z" />
+</vector>

@@ -17,7 +17,7 @@ object PreviewDemo {
             LockConfig(
                 dnsHost = "demo.dns.nextdns.io",
                 allowedBrowser = "com.android.chrome",
-                nightAllowlist = apps.take(3).toSet(),
+                nightClosed = apps.take(3).toSet(),
                 alwaysBlocked = apps.drop(3).take(3).toSet(),
             ),
         )
@@ -25,7 +25,7 @@ object PreviewDemo {
         val state = LockState(context)
         val now = Instant.now()
         state.requests = listOfNotNull(
-            apps.getOrNull(7)?.let { ChangeRequest(RequestKind.NIGHT_ADD, it, now.minus(Duration.ofDays(3)).toEpochMilli()) },
+            apps.getOrNull(7)?.let { ChangeRequest(RequestKind.NIGHT_REMOVE, it, now.minus(Duration.ofDays(3)).toEpochMilli()) },
             ChangeRequest(RequestKind.BROWSER, "com.brave.browser", now.minus(Duration.ofDays(1)).toEpochMilli()),
         )
     }

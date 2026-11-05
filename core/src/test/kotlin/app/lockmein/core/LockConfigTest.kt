@@ -12,7 +12,7 @@ class LockConfigTest {
     private val config = LockConfig(
         dnsHost = "abc123.dns.nextdns.io",
         allowedBrowser = "com.brave.browser",
-        nightAllowlist = setOf("deezer.android.app"),
+        nightClosed = setOf("deezer.android.app"),
         alwaysBlocked = setOf("com.instagram.android"),
     )
 
@@ -45,7 +45,6 @@ class LockConfigTest {
         assertTrue("end after" in refused { copy(windowStart = "21:00", windowEnd = "20:00") })
         assertTrue("Monday" in refused { copy(windowDay = 9) })
         assertTrue("wait" in refused { copy(loosenWaitDays = 0) })
-        assertTrue("both" in refused { copy(alwaysBlocked = setOf("deezer.android.app")) })
         assertTrue("allowed browser" in refused { copy(alwaysBlocked = setOf("com.brave.browser")) })
         assertTrue("poles" in refused { copy(latitude = 80.0) })
     }

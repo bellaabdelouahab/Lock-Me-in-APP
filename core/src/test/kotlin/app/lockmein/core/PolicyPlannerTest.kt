@@ -22,7 +22,7 @@ class PolicyPlannerTest {
         appPackage = me,
         allowedBrowser = brave,
         browsers = setOf(brave, chrome, firefox),
-        nightAllowlist = setOf(phone, audio, "com.android.mms", "com.android.deskclock", "com.azure.authenticator"),
+        nightClosed = setOf(instagram, music),
         protectedPackages = setOf(phone, launcher, "com.android.systemui", "com.android.settings", "com.android.inputmethod"),
     )
     private val planner = PolicyPlanner(rules, "abc123.dns.nextdns.io")
@@ -43,14 +43,20 @@ class PolicyPlannerTest {
     }
 
     @Test
-    fun `at night only the allowlist, the protected packages and this app keep running`() {
+    fun `at night only the apps picked to close are added, everything else keeps running`() {
         val plan = planner.plan(Phase.NIGHT, BuildMode.SEALED, inventory)
-        assertEquals(setOf(brave, chrome, firefox, youtube, music, instagram, bank), plan.suspended)
-        assertFalse(plan.suspended.any { it in rules.nightAllowlist || it in rules.protectedPackages || it == me })
+        assertEquals(setOf(chrome, firefox, youtube, music, instagram), plan.suspended)
+        assertFalse(plan.suspended.any { it in setOf(brave, bank, audio) || it in rules.protectedPackages || it == me })
     }
 
     @Test
-    fun `YouTube Music runs by day and is suspended at night while the local player stays`() {
+    fun `a night pick that is protected is left alone`() {
+        val plan = PolicyPlanner(rules.copy(nightClosed = setOf(phone, launcher)), "abc123.dns.nextdns.io").plan(Phase.NIGHT, BuildMode.SEALED, inventory)
+        assertFalse(phone in plan.suspended || launcher in plan.suspended)
+    }
+
+    @Test
+    fun `a night pick runs by day and is suspended at night while the others stay`() {
         assertFalse(music in planner.plan(Phase.DAY, BuildMode.SEALED, inventory).suspended)
         val night = planner.plan(Phase.NIGHT, BuildMode.SEALED, inventory)
         assertTrue(music in night.suspended)
@@ -115,10 +121,10 @@ class PolicyPlannerTest {
     }
 
     @Test
-    fun `an app added to the night list runs at night`() {
-        val more = PolicyPlanner(rules.copy(nightAllowlist = rules.nightAllowlist + bank), "abc123.dns.nextdns.io")
-        assertFalse(bank in more.plan(Phase.NIGHT, BuildMode.SEALED, inventory).suspended)
-        assertTrue(bank in planner.plan(Phase.NIGHT, BuildMode.SEALED, inventory).suspended)
+    fun `an app added to the night list is closed at night`() {
+        val more = PolicyPlanner(rules.copy(nightClosed = rules.nightClosed + bank), "abc123.dns.nextdns.io")
+        assertTrue(bank in more.plan(Phase.NIGHT, BuildMode.SEALED, inventory).suspended)
+        assertFalse(bank in planner.plan(Phase.NIGHT, BuildMode.SEALED, inventory).suspended)
     }
 
     @Test

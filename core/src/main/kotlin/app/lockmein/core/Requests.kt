@@ -5,8 +5,11 @@ import kotlinx.serialization.json.Json
 import java.time.Instant
 
 enum class RequestKind {
-    /** Put an app on the night list. */
+    /** Old: put an app on the night allowlist, which no longer exists. Kept so saved requests still load; carrying one out changes nothing. */
     NIGHT_ADD,
+
+    /** Stop closing an app at night. */
+    NIGHT_REMOVE,
 
     /** Take an app off the always-blocked list. */
     BLOCKED_REMOVE,

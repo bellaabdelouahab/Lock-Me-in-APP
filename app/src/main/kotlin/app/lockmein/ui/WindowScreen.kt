@@ -56,7 +56,8 @@ fun WindowScreen(onBack: () -> Unit) {
     val held = remember(version) { state.quarantined.sorted() }
 
     fun describe(request: ChangeRequest): String = when (request.kind) {
-        RequestKind.NIGHT_ADD -> "Allow at night: ${inventory.label(request.target)}"
+        RequestKind.NIGHT_ADD -> "Old request, does nothing now: ${inventory.label(request.target)}"
+        RequestKind.NIGHT_REMOVE -> "Stop closing at night: ${inventory.label(request.target)}"
         RequestKind.BLOCKED_REMOVE -> "Unblock: ${inventory.label(request.target)}"
         RequestKind.BROWSER -> "Open the browser: ${inventory.label(request.target)}"
         RequestKind.RELEASE_APP -> "Let the new app through: ${inventory.label(request.target)}"
@@ -67,7 +68,7 @@ fun WindowScreen(onBack: () -> Unit) {
     Page("The open window", onBack) {
         InfoCard {
             Text(if (open) "The window is open now." else "The window is closed. It opens ${TIME.format(schedule.nextWindowStart(now).atZone(zone))}.")
-            Text("Closing the phone more (removing a night app, blocking an app, cancelling a request) works at any time. Opening it up is a request: it waits ${config.loosenWaitDays} days, then you carry it out here.")
+            Text("Closing the phone more (closing an app at night, blocking an app, cancelling a request) works at any time. Opening it up is a request: it waits ${config.loosenWaitDays} days, then you carry it out here.")
         }
         OutcomeText(outcome)
 

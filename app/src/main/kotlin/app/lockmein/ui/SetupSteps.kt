@@ -255,10 +255,10 @@ fun BrowserStep(draft: LockConfig, apps: SetupApps?, onChange: (LockConfig) -> U
 
 @Composable
 fun NightStep(draft: LockConfig, apps: SetupApps?, onChange: (LockConfig) -> Unit) {
-    StepHeader(Icons.Filled.NightsStay, "Apps for the night", "From the night start until fajr only these apps and the phone's essentials work. Best: an offline audio player, the clock and an authenticator.")
+    StepHeader(Icons.Filled.NightsStay, "Apps to close at night", "Tick the apps that pull you in. From the night start until fajr they are closed; every other app keeps working.")
     if (apps == null) return Note("Reading your apps...")
     apps.launchable.forEach { app ->
-        val on = app.packageName in draft.nightAllowlist
+        val on = app.packageName in draft.nightClosed
         Card(
             Modifier.fillMaxWidth().clickable { onChange(toggle(draft, app.packageName, !on)) },
             colors = CardDefaults.cardColors(containerColor = if (on) Palette.RuleDark else Color.Transparent),
@@ -268,7 +268,7 @@ fun NightStep(draft: LockConfig, apps: SetupApps?, onChange: (LockConfig) -> Uni
                 AppIcon(app.packageName, 36.dp)
                 Column(Modifier.weight(1f)) {
                     Text(app.label, fontWeight = FontWeight.Medium)
-                    NightRisk.warning(app.packageName)?.let { Text(it, color = Palette.Locked, style = MaterialTheme.typography.bodySmall) }
+                    NightRisk.warning(app.packageName)?.let { Text(it, color = Palette.Muted, style = MaterialTheme.typography.bodySmall) }
                 }
                 Checkbox(on, onCheckedChange = { onChange(toggle(draft, app.packageName, it)) })
             }
@@ -277,7 +277,7 @@ fun NightStep(draft: LockConfig, apps: SetupApps?, onChange: (LockConfig) -> Uni
 }
 
 private fun toggle(draft: LockConfig, packageName: String, on: Boolean) =
-    draft.copy(nightAllowlist = if (on) draft.nightAllowlist + packageName else draft.nightAllowlist - packageName, alwaysBlocked = draft.alwaysBlocked - packageName)
+    draft.copy(nightClosed = if (on) draft.nightClosed + packageName else draft.nightClosed - packageName)
 
 @Composable
 fun RhythmStep(draft: LockConfig, onChange: (LockConfig) -> Unit) {
@@ -352,7 +352,7 @@ fun ReviewStep(draft: LockConfig, apps: SetupApps?, friendVerified: Boolean, out
     StepHeader(Icons.Filled.CheckCircle, "Ready to start", "Check the summary. Until you press Start, nothing is applied to your phone.")
     SectionCard("Private DNS", draft.dnsHost, leading = Icons.Filled.Shield)
     SectionCard("Browser", draft.allowedBrowser?.let(::label) ?: "No browser stays open", listOfNotNull(draft.allowedBrowser), Icons.Filled.Language)
-    SectionCard("Night apps", if (draft.nightAllowlist.isEmpty()) "Only the phone's essentials" else draft.nightAllowlist.joinToString { label(it) }, draft.nightAllowlist.toList(), Icons.Filled.NightsStay)
+    SectionCard("Closed at night", if (draft.nightClosed.isEmpty()) "No app picked: only other browsers and YouTube close" else draft.nightClosed.joinToString { label(it) }, draft.nightClosed.toList(), Icons.Filled.NightsStay)
     SectionCard("Rhythm", "Night from ${draft.nightStart}. Weekly window: day ${draft.windowDay} (1 = Monday) ${draft.windowStart} to ${draft.windowEnd}.", leading = Icons.Filled.Schedule)
     SectionCard("Friend's code", if (friendVerified) "Confirmed" else "Not confirmed yet", leading = Icons.Filled.People)
     problems.forEach { Problem(it) }

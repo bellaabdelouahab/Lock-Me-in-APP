@@ -32,8 +32,8 @@ class DeviceInventory(private val context: Context) {
 
     fun label(packageName: String): String = runCatching { pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString() }.getOrDefault(packageName)
 
-    /** Clocks and authenticators, the apps most people still need at night. Used only to pre-tick the setup list. */
-    fun suggestedNightApps(): Set<String> = launchableApps().map { it.packageName }.filter { it in NIGHT_SUGGESTIONS }.toSet()
+    /** Feed and video apps, the usual night pull. Used only to pre-tick the setup list. */
+    fun suggestedNightApps(): Set<String> = launchableApps().map { it.packageName }.filter { app.lockmein.core.NightRisk.warning(it) != null }.toSet()
 
     fun read(): DeviceSnapshot {
         val installed = pm.getInstalledApplications(PackageManager.MATCH_DISABLED_COMPONENTS).map { it.packageName }.toSet()
@@ -59,15 +59,6 @@ class DeviceInventory(private val context: Context) {
             info != null && info.flags and ApplicationInfo.FLAG_SYSTEM != 0 && name !in withIcon
         }.toSet()
         return backgroundSystem + named()
-    }
-
-    private companion object {
-        val NIGHT_SUGGESTIONS = setOf(
-            "com.android.deskclock",
-            "com.google.android.deskclock",
-            "com.azure.authenticator",
-            "com.google.android.apps.authenticator2",
-        )
     }
 
     private fun named(): Set<String> {

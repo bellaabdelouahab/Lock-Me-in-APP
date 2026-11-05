@@ -11,6 +11,7 @@ import app.lockmein.core.BuildMode
 import app.lockmein.core.EventKind
 import app.lockmein.core.Inventory
 import app.lockmein.core.ListOp
+import app.lockmein.core.KnownBrowsers
 import app.lockmein.core.LockConfig
 import app.lockmein.core.Phase
 import app.lockmein.core.PolicyPlanner
@@ -56,7 +57,12 @@ class PolicyApplierTest {
     private val inventory get() = Inventory(snapshot.installed)
 
     private fun anAppToSuspend(): String =
-        snapshot.installed.first { it !in snapshot.protectedPackages && it != context.packageName && it !in config.nightAllowlist }
+        appsToSuspend().first()
+
+    /** Plain apps: not protected, not this app, not a browser or YouTube (those close for their own reasons). */
+    private fun appsToSuspend(): List<String> = snapshot.installed.filter {
+        it !in snapshot.protectedPackages && it != context.packageName && it !in snapshot.browsers && it !in KnownBrowsers.ALL && it != "com.google.android.youtube"
+    }.sorted()
 
     @Before
     fun reset() {
@@ -152,18 +158,21 @@ class PolicyApplierTest {
     }
 
     @Test
-    fun c1_nightSuspendsUserFacingAppsAndTheNextDayReleasesThem() {
-        val victim = planner.plan(Phase.NIGHT, BuildMode.TEST, inventory).suspended.first()
+    fun c1_nightClosesOnlyThePickedAppsAndTheNextDayReleasesThem() {
+        val (victim, bystander) = appsToSuspend().take(2)
+        val picked = config.copy(nightClosed = setOf(victim))
+        store.save(picked)
         store.protectionActive = true
 
-        val atNight = PolicyRunner(context).run(config, night)
+        val atNight = PolicyRunner(context).run(picked, night)
         assertTrue("the night pass should finish: ${atNight.report.failed}", atNight.report.ok)
         assertTrue(dpm.isPackageSuspended(admin, victim))
+        assertFalse("an app not picked keeps running at night", dpm.isPackageSuspended(admin, bystander))
         assertTrue(atNight.nextRunAt.isAfter(night) && !atNight.nextRunAt.isAfter(night.plus(PolicyRunner.CHECK_EVERY)))
 
         val noon = LocalDate.of(2026, 11, 3).atTime(12, 0).atZone(zone).toInstant()
-        PolicyRunner(context).run(config, noon)
-        assertEquals(victim in planner.plan(Phase.DAY, BuildMode.TEST, inventory).suspended, dpm.isPackageSuspended(admin, victim))
+        PolicyRunner(context).run(picked, noon)
+        assertFalse(dpm.isPackageSuspended(admin, victim))
     }
 
     @Test
@@ -209,23 +218,27 @@ class PolicyApplierTest {
         val manager = ChangeManager(context)
         store.protectionActive = true
 
-        // Opening the phone up is only a request: nothing changes at once, whatever the day.
-        assertTrue(manager.editList(AppList.NIGHT_ALLOWED, ListOp.ADD, app, asked) is Outcome.Done)
-        assertFalse(app in store.load()!!.nightAllowlist)
+        // Closing an app at night works at once.
+        assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.ADD, app, asked) is Outcome.Done)
+        assertTrue(app in store.load()!!.nightClosed)
+
+        // Opening the phone up (taking it off) is only a request: nothing changes at once, whatever the day.
+        assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app, asked) is Outcome.Done)
+        assertTrue(app in store.load()!!.nightClosed)
         val id = manager.requests().single().id
 
         // A wound-forward phone clock is not believed: the network says it is still Monday afternoon.
         assertTrue(manager.applyRequest(id, window, monday) is Outcome.Refused)
         assertTrue("no network time, no change", manager.applyRequest(id, window, null) is Outcome.Refused)
-        assertFalse(app in store.load()!!.nightAllowlist)
+        assertTrue(app in store.load()!!.nightClosed)
 
         // Waited, in the window, clocks agreeing: carried out.
         assertTrue(manager.applyRequest(id, window, window) is Outcome.Done)
-        assertTrue(app in store.load()!!.nightAllowlist)
+        assertFalse(app in store.load()!!.nightClosed)
         assertTrue(manager.requests().isEmpty())
 
         // Closing the phone more works at once, on any day.
-        assertTrue(manager.editList(AppList.NIGHT_ALLOWED, ListOp.REMOVE, app, monday) is Outcome.Done)
+        assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.ADD, app, monday) is Outcome.Done)
         assertTrue(manager.editList(AppList.ALWAYS_BLOCKED, ListOp.ADD, app, monday) is Outcome.Done)
         assertTrue(dpm.isPackageSuspended(admin, app))
 
@@ -246,8 +259,9 @@ class PolicyApplierTest {
     fun e2_beforeProtectionStartsEverythingIsFree() {
         val app = anAppToSuspend()
         val manager = ChangeManager(context)
-        assertTrue(manager.editList(AppList.NIGHT_ALLOWED, ListOp.ADD, app, monday) is Outcome.Done)
-        assertTrue(app in store.load()!!.nightAllowlist)
+        assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.ADD, app, monday) is Outcome.Done)
+        assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app, monday) is Outcome.Done)
+        assertFalse(app in store.load()!!.nightClosed)
         assertTrue(manager.saveSettings(config.copy(nightStart = "21:30"), monday) is Outcome.Done)
         assertEquals("21:30", store.load()!!.nightStart)
     }
@@ -319,12 +333,13 @@ class PolicyApplierTest {
         val secret = manager.newFriendSecret()
         store.protectionActive = true
         val app = anAppToSuspend()
-        assertTrue(manager.editList(AppList.NIGHT_ALLOWED, ListOp.ADD, app, asked) is Outcome.Done)
+        assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.ADD, app, asked) is Outcome.Done)
+        assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app, asked) is Outcome.Done)
         val id = manager.requests().single().id
         val now = Instant.now()
         assertTrue(manager.redeemEmergency(Totp.code(secret, Totp.counter(now)), app, now) is Outcome.Done)
         assertTrue("an unblock is not a window", manager.applyRequest(id, monday, monday) is Outcome.Refused)
-        assertFalse(app in store.load()!!.nightAllowlist)
+        assertTrue(app in store.load()!!.nightClosed)
     }
 
     @Test
@@ -393,9 +408,10 @@ class PolicyApplierTest {
         store.setupComplete = false
         store.protectionActive = true
         val app = anAppToSuspend()
-        val outcome = ChangeManager(context).editList(AppList.NIGHT_ALLOWED, ListOp.ADD, app)
+        store.save(config.copy(nightClosed = setOf(app)))
+        val outcome = ChangeManager(context).editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app)
         assertTrue("$outcome", outcome is Outcome.Done)
-        assertTrue(app in store.load()!!.nightAllowlist)
+        assertFalse(app in store.load()!!.nightClosed)
         assertTrue("no request queued", state.requests.isEmpty())
     }
 

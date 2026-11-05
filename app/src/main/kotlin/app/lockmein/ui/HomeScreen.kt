@@ -203,10 +203,10 @@ private fun Dashboard(config: LockConfig, state: LockState, owner: Boolean) {
     val (phaseStart, headline, detail, color, icon) = when (phase) {
         Phase.NIGHT -> {
             val start = if (local.toLocalTime() >= nightStart) local.with(nightStart) else local.minusDays(1).with(nightStart)
-            Five(start.toInstant(), "Night", "Only ${config.nightAllowlist.size} app(s) and the phone's essentials until fajr.", Palette.Locked, Icons.Filled.NightsStay)
+            Five(start.toInstant(), "Night", "${config.nightClosed.size} app(s) you picked are closed until fajr.", Palette.Locked, Icons.Filled.NightsStay)
         }
         Phase.OPEN_WINDOW -> Five(next.minus(Duration.ofHours(1)), "Open window", "Requests that waited 7 days can be carried out now.", Palette.Signal, Icons.Filled.LockOpen)
-        Phase.DAY -> Five(ZonedDateTime.of(local.toLocalDate(), fajr.fajr(local.toLocalDate()), zone).toInstant(), "Day", "Social apps run until ${config.nightStart}. YouTube stays blocked.", Palette.Day, Icons.Filled.WbSunny)
+        Phase.DAY -> Five(ZonedDateTime.of(local.toLocalDate(), fajr.fajr(local.toLocalDate()), zone).toInstant(), "Day", "Your night apps run until ${config.nightStart}. YouTube stays blocked.", Palette.Day, Icons.Filled.WbSunny)
     }
 
     // The poster: the phase in huge capitals, the time left bigger still, a square bar.
@@ -243,7 +243,7 @@ private fun Dashboard(config: LockConfig, state: LockState, owner: Boolean) {
         Tile(Icons.Filled.EventAvailable, Palette.Ink, "Requests", if (waiting.isEmpty()) "Nothing waiting." else "${waiting.size} waiting for the window.", waiting.size) { navigate(Screen.WINDOW) }
     }
     TileRow {
-        Tile(Icons.Filled.Apps, Palette.Ink, "Apps", "${config.nightAllowlist.size} at night, ${config.alwaysBlocked.size} always blocked.") { navigate(Screen.LISTS) }
+        Tile(Icons.Filled.Apps, Palette.Ink, "Apps", "${config.nightClosed.size} closed at night, ${config.alwaysBlocked.size} always. See what is closed now.") { navigate(Screen.LISTS) }
         Split()
         Tile(Icons.Filled.Language, Palette.Ink, "Browser", config.allowedBrowser?.let { inventory.label(it) } ?: "None stays open.") { navigate(Screen.BROWSERS) }
     }
