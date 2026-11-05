@@ -1,5 +1,6 @@
 package app.lockmein.ui
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,7 +22,7 @@ import app.lockmein.Outcome
 fun ResetSetup(onReset: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    if (remember { ConfigStore(context).setupComplete }) return
+    if (remember { ConfigStore(context).let { it.setupComplete || it.redoing } }) return
     var armed by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
     var outcome by remember { mutableStateOf<Outcome?>(null) }
@@ -50,13 +51,18 @@ fun ResetSetup(onReset: () -> Unit) {
 fun UnfinishedSetupBanner(onReset: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val navigate = LocalNavigate.current
     var complete by remember { mutableStateOf(ConfigStore(context).setupComplete) }
     if (complete) return
     var working by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf<List<app.lockmein.HealthItem>?>(null) }
     var outcome by remember { mutableStateOf<Outcome?>(null) }
-    Text("SETUP NOT FINISHED", style = MaterialTheme.typography.labelLarge, color = Palette.Locked)
-    Note("Until the setup is complete, every change works at once. Pick your night apps now (Apps): once it is complete, adding one waits 7 days. Then finish: the rules are applied again and the setup completes only if every check passes.")
+    val redoing = remember { ConfigStore(context).redoing }
+    Text(if (redoing) "SETUP REOPENED" else "SETUP NOT FINISHED", style = MaterialTheme.typography.labelLarge, color = Palette.Locked)
+    if (redoing) {
+        Note("You reopened the setup. Every change works at once until you finish: go through the steps (your friend's code stays as it is), then Start, or press Finish the setup below to lock it again as it is.")
+        MenuButton("Go through the steps") { navigate(Screen.SETUP) }
+    } else Note("Until the setup is complete, every change works at once. Pick your night apps now (Apps): once it is complete, adding one waits 7 days. Then finish: the rules are applied again and the setup completes only if every check passes.")
     MenuButton(if (working) "Checking..." else "Finish the setup", enabled = !working) {
         working = true
         outcome = null
@@ -78,4 +84,44 @@ fun UnfinishedSetupBanner(onReset: () -> Unit) {
     OutcomeText(outcome)
     failed?.forEach { CheckRow(it.title, CheckState.FAIL, it.detail) }
     ResetSetup(onReset)
+}
+
+/**
+ * In Settings: going through the setup again (apps, DNS, browser, hours, place; never the friend's code). It opens everything up,
+ * so it is a request that waits like any other, or your friend's code reopens it at once.
+ */
+@Composable
+fun RedoSetup() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val navigate = LocalNavigate.current
+    val store = remember { ConfigStore(context) }
+    if (!store.protectionActive) return
+    var code by remember { mutableStateOf("") }
+    var outcome by remember { mutableStateOf<Outcome?>(null) }
+    Heading("Redo the setup")
+    if (store.redoing || !store.setupComplete) {
+        Note("The setup is open: changes work at once until you finish it.")
+        MenuButton("Go through the steps") { navigate(Screen.SETUP) }
+        return
+    }
+    Note("Go through the steps again to check or change the apps, DNS, browser, hours and place. Your friend's code is kept, so that step is skipped. While the setup is open every change works at once, so opening it waits like any other request, or your friend's code opens it now.")
+    SecondaryButton("Ask to redo (waits, then the weekly window)", {
+        scope.background({ ChangeManager(context).requestRedo() }) { outcome = it }
+    })
+    androidx.compose.material3.OutlinedTextField(
+        value = code,
+        onValueChange = { code = it.filter(Char::isDigit).take(6) },
+        label = { Text("Friend's code") },
+        singleLine = true,
+        modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+    )
+    MenuButton("Redo now with the code", enabled = code.length == 6) {
+        scope.background({ ChangeManager(context).redoWithCode(code) }) {
+            outcome = it
+            code = ""
+            if (it is Outcome.Done) navigate(Screen.SETUP)
+        }
+    }
+    OutcomeText(outcome)
 }

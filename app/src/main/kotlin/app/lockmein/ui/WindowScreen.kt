@@ -62,6 +62,7 @@ fun WindowScreen(onBack: () -> Unit) {
         RequestKind.BROWSER -> "Open the browser: ${inventory.label(request.target)}"
         RequestKind.RELEASE_APP -> "Let the new app through: ${inventory.label(request.target)}"
         RequestKind.SETTINGS -> "Change the settings"
+        RequestKind.REDO_SETUP -> "Redo the setup"
         RequestKind.REMOVE_PROTECTION -> "Remove the protection"
     }
 

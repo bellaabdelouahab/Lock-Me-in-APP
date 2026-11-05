@@ -71,6 +71,8 @@ fun SettingsScreen(onBack: () -> Unit) {
             scope.background({ manager.saveSettings(current) }) { outcome = it }
         }
 
+        RedoSetup()
+
         Heading("Share this setup")
         Note("The exported text holds your settings only: no secrets, no friend's code. Someone else can import it, then do their own friend's code.")
         SecondaryButton("Export settings", {

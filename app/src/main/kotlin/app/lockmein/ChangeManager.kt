@@ -89,6 +89,7 @@ class ChangeManager(private val context: Context) {
             RequestKind.SETTINGS -> request.settings ?: return Outcome.Refused("That request holds no settings.")
             RequestKind.BROWSER -> { state.approveBrowser(request.target); config }
             RequestKind.RELEASE_APP -> { state.release(request.target); config }
+            RequestKind.REDO_SETUP -> { reopenSetup(); config }
             RequestKind.REMOVE_PROTECTION -> return Outcome.Refused("Taking the protection off needs your friend's code: use Remove protection.")
         }
         ConfigRules.problems(updated).firstOrNull()?.let { return Outcome.Refused(it) }
@@ -219,6 +220,7 @@ class ChangeManager(private val context: Context) {
      * computer step does not have to be done again. Refused once the setup completed: then only the removal path opens the phone.
      */
     fun resetSetup(): Outcome {
+        if (store.redoing) return Outcome.Refused("This is a redo of a completed setup: Reset is closed. Finish the setup to lock the rules again.")
         if (store.setupComplete) return Outcome.Refused("The setup is complete, so the protection can only be removed through a request and your friend's code.")
         if (!BuildConfig.PREVIEW && dpm.isDeviceOwnerApp(context.packageName)) {
             val report = PolicyApplier(context).release(DeviceInventory(context).read().installed)
@@ -231,6 +233,27 @@ class ChangeManager(private val context: Context) {
         secrets.clear()
         events.clear()
         return Outcome.Done("Reset. Private DNS is back to automatic, nothing is blocked, and the setup starts again from the beginning.")
+    }
+
+    /** Asks to go through the setup again. It opens everything up, so it waits like every opening. */
+    fun requestRedo(now: Instant = TrustedClock(context).now()): Outcome = ask(RequestKind.REDO_SETUP, "", now)
+
+    /** The friend's code skips the wait: the setup reopens at once. The code is used up, like an emergency code. */
+    fun redoWithCode(code: String, now: Instant = TrustedClock(context).now()): Outcome {
+        val secret = secrets.load() ?: return Outcome.Refused("No friend code is set up.")
+        val check = CodeChecker(secret).check(code, now, state.lastCodeCounter)
+        if (check !is CodeCheck.Accepted) return refused("that code is wrong or was already used", "redo setup", now)
+        state.lastCodeCounter = check.counter
+        state.requests = state.requests.filter { it.kind != RequestKind.REDO_SETUP }
+        reopenSetup()
+        events.add(EventKind.LOOSENED, "REDO_SETUP with the friend's code", now)
+        return Outcome.Done("The setup is open. Go through the steps, then Start to lock it again.")
+    }
+
+    /** Lists and settings change freely until Start passes every check again; the protection itself stays on meanwhile. */
+    private fun reopenSetup() {
+        store.setupComplete = false
+        store.redoing = true
     }
 
     /** Up to about 20 seconds for the internet to answer through the new DNS (the network re-validates after the switch). */

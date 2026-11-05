@@ -23,6 +23,9 @@ enum class RequestKind {
     /** Any change to the settings. [ChangeRequest.settings] holds the whole new configuration. */
     SETTINGS,
 
+    /** Reopen the setup to go through the steps again (all but the friend's code). */
+    REDO_SETUP,
+
     /** Take the whole protection off (the friend's code is still needed when it is carried out). */
     REMOVE_PROTECTION,
 }

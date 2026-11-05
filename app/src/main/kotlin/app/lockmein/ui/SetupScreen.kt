@@ -58,12 +58,14 @@ fun SetupScreen(onExit: () -> Unit) {
     val navigate = LocalNavigate.current
 
     // The preview build can open on a given step (adb shell am start --ei step 3), which is how the screens are photographed.
-    var step by rememberSaveable { mutableIntStateOf(if (BuildConfig.PREVIEW) ((context as? android.app.Activity)?.intent?.getIntExtra("step", 0) ?: 0).coerceIn(0, LAST_STEP) else 0) }
+    // A redo of a completed setup skips the computer step and the friend's code: both are already done.
+    val redo = remember { store.redoing }
+    var step by rememberSaveable { mutableIntStateOf(if (redo) 1 else if (BuildConfig.PREVIEW) ((context as? android.app.Activity)?.intent?.getIntExtra("step", 0) ?: 0).coerceIn(0, LAST_STEP) else 0) }
     var draft by remember { mutableStateOf(store.load() ?: LockConfig(dnsHost = "")) }
-    var friendVerified by rememberSaveable { mutableStateOf(false) }
+    var friendVerified by rememberSaveable { mutableStateOf(redo) }
     // The host the DNS step reached for real (null until it answers), and whether a browser was picked on purpose.
     var dnsChecked by rememberSaveable { mutableStateOf<String?>(null) }
-    var browserChosen by rememberSaveable { mutableStateOf(false) }
+    var browserChosen by rememberSaveable { mutableStateOf(redo) }
     var afterStart by remember { mutableStateOf<List<app.lockmein.HealthItem>?>(null) }
     var ownerChecked by remember { mutableIntStateOf(0) }
     var outcome by remember { mutableStateOf<Outcome?>(null) }
@@ -104,7 +106,7 @@ fun SetupScreen(onExit: () -> Unit) {
 
     Page(
         "Setup",
-        onBack = { if (step == 0) onExit() else step-- },
+        onBack = { if (step == 0 || (redo && step == 1)) onExit() else step = previous(step, redo) },
         bottomBar = {
             Column(Modifier.fillMaxWidth().background(Palette.Paper).navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Rule()
@@ -117,13 +119,13 @@ fun SetupScreen(onExit: () -> Unit) {
                     if (step < LAST_STEP) {
                         if (!canContinue && hint != null) Text(hint, color = Palette.Signal, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
                         ButtonRow {
-                            if (step > 0) SecondaryButtonSmall("Back") { step-- }
+                            if (step > 0 && !(redo && step == 1)) SecondaryButtonSmall("Back") { step = previous(step, redo) }
                             Button(
                                 shape = androidx.compose.ui.graphics.RectangleShape,
                                 colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Palette.Ink, contentColor = Palette.Paper, disabledContainerColor = Palette.Line, disabledContentColor = Palette.Muted),
                                 onClick = {
                                     if (DnsHost.problem(draft.dnsHost) == null) store.save(draft)
-                                    step++
+                                    step = if (redo && step == 4) LAST_STEP else step + 1
                                 },
                                 enabled = canContinue,
                                 modifier = Modifier.weight(1f),
@@ -169,3 +171,5 @@ fun SetupScreen(onExit: () -> Unit) {
         }
     }
 }
+
+private fun previous(step: Int, redo: Boolean) = if (redo && step == LAST_STEP) 4 else step - 1

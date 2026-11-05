@@ -24,9 +24,19 @@ class ConfigStore(context: Context) {
      */
     var setupComplete: Boolean
         get() = prefs.getBoolean(COMPLETE, false)
-        set(value) = prefs.edit().putBoolean(COMPLETE, value).apply()
+        // Completing ends a redo too.
+        set(value) = prefs.edit().putBoolean(COMPLETE, value).apply { if (value) putBoolean(REDO, false) }.apply()
+
+    /**
+     * True while a completed setup was reopened to go through the steps again (a waited request, or the friend's code). The rules
+     * are free while it lasts, like a first setup, but Reset stays closed: a redo is never a way to take the protection off.
+     */
+    var redoing: Boolean
+        get() = prefs.getBoolean(REDO, false)
+        set(value) = prefs.edit().putBoolean(REDO, value).apply()
 
     private companion object {
+        const val REDO = "redoing"
         const val COMPLETE = "setup_complete"
         const val CONFIG = "config_json"
         const val ACTIVE = "protection_active"

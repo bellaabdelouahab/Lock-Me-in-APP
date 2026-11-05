@@ -70,6 +70,7 @@ class PolicyApplierTest {
         state.clear()
         store.protectionActive = false
         // These tests are about a finished setup: rules locked once protection is on. (Before completion every change is free.)
+        store.redoing = false
         store.setupComplete = true
         store.save(config)
     }
@@ -413,6 +414,33 @@ class PolicyApplierTest {
         assertTrue("$outcome", outcome is Outcome.Done)
         assertFalse(app in store.load()!!.nightClosed)
         assertTrue("no request queued", state.requests.isEmpty())
+    }
+
+    @Test
+    fun y4_theFriendsCodeReopensTheSetupButNeverOpensReset() {
+        val manager = ChangeManager(context)
+        val secret = manager.newFriendSecret()
+        store.protectionActive = true
+        val now = Instant.now()
+        val code = Totp.code(secret, Totp.counter(now))
+        val wrong = ((code.toInt() + 1) % 1_000_000).toString().padStart(6, '0')
+        assertTrue(manager.redoWithCode(wrong, now) is Outcome.Refused)
+        assertTrue(store.setupComplete)
+
+        assertTrue(manager.redoWithCode(code, now) is Outcome.Done)
+        assertFalse(store.setupComplete)
+        assertTrue(store.redoing)
+        assertTrue("a used code does not work twice", manager.redoWithCode(code, now) is Outcome.Refused)
+        assertTrue("reset stays closed in a redo", manager.resetSetup() is Outcome.Refused)
+        assertTrue(store.protectionActive)
+
+        val app = anAppToSuspend()
+        store.save(config.copy(nightClosed = setOf(app)))
+        assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app) is Outcome.Done)
+        assertFalse("changes are free while it is open", app in store.load()!!.nightClosed)
+
+        store.setupComplete = true
+        assertFalse("finishing ends the redo", store.redoing)
     }
 
     @Test
