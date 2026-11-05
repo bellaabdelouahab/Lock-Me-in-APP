@@ -203,7 +203,13 @@ fun StatusBadge(kind: StatusKind, label: String, modifier: Modifier = Modifier) 
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
-            Text(label, color = color, style = MaterialTheme.typography.labelMedium)
+            Text(
+                label,
+                color = color,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                softWrap = false,
+            )
         }
     }
 }

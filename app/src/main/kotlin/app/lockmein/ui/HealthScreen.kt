@@ -118,9 +118,12 @@ fun HealthScreen(onBack: () -> Unit) {
                     Text("Asking Android...", style = MaterialTheme.typography.titleMedium)
                 } else if (hasFailing) {
                     Icon(Icons.Filled.WarningAmber, contentDescription = null, tint = Palette.Attention, modifier = Modifier.size(22.dp))
-                    Text("${failing.size} item" + (if (failing.size > 1) "s" else "") + " need attention", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (failing.size == 1) "1 item needs attention" else "${failing.size} items need attention",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
                     Spacer(Modifier.weight(1f))
-                    StatusBadge(StatusKind.ATTENTION, "Needs attention")
+                    StatusBadge(StatusKind.ATTENTION, "Attention")
                 } else {
                     Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Palette.Ok, modifier = Modifier.size(22.dp))
                     Text("All rules verified", style = MaterialTheme.typography.titleMedium)

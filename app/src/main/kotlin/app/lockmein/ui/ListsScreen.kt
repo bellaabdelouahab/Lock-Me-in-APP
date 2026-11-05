@@ -88,9 +88,9 @@ fun ListsScreen(onBack: () -> Unit) {
     }
 
     val tabs = listOf(
-        "Closed at night (${config.nightClosed.size})",
-        "Always blocked (${config.alwaysBlocked.size})",
-        "Closed right now (${closed?.size ?: 0})",
+        "At night (${config.nightClosed.size})",
+        "Always (${config.alwaysBlocked.size})",
+        "Now (${closed?.size ?: 0})",
     )
 
     Page(

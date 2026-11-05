@@ -130,6 +130,12 @@ private fun LockApp(requested: String?) {
 
     var screen by rememberSaveable { mutableStateOf(first) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val shouldOpenDrawer = remember { intent(context)?.getBooleanExtra("openDrawer", false) == true }
+    LaunchedEffect(shouldOpenDrawer) {
+        if (shouldOpenDrawer) {
+            drawerState.open()
+        }
+    }
 
     val home = { screen = Screen.HOME }
     val selectScreen: (Screen) -> Unit = { dest ->

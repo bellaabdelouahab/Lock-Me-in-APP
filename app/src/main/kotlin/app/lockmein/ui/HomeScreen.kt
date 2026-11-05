@@ -295,7 +295,7 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
             } else {
                 Icon(Icons.Filled.WarningAmber, contentDescription = null, tint = Palette.Attention, modifier = Modifier.size(18.dp))
                 Text(
-                    "$failingHealth item" + (if (failingHealth > 1) "s" else "") + " need attention",
+                    if (failingHealth == 1) "1 item needs attention" else "$failingHealth items need attention",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Palette.Attention,
                     fontWeight = FontWeight.Medium,

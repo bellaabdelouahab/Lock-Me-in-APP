@@ -68,4 +68,5 @@ shot() { # name, extras...
 }
 for n in 0 1 2 3 4 5 6; do shot "setup-$n" --ei step $n; done
 for s in HOME HEALTH WINDOW LISTS BROWSERS EMERGENCY REPORT SETTINGS REMOVE ABOUT; do shot "$(echo $s | tr A-Z a-z)" --es screen $s --ez demo true; done
+shot "drawer" --es screen HOME --ez demo true --ez openDrawer true
 exit "$status"

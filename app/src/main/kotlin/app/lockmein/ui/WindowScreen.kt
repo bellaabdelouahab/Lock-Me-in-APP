@@ -126,9 +126,15 @@ fun WindowScreen(onBack: () -> Unit) {
                 Spacer(Modifier.weight(1f))
                 StatusBadge(
                     kind = if (open) StatusKind.OK else StatusKind.ATTENTION,
-                    label = if (open) "Open now" else "Opens " + TIME.format(schedule.nextWindowStart(now).atZone(zone)),
+                    label = if (open) "Open" else "Closed",
                 )
             }
+            Text(
+                if (open) "The weekly window is open until " + TIME.format(schedule.nextWindowEnd(now).atZone(zone)) + "."
+                else "Next open window: " + TIME.format(schedule.nextWindowStart(now).atZone(zone)) + ".",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
             Text(
                 "Opening the phone up waits ${config.loosenWaitDays} days and applies only in the weekly window. Closing things works at once.",
                 style = MaterialTheme.typography.bodySmall,
