@@ -31,6 +31,7 @@ private fun <T> ValidatedField(label: String, initial: String, hint: String, par
         supportingText = { Text(if (parsed == null) "Not valid: $hint" else hint) },
         isError = parsed == null,
         singleLine = true,
+        shape = CardShape,
         modifier = Modifier.fillMaxWidth(),
     )
 }
@@ -53,6 +54,7 @@ fun DnsFields(config: LockConfig, onChange: (LockConfig) -> Unit) {
             supportingText = { Text(if (typed.isBlank()) "Like abc123.dns.nextdns.io, or just the 6-character NextDNS id." else DnsHost.problem(DnsHost.normalise(typed) ?: typed) ?: "Will use ${DnsHost.normalise(typed)}") },
             isError = typed.isNotBlank() && DnsHost.normalise(typed) == null, // nothing typed yet is not a mistake
             singleLine = true,
+            shape = CardShape,
             modifier = Modifier.fillMaxWidth(),
         )
         Note("A NextDNS profile is free: sign in at nextdns.io, open Setup, and copy the host under Endpoints (like abc123.dns.nextdns.io) or just the 6-character id. Any host that supports DNS over TLS works.")

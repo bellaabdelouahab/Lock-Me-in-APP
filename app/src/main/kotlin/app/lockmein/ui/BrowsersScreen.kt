@@ -1,6 +1,11 @@
 package app.lockmein.ui
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -8,7 +13,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import app.lockmein.ChangeManager
 import app.lockmein.ConfigStore
 import app.lockmein.DeviceInventory
@@ -35,21 +43,44 @@ fun BrowsersScreen(onBack: () -> Unit) {
     val waiting = remember(version) { manager.requests().filter { it.kind == RequestKind.BROWSER }.map { it.target }.toSet() }
 
     Page("Browsers", onBack) {
-        Note("Open: ${config.allowedBrowser?.let(inventory::label) ?: "none"}. Others are closed. Asking for one waits ${config.loosenWaitDays} days, then you carry it out in the weekly window (see The open window).")
+        AppCard {
+            Text("Browser policy", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Open: ${config.allowedBrowser?.let(inventory::label) ?: "None"}. Other browsers are closed to prevent filter bypass. Asking for another is a request that waits ${config.loosenWaitDays} days.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         OutcomeText(outcome)
-        if (closed.isEmpty()) Note("No other browser is closed.")
+
+        if (closed.isEmpty()) {
+            AppCard {
+                Text("No other browser is installed and closed.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         closed.forEach { pkg ->
-            InfoCard {
-                Text(inventory.label(pkg))
-                if (pkg in waiting) {
-                    Text("Requested. See The open window for when it can open.")
-                } else {
-                    SecondaryButton("Request this browser", {
-                        scope.background({ manager.requestBrowser(pkg) }) {
-                            outcome = it
-                            version++
+            AppCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AppIcon(pkg, size = 40.dp)
+                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                        Text(inventory.label(pkg), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (pkg in waiting) "Requested (waiting for open window)" else "Closed browser",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (pkg !in waiting) {
+                        TextButton(onClick = {
+                            scope.background({ manager.requestBrowser(pkg) }) {
+                                outcome = it
+                                version++
+                            }
+                        }) {
+                            Text("Request")
                         }
-                    })
+                    }
                 }
             }
         }

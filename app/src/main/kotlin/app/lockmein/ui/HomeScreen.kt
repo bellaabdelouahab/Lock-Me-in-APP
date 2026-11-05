@@ -1,104 +1,77 @@
 package app.lockmein.ui
 
 import android.app.admin.DevicePolicyManager
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.filled.Sos
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
-import app.lockmein.Health
-import app.lockmein.HealthItem
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.Assessment
-import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EventAvailable
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.lockmein.BuildConfig
+import app.lockmein.ChangeManager
 import app.lockmein.ConfigStore
 import app.lockmein.DeviceInventory
+import app.lockmein.Health
+import app.lockmein.HealthItem
 import app.lockmein.LockState
-import app.lockmein.PreviewDemo
+import app.lockmein.Outcome
+import app.lockmein.Release
 import app.lockmein.Rules
+import app.lockmein.Updater
 import app.lockmein.core.AstronomicalFajr
 import app.lockmein.core.LockConfig
 import app.lockmein.core.Phase
 import java.time.Duration
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val CLOCK = DateTimeFormatter.ofPattern("HH:mm")
 private val DAY_TIME = DateTimeFormatter.ofPattern("EEE HH:mm")
-
-private fun lengthOf(d: Duration): String {
-    val minutes = d.toMinutes().coerceAtLeast(0)
-    return when {
-        minutes >= 24 * 60 -> "${minutes / (24 * 60)} d ${minutes % (24 * 60) / 60} h"
-        minutes >= 60 -> "${minutes / 60} h ${minutes % 60} min"
-        else -> "$minutes min"
-    }
-}
-
-/** The time left, short enough to print huge: 2d 4h, 14h 57m, 38m. */
-private fun shortLength(d: Duration): String {
-    val minutes = d.toMinutes().coerceAtLeast(0)
-    return when {
-        minutes >= 24 * 60 -> "${minutes / (24 * 60)}d ${minutes % (24 * 60) / 60}h"
-        minutes >= 60 -> "${minutes / 60}h ${minutes % 60}m"
-        else -> "${minutes}m"
-    }
-}
-
-/** Where we are between the start of the current phase and the next change, 0 to 1. */
-private fun progressOf(start: Instant, now: Instant, end: Instant): Float {
-    val total = Duration.between(start, end).toMillis().coerceAtLeast(1)
-    return (Duration.between(start, now).toMillis().toFloat() / total).coerceIn(0f, 1f)
-}
 
 @Composable
 fun HomeScreen() {
@@ -111,82 +84,57 @@ fun HomeScreen() {
     val active = store.protectionActive && config != null
 
     Page(
-        "Lock Me In",
-        actions = {
-            if (active) {
-                IconButton(onClick = { navigate(Screen.REPORT) }) { Icon(Icons.Filled.Assessment, contentDescription = "This week") }
-                IconButton(onClick = { navigate(Screen.SETTINGS) }) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
-            }
-        },
+        title = "Lock Me In",
     ) {
         if (!active || config == null) {
-            Welcome(owner) { navigate(Screen.SETUP) }
+            WelcomeView(owner = owner) { navigate(Screen.SETUP) }
         } else {
-            Dashboard(config, state, owner)
+            DashboardView(config = config, state = state, owner = owner)
         }
     }
 }
 
 @Composable
-private fun Welcome(owner: Boolean, onSetup: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("NO FIGHT", style = MaterialTheme.typography.displayMedium)
-        Text("AT NIGHT.", style = MaterialTheme.typography.displayMedium, color = Palette.Signal)
+private fun WelcomeView(owner: Boolean, onSetup: () -> Unit) {
+    AppCard {
+        Text("No fight at night", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "You choose the rules while you are calm. At night the phone keeps them, and opening anything up waits a week.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
-    Text("You choose the rules while you are calm. At night the phone keeps them, and opening anything up has to wait a week.", style = MaterialTheme.typography.bodyLarge)
-    Rule()
-    Step(1, "Set it up once", "Seven steps. Each one is checked on the phone before you can go on.")
-    Step(2, "The night closes the phone", "From your cut-off until fajr only your night apps run.")
-    Step(3, "Opening up waits a week", "Closing more is instant. Opening is a request carried out in the weekly window.")
-    CheckRow("This phone", if (owner) CheckState.PASS else CheckState.CONFIRM, if (owner) "Lock Me In is the device owner." else "Not the device owner yet: step 1 walks you through it.")
-    MenuButton("Start the setup", onClick = onSetup)
-    UpdateCard(onlyIfNewer = true)
+
+    Heading("How it works")
+    AppCard {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("1. Set it up once", fontWeight = FontWeight.SemiBold)
+            Text("Seven steps. Each one is verified on the phone before you go on.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Text("2. The night closes the phone", fontWeight = FontWeight.SemiBold)
+            Text("From your night start until fajr only your chosen apps run.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Text("3. Opening up waits a week", fontWeight = FontWeight.SemiBold)
+            Text("Closing more is instant. Opening is a request carried out in the weekly window.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+
+    CheckRow(
+        title = "Device owner",
+        state = if (owner) CheckState.PASS else CheckState.CONFIRM,
+        detail = if (owner) "Lock Me In is the device owner." else "Not device owner yet: step 1 walks you through it.",
+    )
+
+    PrimaryButton(label = "Start setup", onClick = onSetup)
     ResetSetup(onReset = {})
 }
 
 @Composable
-private fun Step(number: Int, title: String, text: String) {
-    Column {
-        Row(Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("0$number", style = MaterialTheme.typography.headlineMedium, color = Palette.Signal)
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(text, style = MaterialTheme.typography.bodySmall, color = Palette.Muted)
-            }
-        }
-        Rule(thick = false)
-    }
-}
-
-/** One cell of the shortcut grid: no box, split from its neighbour by a line. Name in capitals, a line, an optional count. */
-@Composable
-private fun RowScope.Tile(icon: ImageVector, color: Color, title: String, line: String, badge: Int = 0, onClick: () -> Unit) {
-    Column(Modifier.weight(1f).clickable(onClick = onClick).padding(vertical = 16.dp, horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = color, modifier = Modifier.size(26.dp))
-            Spacer(Modifier.weight(1f))
-            if (badge > 0) Box(Modifier.size(26.dp).clip(Dot).background(Palette.Signal), contentAlignment = Alignment.Center) {
-                Text("$badge", color = Palette.Paper, fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelMedium)
-            }
-        }
-        Text(title.uppercase(), style = MaterialTheme.typography.labelLarge)
-        Text(line, style = MaterialTheme.typography.bodySmall, color = Palette.Muted, maxLines = 2)
-    }
-}
-
-@Composable
-private fun TileRow(content: @Composable RowScope.() -> Unit) {
-    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(14.dp)) { content() }
-    Rule(thick = false)
-}
-
-@Composable
-private fun RowScope.Split() = Box(Modifier.fillMaxHeight().width(1.dp).background(Palette.Line))
-
-@Composable
-private fun Dashboard(config: LockConfig, state: LockState, owner: Boolean) {
+private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) {
     val context = LocalContext.current
     val navigate = LocalNavigate.current
+    val store = remember { ConfigStore(context) }
+    val scope = rememberCoroutineScope()
     val zone = ZoneId.systemDefault()
     val now = app.lockmein.TrustedClock(context).now()
     val schedule = remember(config) { Rules.schedule(config, zone) }
@@ -194,104 +142,263 @@ private fun Dashboard(config: LockConfig, state: LockState, owner: Boolean) {
     val phase = schedule.phaseAt(now)
     val next = schedule.nextTransition(now)
     val local = ZonedDateTime.ofInstant(now, zone)
-    val nightStart = java.time.LocalTime.parse(config.nightStart)
     val inventory = remember { DeviceInventory(context) }
     val waiting = state.requests
     val unblocks = state.unblocks(now)
 
-    // Progress through the current phase.
-    val (phaseStart, headline, detail, color, icon) = when (phase) {
-        Phase.NIGHT -> {
-            val start = if (local.toLocalTime() >= nightStart) local.with(nightStart) else local.minusDays(1).with(nightStart)
-            Five(start.toInstant(), "Night", "${config.nightClosed.size} app(s) you picked are closed until fajr.", Palette.Locked, Icons.Filled.NightsStay)
+    // Check for updates
+    var latestRelease by remember { mutableStateOf<Release?>(null) }
+    LaunchedEffect(Unit) {
+        latestRelease = withContext(Dispatchers.IO) { Updater.latest() }
+    }
+    val hasUpdate = Updater.isNewer(latestRelease)
+    var bannerDismissed by remember { mutableStateOf(false) }
+
+    // Combined top alert card: setup not finished OR update available
+    val setupIncomplete = !store.setupComplete
+    if (!bannerDismissed && (setupIncomplete || hasUpdate)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = CardShape,
+            colors = CardDefaults.cardColors(
+                containerColor = if (setupIncomplete) Palette.AttentionContainer else MaterialTheme.colorScheme.primaryContainer,
+            ),
+            border = BorderStroke(1.dp, if (setupIncomplete) Palette.Attention else MaterialTheme.colorScheme.primary),
+        ) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (setupIncomplete) Icons.Filled.WarningAmber else Icons.Filled.SystemUpdate,
+                        contentDescription = null,
+                        tint = if (setupIncomplete) Palette.Attention else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        if (setupIncomplete) (if (store.redoing) "Setup reopened" else "Setup not complete")
+                        else "Update ready: version ${latestRelease?.name}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (setupIncomplete) Palette.Attention else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 8.dp),
+                    )
+                    IconButton(onClick = { bannerDismissed = true }, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Filled.Close, contentDescription = "Dismiss", modifier = Modifier.size(16.dp))
+                    }
+                }
+                Text(
+                    if (setupIncomplete) "Every change works at once until the setup passes every check and completes."
+                    else latestRelease?.notes?.ifBlank { "A newer version is ready to install." } ?: "A newer version is ready to install.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (setupIncomplete) {
+                        PrimaryButton(
+                            label = if (store.redoing) "Go through steps" else "Finish setup",
+                            onClick = { navigate(Screen.SETUP) },
+                            modifier = Modifier.height(44.dp),
+                        )
+                    } else if (hasUpdate) {
+                        PrimaryButton(
+                            label = "Update now",
+                            onClick = {
+                                scope.launch {
+                                    withContext(Dispatchers.IO) { Updater.install(context) {} }
+                                }
+                            },
+                            modifier = Modifier.height(44.dp),
+                        )
+                    }
+                }
+            }
         }
-        Phase.OPEN_WINDOW -> Five(next.minus(Duration.ofHours(1)), "Open window", "Requests that waited 7 days can be carried out now.", Palette.Signal, Icons.Filled.LockOpen)
-        Phase.DAY -> Five(ZonedDateTime.of(local.toLocalDate(), fajr.fajr(local.toLocalDate()), zone).toInstant(), "Day", "Your night apps run until ${config.nightStart}. YouTube stays blocked.", Palette.Day, Icons.Filled.WbSunny)
     }
 
-    // The poster: the phase in huge capitals, the time left bigger still, a square bar.
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.size(12.dp).clip(Dot).background(color))
-            Text("NOW", style = MaterialTheme.typography.labelSmall)
-        }
-        Text(headline.uppercase(), style = MaterialTheme.typography.displaySmall, color = color)
-        Text(shortLength(Duration.between(now, next)), style = MaterialTheme.typography.displayMedium, maxLines = 1, softWrap = false)
-        Text("LEFT, UNTIL ${DAY_TIME.format(next.atZone(zone)).uppercase()}", style = MaterialTheme.typography.labelSmall, color = Palette.Muted)
-    }
-    Box(Modifier.fillMaxWidth().height(10.dp).background(Palette.Line)) {
-        Box(Modifier.fillMaxWidth(progressOf(phaseStart, now, next)).height(10.dp).background(Palette.Ink))
-    }
-    Text(detail, style = MaterialTheme.typography.bodyLarge)
-    unblocks.forEach { (pkg, until) ->
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            AppIcon(pkg, 28.dp)
-            Text("${inventory.label(pkg)} is open until ${CLOCK.format(until.atZone(zone))}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-        }
-    }
-
-    // Not what the app thinks, what Android says.
-    val health by produceState<List<HealthItem>?>(null, config) { value = withContext(Dispatchers.IO) { Health(context).check() } }
-    HealthBadge(health) { navigate(Screen.HEALTH) }
-    UnfinishedSetupBanner { navigate(Screen.SETUP) }
-    UpdateCard(onlyIfNewer = true)
-
-    Rule()
-    TileRow {
-        Tile(Icons.Filled.Sos, Palette.Locked, "Emergency", "Friend's code opens one app for an hour.") { navigate(Screen.EMERGENCY) }
-        Split()
-        Tile(Icons.Filled.EventAvailable, Palette.Ink, "Requests", if (waiting.isEmpty()) "Nothing waiting." else "${waiting.size} waiting for the window.", waiting.size) { navigate(Screen.WINDOW) }
-    }
-    TileRow {
-        Tile(Icons.Filled.Apps, Palette.Ink, "Apps", "${config.nightClosed.size} closed at night, ${config.alwaysBlocked.size} always. See what is closed now.") { navigate(Screen.LISTS) }
-        Split()
-        Tile(Icons.Filled.Language, Palette.Ink, "Browser", config.allowedBrowser?.let { inventory.label(it) } ?: "None stays open.") { navigate(Screen.BROWSERS) }
-    }
-
-    Heading("Rules")
+    // Top Status Card: "Am I protected right now?"
     val nightEnd = fajr.fajr(local.toLocalDate())
-    RuleCard(
-        title = "Night",
-        icons = listOf(Icons.Filled.NightsStay, Icons.Filled.Block, Icons.Filled.Language),
-        time = "${config.nightStart} – ${CLOCK.format(nightEnd)} (fajr)",
-        days = (1..7).toSet(),
-        progress = if (phase == Phase.NIGHT) progressOf(phaseStart, now, next) else 0f,
-        caption = "Only the night list runs. Browsers and social apps are closed.",
-        color = Palette.Ink,
-        onClick = { navigate(Screen.LISTS) },
-    )
-    val windowDay = java.time.DayOfWeek.of(config.windowDay).getDisplayName(TextStyle.FULL, Locale.getDefault())
-    val readyIn = waiting.minOfOrNull { Duration.between(now, it.requestedAt.plus(Duration.ofDays(config.loosenWaitDays.toLong()))) }
-    RuleCard(
-        title = "Open window",
-        icons = listOf(Icons.Filled.EventAvailable, Icons.Filled.Schedule),
-        time = "$windowDay ${config.windowStart} – ${config.windowEnd}",
-        days = setOf(config.windowDay),
-        progress = readyIn?.let { 1f - (it.toMillis().toFloat() / Duration.ofDays(config.loosenWaitDays.toLong()).toMillis()).coerceIn(0f, 1f) },
-        caption = when {
-            waiting.isEmpty() -> "Nothing waiting. Anything you ask to open up waits ${config.loosenWaitDays} days, then applies here."
-            readyIn != null && !readyIn.isNegative -> "${waiting.size} request(s) waiting. The first is ready in ${lengthOf(readyIn)}."
-            else -> "${waiting.size} request(s) ready to carry out in the window."
-        },
-        color = Palette.Signal,
-        onClick = { navigate(Screen.WINDOW) },
-    )
+    val (phaseName, statusKind, sentence, phaseIcon) = when (phase) {
+        Phase.NIGHT -> Quad(
+            "Night",
+            StatusKind.OK,
+            "Night until ${CLOCK.format(nightEnd)}. ${config.nightClosed.size} apps closed.",
+            Icons.Filled.NightsStay,
+        )
+        Phase.OPEN_WINDOW -> Quad(
+            "Open window",
+            StatusKind.ATTENTION,
+            "Open window until ${config.windowEnd}. Requests that waited 7 days can be carried out now.",
+            Icons.Filled.EventAvailable,
+        )
+        Phase.DAY -> Quad(
+            "Day",
+            StatusKind.OK,
+            "Day until ${config.nightStart}. Night apps will close at night.",
+            Icons.Filled.WbSunny,
+        )
+    }
 
-    SectionCard("Private DNS", config.dnsHost, leading = Icons.Filled.Shield)
-    if (state.quarantined.isNotEmpty()) SectionCard("New apps held back", "${state.quarantined.size} app(s) wait for your review.", state.quarantined.toList(), Icons.Filled.Apps) { navigate(Screen.WINDOW) }
+    val healthItems by produceState<List<HealthItem>?>(null, config) {
+        value = withContext(Dispatchers.IO) { Health(context).check() }
+    }
+    val failingHealth = healthItems?.count { !it.ok } ?: 0
 
-    Spacer(Modifier.height(4.dp))
+    AppCard {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(phaseIcon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+            Text(phaseName, style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.weight(1f))
+            StatusBadge(kind = statusKind, label = if (phase == Phase.OPEN_WINDOW) "Window open" else "Protected")
+        }
+
+        Text(
+            sentence,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+
+        if (unblocks.isNotEmpty()) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            unblocks.forEach { (pkg, until) ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AppIcon(pkg, size = 24.dp)
+                    Text(
+                        "${inventory.label(pkg)} is open until ${CLOCK.format(until.atZone(zone))}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Palette.Attention,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+        // Health summary row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { navigate(Screen.HEALTH) }
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (healthItems == null) {
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                Text("Checking protection status...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else if (failingHealth == 0) {
+                Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Palette.Ok, modifier = Modifier.size(18.dp))
+                Text("Protection verified", style = MaterialTheme.typography.bodyMedium, color = Palette.Ok, fontWeight = FontWeight.Medium)
+            } else {
+                Icon(Icons.Filled.WarningAmber, contentDescription = null, tint = Palette.Attention, modifier = Modifier.size(18.dp))
+                Text(
+                    "$failingHealth item" + (if (failingHealth > 1) "s" else "") + " need attention",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Palette.Attention,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+        }
+    }
+
+    // "Next" Card: Upcoming phase change and weekly window
+    AppCard {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(Icons.Filled.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            Text("Upcoming changes", style = MaterialTheme.typography.titleMedium)
+        }
+        val nextPhaseName = when (phase) {
+            Phase.NIGHT -> "Day"
+            Phase.DAY -> "Night"
+            Phase.OPEN_WINDOW -> "Night"
+        }
+        Text(
+            "$nextPhaseName starts ${DAY_TIME.format(next.atZone(zone))}.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        val windowDay = java.time.DayOfWeek.of(config.windowDay).getDisplayName(TextStyle.FULL, Locale.getDefault())
+        val nextWindow = schedule.nextWindowStart(now)
+        Text(
+            "Weekly window: $windowDay ${config.windowStart} to ${config.windowEnd} (next: ${DAY_TIME.format(nextWindow.atZone(zone))}).",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    Heading("Shortcuts")
+
+    // Shortcut 1: Closed right now
+    AppCard(onClick = { navigate(Screen.LISTS) }) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            IconCircle(Icons.Filled.Apps, MaterialTheme.colorScheme.primaryContainer, tint = MaterialTheme.colorScheme.primary)
+            Column(Modifier.weight(1f)) {
+                Text("Closed right now", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "${config.nightClosed.size} night apps, ${config.alwaysBlocked.size} always blocked",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+        }
+    }
+
+    // Shortcut 2: Waiting requests
+    AppCard(onClick = { navigate(Screen.WINDOW) }) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            IconCircle(Icons.Filled.EventAvailable, MaterialTheme.colorScheme.secondaryContainer, tint = MaterialTheme.colorScheme.secondary)
+            Column(Modifier.weight(1f)) {
+                Text("Waiting requests", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (waiting.isEmpty()) "Nothing waiting" else "${waiting.size} request" + (if (waiting.size > 1) "s" else "") + " waiting for the window",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (waiting.isNotEmpty()) {
+                StatusBadge(kind = StatusKind.ATTENTION, label = "${waiting.size}")
+            }
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+        }
+    }
+
+    // Shortcut 3: Emergency: use friend's code
+    AppCard(onClick = { navigate(Screen.EMERGENCY) }) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            IconCircle(Icons.Filled.Key, Palette.ClosedContainer, tint = Palette.Closed)
+            Column(Modifier.weight(1f)) {
+                Text("Emergency: use friend's code", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Open an app for an hour or carry out an emergency action",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+        }
+    }
+
+    Spacer(Modifier.height(8.dp))
+
     Text(
         when {
             BuildConfig.PREVIEW -> "Preview build: nothing is applied to this phone."
             BuildConfig.TEST_BUILD -> "Test build: can be removed over USB."
             else -> "Sealed build."
-        } + if (owner) "  Device owner: yes." else "  Device owner: no.",
+        } + if (owner) " Device owner: yes." else " Device owner: no.",
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.bodySmall,
     )
-    TextButton(onClick = { navigate(Screen.REMOVE) }, modifier = Modifier.fillMaxWidth()) { Text("Remove protection", color = MaterialTheme.colorScheme.error) }
-    if (BuildConfig.PREVIEW) TextButton(onClick = { PreviewDemo.reset(context); navigate(Screen.SETUP) }, modifier = Modifier.fillMaxWidth()) { Text("Reset the preview and start over") }
 }
 
-private data class Five<A, B, C, D, E>(val a: A, val b: B, val c: C, val d: D, val e: E)
+private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)

@@ -155,16 +155,119 @@ class ChangeManager(private val context: Context) {
         val untouchable = DeviceInventory(context).read().protectedPackages + context.packageName
         if (packageName in untouchable) return Outcome.Refused("That app is never blocked.")
         val secret = secrets.load() ?: return Outcome.Refused("No friend code is set up.")
-        val redemption = Emergency(secret).redeem(code, now, state.lastCodeCounter)
-        if (redemption == null) {
+        val check = CodeChecker(secret).check(code, now, state.lastCodeCounter)
+        if (check !is CodeCheck.Accepted) {
             events.add(EventKind.EMERGENCY_REFUSED, "wrong or used code", now)
             return Outcome.Refused("That code is wrong or was already used.")
         }
-        state.unblock(packageName, redemption.until)
-        state.lastCodeCounter = redemption.counter
-        events.add(EventKind.EMERGENCY_USED, "$packageName until ${redemption.until}", now)
+        state.unblock(packageName, now.plus(Duration.ofMinutes(60)))
+        state.lastCodeCounter = check.counter
+        events.add(EventKind.EMERGENCY_USED, "$packageName until ${now.plus(Duration.ofMinutes(60))}", now)
         PolicyRunner(context).runIfActive(now)
         return Outcome.Done("$packageName is open for 60 minutes. It closes by itself.")
+    }
+
+    /**
+     * Carries out one waiting request now with the friend's code, skipping the wait and the open window.
+     * Taking the whole protection off still requires the waited request and the open window.
+     */
+    fun applyRequestWithCode(code: String, id: String, now: Instant = TrustedClock(context).now()): Outcome {
+        val request = state.requests.firstOrNull { it.id == id } ?: return Outcome.Refused("That request is gone.")
+        if (request.kind == RequestKind.REMOVE_PROTECTION) {
+            return Outcome.Refused("Taking the protection off needs a waited request in the weekly window.")
+        }
+        val secret = secrets.load() ?: return Outcome.Refused("No friend code is set up.")
+        val check = CodeChecker(secret).check(code, now, state.lastCodeCounter)
+        if (check !is CodeCheck.Accepted) {
+            events.add(EventKind.EMERGENCY_REFUSED, "wrong or used code", now)
+            return Outcome.Refused("That code is wrong or was already used.")
+        }
+        state.lastCodeCounter = check.counter
+
+        val config = config()
+        val updated: LockConfig = when (request.kind) {
+            RequestKind.NIGHT_ADD -> config
+            RequestKind.NIGHT_REMOVE -> config.copy(nightClosed = config.nightClosed - request.target)
+            RequestKind.BLOCKED_REMOVE -> config.copy(alwaysBlocked = config.alwaysBlocked - request.target)
+            RequestKind.SETTINGS -> request.settings ?: return Outcome.Refused("That request holds no settings.")
+            RequestKind.BROWSER -> { state.approveBrowser(request.target); config }
+            RequestKind.RELEASE_APP -> { state.release(request.target); config }
+            RequestKind.REDO_SETUP -> { reopenSetup(); config }
+            RequestKind.REMOVE_PROTECTION -> error("unreachable")
+        }
+        ConfigRules.problems(updated).firstOrNull()?.let { return Outcome.Refused(it) }
+        if (updated != config) store.save(updated)
+        state.requests = Requests.cancel(state.requests, id)
+        events.add(EventKind.LOOSENED, "${request.kind} ${request.target} with friend's code", now)
+        if (request.kind == RequestKind.BROWSER) events.add(EventKind.BROWSER_APPROVED, request.target, now)
+        if (request.kind == RequestKind.RELEASE_APP) events.add(EventKind.APP_RELEASED, request.target, now)
+        PolicyRunner(context).runIfActive(now)
+        return Outcome.Done("Carried out.")
+    }
+
+    /**
+     * Stop closing an app now with the friend's code: takes it off "Closed at night" or "Always blocked" without the 7-day wait.
+     */
+    fun stopClosingWithCode(code: String, list: AppList, packageName: String, now: Instant = TrustedClock(context).now()): Outcome {
+        val secret = secrets.load() ?: return Outcome.Refused("No friend code is set up.")
+        val check = CodeChecker(secret).check(code, now, state.lastCodeCounter)
+        if (check !is CodeCheck.Accepted) {
+            events.add(EventKind.EMERGENCY_REFUSED, "wrong or used code", now)
+            return Outcome.Refused("That code is wrong or was already used.")
+        }
+        state.lastCodeCounter = check.counter
+
+        val config = config()
+        val updated = if (list == AppList.NIGHT_CLOSED) {
+            config.copy(nightClosed = config.nightClosed - packageName)
+        } else {
+            config.copy(alwaysBlocked = config.alwaysBlocked - packageName)
+        }
+        ConfigRules.problems(updated).firstOrNull()?.let { return Outcome.Refused(it) }
+        store.save(updated)
+        val reqId = "${editor.requestKind(list)}:$packageName"
+        state.requests = Requests.cancel(state.requests, reqId)
+        events.add(EventKind.LOOSENED, "stop closing $packageName on $list with friend's code", now)
+        PolicyRunner(context).runIfActive(now)
+        return Outcome.Done("$packageName is no longer closed.")
+    }
+
+    /**
+     * Lets one held-back new app through now with the friend's code.
+     */
+    fun releaseAppWithCode(code: String, packageName: String, now: Instant = TrustedClock(context).now()): Outcome {
+        val secret = secrets.load() ?: return Outcome.Refused("No friend code is set up.")
+        val check = CodeChecker(secret).check(code, now, state.lastCodeCounter)
+        if (check !is CodeCheck.Accepted) {
+            events.add(EventKind.EMERGENCY_REFUSED, "wrong or used code", now)
+            return Outcome.Refused("That code is wrong or was already used.")
+        }
+        state.lastCodeCounter = check.counter
+
+        state.release(packageName)
+        state.requests = Requests.cancel(state.requests, "${RequestKind.RELEASE_APP}:$packageName")
+        events.add(EventKind.APP_RELEASED, "$packageName with friend's code", now)
+        PolicyRunner(context).runIfActive(now)
+        return Outcome.Done("$packageName is let through.")
+    }
+
+    /**
+     * Opens one closed browser now (approves it) with the friend's code.
+     */
+    fun approveBrowserWithCode(code: String, packageName: String, now: Instant = TrustedClock(context).now()): Outcome {
+        val secret = secrets.load() ?: return Outcome.Refused("No friend code is set up.")
+        val check = CodeChecker(secret).check(code, now, state.lastCodeCounter)
+        if (check !is CodeCheck.Accepted) {
+            events.add(EventKind.EMERGENCY_REFUSED, "wrong or used code", now)
+            return Outcome.Refused("That code is wrong or was already used.")
+        }
+        state.lastCodeCounter = check.counter
+
+        state.approveBrowser(packageName)
+        state.requests = Requests.cancel(state.requests, "${RequestKind.BROWSER}:$packageName")
+        events.add(EventKind.BROWSER_APPROVED, "$packageName with friend's code", now)
+        PolicyRunner(context).runIfActive(now)
+        return Outcome.Done("$packageName is approved.")
     }
 
     /**
@@ -242,7 +345,10 @@ class ChangeManager(private val context: Context) {
     fun redoWithCode(code: String, now: Instant = TrustedClock(context).now()): Outcome {
         val secret = secrets.load() ?: return Outcome.Refused("No friend code is set up.")
         val check = CodeChecker(secret).check(code, now, state.lastCodeCounter)
-        if (check !is CodeCheck.Accepted) return refused("that code is wrong or was already used", "redo setup", now)
+        if (check !is CodeCheck.Accepted) {
+            events.add(EventKind.EMERGENCY_REFUSED, "wrong or used code", now)
+            return refused("that code is wrong or was already used", "redo setup", now)
+        }
         state.lastCodeCounter = check.counter
         state.requests = state.requests.filter { it.kind != RequestKind.REDO_SETUP }
         reopenSetup()

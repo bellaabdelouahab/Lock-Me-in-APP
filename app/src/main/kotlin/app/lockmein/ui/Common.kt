@@ -1,87 +1,119 @@
 package app.lockmein.ui
 
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.ui.graphics.RectangleShape
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
-import androidx.compose.runtime.remember
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import app.lockmein.AppInfo
 import app.lockmein.Outcome
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class Screen { HOME, SETUP, LISTS, BROWSERS, WINDOW, EMERGENCY, REPORT, SETTINGS, REMOVE, HEALTH }
+/**
+ * Screen destinations.
+ * Existing names (LISTS, WINDOW, EMERGENCY) are kept for compatibility with intents and tests.
+ */
+enum class Screen {
+    HOME,
+    SETUP,
+    LISTS,     // Apps
+    BROWSERS,
+    WINDOW,    // Requests
+    EMERGENCY, // Friend's code
+    REPORT,
+    SETTINGS,
+    REMOVE,
+    HEALTH,    // Is it working?
+    ABOUT,
+}
 
-/** Where a screen can send the person. */
 val LocalNavigate = compositionLocalOf<(Screen) -> Unit> { {} }
+val LocalOpenDrawer = compositionLocalOf<() -> Unit> { {} }
 
 @Composable
-fun Navigation(navigate: (Screen) -> Unit, content: @Composable () -> Unit) = CompositionLocalProvider(LocalNavigate provides navigate, content = content)
+fun Navigation(navigate: (Screen) -> Unit, content: @Composable () -> Unit) =
+    CompositionLocalProvider(LocalNavigate provides navigate, content = content)
 
-/** A thick ink rule: the poster's way of separating things instead of boxes. */
-@Composable
-fun Rule(thick: Boolean = true) = Box(Modifier.fillMaxWidth().height(if (thick) 3.dp else 1.dp).background(if (thick) Palette.Ink else Palette.Line))
-
-/** A page: the title in capitals with a thick rule under it, an optional back arrow and actions, then scrolling content. */
+/**
+ * Common page skeleton:
+ * - Top app bar: left = menu icon (on Home) or back arrow (on subpages); center = title in sentence case; right = optional single icon action.
+ * - Single column, 16dp horizontal padding, consistent 8dp rhythm.
+ * - Pinned bottom bar container for the primary thumb-zone action.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Page(
@@ -92,181 +124,294 @@ fun Page(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     if (onBack != null) BackHandler(onBack = onBack)
+    val openDrawer = LocalOpenDrawer.current
     Scaffold(
-        containerColor = Palette.Paper,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            Column(Modifier.background(Palette.Paper).statusBarsPadding()) {
-                TopAppBar(
-                    title = { Text(title.uppercase(), style = MaterialTheme.typography.titleLarge, maxLines = 1) },
-                    navigationIcon = {
-                        if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-                    },
-                    actions = actions,
-                    windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Palette.Paper, titleContentColor = Palette.Ink, navigationIconContentColor = Palette.Ink, actionIconContentColor = Palette.Ink),
-                )
-                Box(Modifier.padding(horizontal = 20.dp)) { Rule() }
-            }
+            TopAppBar(
+                title = { Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1) },
+                navigationIcon = {
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    } else {
+                        IconButton(onClick = openDrawer) {
+                            Icon(Icons.Filled.Menu, contentDescription = "Open side bar")
+                        }
+                    }
+                },
+                actions = actions,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                    actionIconContentColor = MaterialTheme.colorScheme.onSurface,
+                ),
+            )
         },
         bottomBar = bottomBar,
     ) { padding ->
         Column(
-            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp).padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content,
         )
     }
 }
 
-/** A section label: small capitals, then a thin rule. */
+/** Standard section header: sentence case, 16sp SemiBold. */
 @Composable
-fun Heading(text: String) = Column(Modifier.fillMaxWidth().padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-    Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = Palette.Ink)
-    Rule(thick = false)
+fun Heading(text: String) = Column(
+    Modifier
+        .fillMaxWidth()
+        .padding(top = 10.dp, bottom = 2.dp),
+) {
+    Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
 }
 
 @Composable
-fun Note(text: String) = Text(text, style = MaterialTheme.typography.bodyMedium, color = Palette.Muted)
+fun Note(text: String) = Text(
+    text,
+    style = MaterialTheme.typography.bodyMedium,
+    color = MaterialTheme.colorScheme.onSurfaceVariant,
+)
+
+/** Status indicator: Green (OK), Amber (Needs attention), Red (Broken/Closed). Never color alone. */
+enum class StatusKind { OK, ATTENTION, CLOSED }
 
 @Composable
-fun Problem(text: String?) {
-    if (text != null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-        Box(Modifier.padding(top = 5.dp).size(8.dp).background(Palette.Locked))
-        Text(text, color = Palette.Locked, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+fun StatusBadge(kind: StatusKind, label: String, modifier: Modifier = Modifier) {
+    val (icon, color, bg) = when (kind) {
+        StatusKind.OK -> Triple(Icons.Filled.CheckCircle, Palette.Ok, Palette.OkContainer)
+        StatusKind.ATTENTION -> Triple(Icons.Filled.WarningAmber, Palette.Attention, Palette.AttentionContainer)
+        StatusKind.CLOSED -> Triple(Icons.Filled.Block, Palette.Closed, Palette.ClosedContainer)
+    }
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = bg,
+        modifier = modifier,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+            Text(label, color = color, style = MaterialTheme.typography.labelMedium)
+        }
     }
 }
 
-/** The sentence an outcome came to, in the colour that fits. */
+@Composable
+fun Problem(text: String?) {
+    if (text != null) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top,
+            modifier = Modifier.padding(vertical = 4.dp),
+        ) {
+            Icon(Icons.Filled.Block, contentDescription = null, tint = Palette.Closed, modifier = Modifier.size(18.dp))
+            Text(text, color = Palette.Closed, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+/** The sentence an outcome came to, with icon and clear status color. */
 @Composable
 fun OutcomeText(outcome: Outcome?) = when (outcome) {
-    is Outcome.Done -> Text(outcome.message, color = Palette.Day, fontWeight = FontWeight.SemiBold)
+    is Outcome.Done -> Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(vertical = 4.dp),
+    ) {
+        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Palette.Ok, modifier = Modifier.size(18.dp))
+        Text(outcome.message, color = Palette.Ok, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+    }
     is Outcome.Refused -> Problem(outcome.reason)
     null -> Unit
 }
 
-/** No box: the content sits on the paper with a thick rule on its left, like a margin note on a poster. */
+/** Card container with 12dp corner radius and 1dp subtle outline. */
 @Composable
-fun InfoCard(content: @Composable ColumnScope.() -> Unit) = Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-    Box(Modifier.fillMaxHeight().width(3.dp).background(Palette.Ink))
-    Column(Modifier.weight(1f).padding(start = 14.dp, top = 2.dp, bottom = 2.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+fun AppCard(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it },
+        shape = CardShape,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            content = content,
+        )
+    }
 }
 
-/** The main action: a square ink block with capitals. */
+@Composable
+fun InfoCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) =
+    AppCard(modifier = modifier, content = content)
+
+/** The main action: full-width filled button pinned at the bottom in the thumb zone. */
+@Composable
+fun PrimaryButton(
+    label: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) = Button(
+    onClick = onClick,
+    enabled = enabled,
+    shape = ButtonShape,
+    modifier = Modifier
+        .fillMaxWidth()
+        .height(52.dp),
+    colors = ButtonDefaults.buttonColors(
+        containerColor = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+    ),
+) {
+    Text(label, style = MaterialTheme.typography.labelLarge)
+}
+
+/** Alias for callers expecting MenuButton. */
 @Composable
 fun MenuButton(label: String, enabled: Boolean = true, onClick: () -> Unit) =
-    Button(
-        onClick = onClick, enabled = enabled, shape = RectangleShape, modifier = Modifier.fillMaxWidth().height(58.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Palette.Ink, contentColor = Palette.Paper, disabledContainerColor = Palette.Line, disabledContentColor = Palette.Muted),
-    ) { Text(label.uppercase(), style = MaterialTheme.typography.labelLarge) }
+    PrimaryButton(label = label, enabled = enabled, onClick = onClick)
 
-/** A second action: a square ink outline. */
+/** Secondary action: full-width outlined button. */
 @Composable
 fun SecondaryButton(label: String, onClick: () -> Unit, enabled: Boolean = true) =
-    OutlinedButton(onClick = onClick, enabled = enabled, shape = RectangleShape, border = BorderStroke(2.dp, if (enabled) Palette.Ink else Palette.Line), modifier = Modifier.fillMaxWidth().height(52.dp)) {
-        Text(label.uppercase(), style = MaterialTheme.typography.labelLarge, color = if (enabled) Palette.Ink else Palette.Muted)
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        shape = ButtonShape,
+        border = BorderStroke(1.dp, if (enabled) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 
-/** Small buttons for rows: the chosen one is filled, the others outlined. */
 @Composable
 fun RowScope.MenuButtonSmall(label: String, onClick: () -> Unit) =
-    Button(onClick = onClick, shape = RectangleShape, colors = ButtonDefaults.buttonColors(containerColor = Palette.Ink, contentColor = Palette.Paper), modifier = Modifier.weight(1f)) { Text(label.uppercase(), maxLines = 1, style = MaterialTheme.typography.labelMedium) }
+    Button(
+        onClick = onClick,
+        shape = ButtonShape,
+        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary),
+        modifier = Modifier.weight(1f),
+    ) {
+        Text(label, maxLines = 1, style = MaterialTheme.typography.labelMedium)
+    }
 
 @Composable
 fun RowScope.SecondaryButtonSmall(label: String, onClick: () -> Unit) =
-    OutlinedButton(onClick = onClick, shape = RectangleShape, border = BorderStroke(2.dp, Palette.Ink), modifier = Modifier.weight(1f)) { Text(label.uppercase(), maxLines = 1, color = Palette.Ink, style = MaterialTheme.typography.labelMedium) }
+    OutlinedButton(
+        onClick = onClick,
+        shape = ButtonShape,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = Modifier.weight(1f),
+    ) {
+        Text(label, maxLines = 1, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+    }
 
 @Composable
 fun ButtonRow(content: @Composable RowScope.() -> Unit) =
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), content = content)
 
-/** One of the few round things: a solid dot of [color] with the icon on it in paper. */
 @Composable
-fun IconCircle(icon: ImageVector, color: Color, size: Dp = 56.dp, tint: Color = Palette.Paper) {
+fun IconCircle(icon: ImageVector, color: Color, size: Dp = 40.dp, tint: Color = Color.White) {
     Box(Modifier.size(size).clip(Dot).background(color), contentAlignment = Alignment.Center) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size * 0.5f))
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size * 0.55f))
     }
 }
 
-/** The app's own icon, as the phone shows it. */
+/** 40dp app icon with 8dp rounded corners. */
 @Composable
-fun AppIcon(packageName: String, size: Dp = 36.dp) {
+fun AppIcon(packageName: String, size: Dp = 40.dp) {
     val context = LocalContext.current
     val bitmap = remember(packageName) {
         runCatching {
             val drawable = context.packageManager.getApplicationIcon(packageName)
-            val px = 96
-            val out = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
+            val px = 120
+            val out = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
             drawable.setBounds(0, 0, px, px)
-            drawable.draw(android.graphics.Canvas(out))
+            drawable.draw(Canvas(out))
             out.asImageBitmap()
         }.getOrNull()
     }
-    if (bitmap != null) Image(bitmap, contentDescription = null, modifier = Modifier.size(size).clip(Dot))
-    else IconCircle(Icons.Filled.Apps, Palette.Muted, size)
-}
-
-/** M T W T F S S as squares: filled ink for the chosen days. [days] are ISO numbers, 1 = Monday. */
-@Composable
-fun DayCircles(days: Set<Int>, on: Color = Palette.Ink, off: Color = Palette.Line, onText: Color = Palette.Paper) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        "MTWTFSS".forEachIndexed { index, letter ->
-            val chosen = (index + 1) in days
-            Box(Modifier.weight(1f).height(30.dp).background(if (chosen) on else Color.Transparent).border(1.dp, if (chosen) on else off), contentAlignment = Alignment.Center) {
-                Text(letter.toString(), color = if (chosen) onText else Palette.Muted, fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelMedium)
-            }
+    if (bitmap != null) {
+        Image(
+            bitmap,
+            contentDescription = null,
+            modifier = Modifier
+                .size(size)
+                .clip(RoundedCornerShape(8.dp)),
+        )
+    } else {
+        Box(
+            Modifier
+                .size(size)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Filled.Apps, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(size * 0.6f))
         }
     }
 }
 
-/** A rule as a poster block: a solid slab of [color] (ink by default), the name in capitals, the time huge, the days, a square progress bar. */
+/**
+ * Standard app row used across every list:
+ * App icon (40dp), app label (16sp), one short grey line saying state/reason (14sp), and a right control.
+ */
 @Composable
-fun RuleCard(
+fun AppRow(
+    packageName: String,
     title: String,
-    icons: List<ImageVector>,
-    time: String,
-    days: Set<Int>,
-    progress: Float? = null,
-    caption: String? = null,
-    color: Color = Palette.Ink,
-    onClick: (() -> Unit)? = null,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    statusColor: Color? = null,
+    trailing: @Composable () -> Unit,
 ) {
-    val slab = if (color == Palette.Signal || color == Palette.Rule) Palette.Signal else Palette.Ink
-    Column(
-        Modifier.fillMaxWidth().background(slab).let { if (onClick != null) it.clickable(onClick = onClick) else it }.padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(title.uppercase(), color = Palette.Paper, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-            icons.forEach { Icon(it, contentDescription = null, tint = Palette.Paper, modifier = Modifier.padding(start = 8.dp).size(18.dp)) }
-            if (onClick != null) Text("  \u2192", color = Palette.Paper, style = MaterialTheme.typography.titleLarge)
+        AppIcon(packageName, size = 40.dp)
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = statusColor ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+            )
         }
-        Text(time, color = Palette.Paper, style = MaterialTheme.typography.headlineMedium)
-        DayCircles(days, on = Palette.Paper, off = Palette.Paper.copy(alpha = 0.35f), onText = slab)
-        if (progress != null) Box(Modifier.fillMaxWidth().height(6.dp).background(Palette.Paper.copy(alpha = 0.25f))) {
-            Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).height(6.dp).background(Palette.Paper))
-        }
-        if (caption != null) Text(caption, color = Palette.Paper.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall)
+        trailing()
     }
 }
 
-/** A row on the paper, no box: icon, the name in bold, a line of text, app icons, an arrow; a thin rule under it. */
-@Composable
-fun SectionCard(title: String, subtitle: String, packages: List<String> = emptyList(), leading: ImageVector? = null, onClick: (() -> Unit)? = null) {
-    Column(Modifier.fillMaxWidth().let { if (onClick != null) it.clickable(onClick = onClick) else it }) {
-        Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            if (leading != null) Icon(leading, null, tint = Palette.Ink, modifier = Modifier.size(26.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(subtitle, color = Palette.Muted, style = MaterialTheme.typography.bodySmall)
-                if (packages.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) { packages.take(6).forEach { AppIcon(it, 26.dp) } }
-            }
-            if (onClick != null) Text("\u2192", style = MaterialTheme.typography.headlineSmall, color = Palette.Ink)
-        }
-        Rule(thick = false)
-    }
-}
-
-/** Runs slow work (the network, the DNS check, the policy pass) off the main thread and hands the result back. */
+/** Runs slow work off the main thread. */
 fun <T> CoroutineScope.background(work: () -> T, done: (T) -> Unit) {
     launch {
         val result = withContext(Dispatchers.IO) { work() }
@@ -274,40 +419,223 @@ fun <T> CoroutineScope.background(work: () -> T, done: (T) -> Unit) {
     }
 }
 
-/** Where one requirement stands: checked by the app (PASS or FAIL), being checked, or one only the person can confirm. */
+/** Where one requirement stands: PASS, FAIL, CHECKING, CONFIRM. */
 enum class CheckState { PASS, FAIL, CHECKING, CONFIRM }
 
-/**
- * One requirement, with its live state, as a line on the paper: a round status dot (green once the phone itself confirms it,
- * red while it does not hold, yellow when only you can confirm it), the name, what was found; a thin rule under it.
- */
+/** Checklist row: icon, title, short detail line, status tag. Failing ones are red/amber, verified are green. */
 @Composable
-fun CheckRow(title: String, state: CheckState, detail: String? = null, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
-    val color = when (state) {
-        CheckState.PASS -> Palette.Day
-        CheckState.FAIL -> Palette.Locked
-        CheckState.CHECKING -> Palette.Muted
-        CheckState.CONFIRM -> Palette.Open
+fun CheckRow(
+    title: String,
+    state: CheckState,
+    detail: String? = null,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    val (statusKind, tagText) = when (state) {
+        CheckState.PASS -> StatusKind.OK to "OK"
+        CheckState.FAIL -> StatusKind.CLOSED to "Problem"
+        CheckState.CHECKING -> StatusKind.ATTENTION to "Checking"
+        CheckState.CONFIRM -> StatusKind.ATTENTION to "Action needed"
     }
-    Column(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Box(Modifier.padding(top = 2.dp).size(22.dp), contentAlignment = Alignment.Center) {
-                if (state == CheckState.CHECKING) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.5.dp, color = Palette.Ink)
-                else Box(Modifier.size(16.dp).clip(Dot).background(color))
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                if (detail != null) Text(detail, style = MaterialTheme.typography.bodySmall, color = if (state == CheckState.FAIL) Palette.Locked else Palette.Muted)
-                if (actionLabel != null && onAction != null && state != CheckState.PASS) {
-                    Text("${actionLabel.uppercase()}  \u2192", style = MaterialTheme.typography.labelLarge, color = Palette.Signal,
-                        modifier = Modifier.padding(top = 6.dp).clickable(onClick = onAction))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = CardShape,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            Modifier.padding(14.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(Modifier.padding(top = 2.dp), contentAlignment = Alignment.Center) {
+                if (state == CheckState.CHECKING) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.5.dp, color = MaterialTheme.colorScheme.primary)
+                } else {
+                    StatusBadge(statusKind, tagText)
                 }
             }
-            Text(
-                when (state) { CheckState.PASS -> "OK"; CheckState.FAIL -> "NO"; CheckState.CHECKING -> "..."; CheckState.CONFIRM -> "YOU" },
-                style = MaterialTheme.typography.labelLarge, color = if (state == CheckState.CHECKING) Palette.Muted else color,
-            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                if (detail != null) {
+                    Text(
+                        detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (state == CheckState.FAIL) Palette.Closed else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (actionLabel != null && onAction != null && state != CheckState.PASS) {
+                    TextButton(onClick = onAction, modifier = Modifier.padding(top = 2.dp)) {
+                        Text(actionLabel, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
         }
-        Rule(thick = false)
+    }
+}
+
+/** Confirmation dialog for actions (destructive actions in red text). */
+@Composable
+fun ConfirmDialog(
+    title: String,
+    text: String,
+    confirmLabel: String = "Confirm",
+    isDestructive: Boolean = false,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = CardShape,
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        title = { Text(title, style = MaterialTheme.typography.titleMedium) },
+        text = { Text(text, style = MaterialTheme.typography.bodyMedium) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(
+                    confirmLabel,
+                    color = if (isDestructive) Palette.Closed else MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
+}
+
+/** Full-screen multi-select app picker with search and pinned bottom confirm button. */
+@Composable
+fun MultiAppPicker(
+    choices: List<AppInfo>,
+    onDismiss: () -> Unit,
+    onConfirm: (List<AppInfo>) -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val selected = remember { mutableStateListOf<AppInfo>() }
+    val filtered = remember(query, choices) {
+        if (query.isBlank()) choices
+        else choices.filter { it.label.contains(query, ignoreCase = true) || it.packageName.contains(query, ignoreCase = true) }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background,
+        ) {
+            Scaffold(
+                topBar = {
+                    Column(Modifier.statusBarsPadding()) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            IconButton(onClick = onDismiss) {
+                                Icon(Icons.Filled.Close, contentDescription = "Close")
+                            }
+                            Text(
+                                "Add apps",
+                                style = MaterialTheme.typography.titleLarge,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            placeholder = { Text("Search apps") },
+                            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                            singleLine = true,
+                            shape = CardShape,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                },
+                bottomBar = {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    ) {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .padding(16.dp),
+                        ) {
+                            PrimaryButton(
+                                label = if (selected.isEmpty()) "Select apps" else "Add ${selected.size} app" + if (selected.size > 1) "s" else "",
+                                enabled = selected.isNotEmpty(),
+                                onClick = { onConfirm(selected.toList()) },
+                            )
+                        }
+                    }
+                },
+            ) { padding ->
+                LazyColumn(
+                    modifier = Modifier
+                        .padding(padding)
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (filtered.isEmpty()) {
+                        item {
+                            Text(
+                                "No apps match your search.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 24.dp),
+                            )
+                        }
+                    } else {
+                        items(filtered, key = { it.packageName }) { app ->
+                            val isChecked = selected.any { it.packageName == app.packageName }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        if (isChecked) selected.removeAll { it.packageName == app.packageName }
+                                        else selected.add(app)
+                                    }
+                                    .padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                AppIcon(app.packageName, size = 40.dp)
+                                Text(
+                                    app.label,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Checkbox(
+                                    checked = isChecked,
+                                    onCheckedChange = { checked ->
+                                        if (checked) selected.add(app)
+                                        else selected.removeAll { it.packageName == app.packageName }
+                                    },
+                                )
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Legacy single-app picker for callers still using it. */
+@Composable
+fun AppPicker(choices: List<AppInfo>, onDismiss: () -> Unit, onPick: (AppInfo) -> Unit) {
+    MultiAppPicker(choices = choices, onDismiss = onDismiss) { picked ->
+        picked.firstOrNull()?.let(onPick)
     }
 }

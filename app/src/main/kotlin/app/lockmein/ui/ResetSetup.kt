@@ -58,7 +58,7 @@ fun UnfinishedSetupBanner(onReset: () -> Unit) {
     var failed by remember { mutableStateOf<List<app.lockmein.HealthItem>?>(null) }
     var outcome by remember { mutableStateOf<Outcome?>(null) }
     val redoing = remember { ConfigStore(context).redoing }
-    Text(if (redoing) "SETUP REOPENED" else "SETUP NOT FINISHED", style = MaterialTheme.typography.labelLarge, color = Palette.Locked)
+    Text(if (redoing) "Setup reopened" else "Setup not finished", style = MaterialTheme.typography.titleMedium, color = Palette.Attention)
     if (redoing) {
         Note("You reopened the setup. Every change works at once until you finish: go through the steps (your friend's code stays as it is), then Start, or press Finish the setup below to lock it again as it is.")
         MenuButton("Go through the steps") { navigate(Screen.SETUP) }
@@ -114,6 +114,7 @@ fun RedoSetup() {
         onValueChange = { code = it.filter(Char::isDigit).take(6) },
         label = { Text("Friend's code") },
         singleLine = true,
+        shape = CardShape,
         modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
     )
     MenuButton("Redo now with the code", enabled = code.length == 6) {

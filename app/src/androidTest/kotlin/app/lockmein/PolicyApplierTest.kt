@@ -355,6 +355,133 @@ class PolicyApplierTest {
     }
 
     @Test
+    fun f4_power2_applyWaitingRequestNowWithCodeSkipsWaitAndWindow() {
+        val manager = ChangeManager(context)
+        val secret = manager.newFriendSecret()
+        store.protectionActive = true
+        val app = anAppToSuspend()
+        val now = Instant.now()
+        val counter = Totp.counter(now)
+        val code1 = Totp.code(secret, counter)
+        val wrong = ((code1.toInt() + 1) % 1_000_000).toString().padStart(6, '0')
+
+        // Queue a waiting request to remove an app from night list
+        assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.ADD, app, now) is Outcome.Done)
+        assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app, now) is Outcome.Done)
+        val id = manager.requests().single().id
+        assertTrue(app in store.load()!!.nightClosed)
+
+        // Wrong code fails and leaves request waiting
+        assertTrue(manager.applyRequestWithCode(wrong, id, now) is Outcome.Refused)
+        assertEquals(1, manager.requests().size)
+        assertTrue(app in store.load()!!.nightClosed)
+
+        // Correct code carries out request immediately
+        assertTrue(manager.applyRequestWithCode(code1, id, now) is Outcome.Done)
+        assertTrue(manager.requests().isEmpty())
+        assertFalse(app in store.load()!!.nightClosed)
+
+        // Reused code is refused
+        assertTrue(manager.applyRequestWithCode(code1, id, now.plusSeconds(2)) is Outcome.Refused)
+
+        // Cannot apply REMOVE_PROTECTION with this method
+        val removeReq = manager.requestRemoval(now)
+        assertTrue(removeReq is Outcome.Done)
+        val removeId = manager.requests().single().id
+        val code2 = Totp.code(secret, counter + 1)
+        val outcome = manager.applyRequestWithCode(code2, removeId, now.plusSeconds(35))
+        assertTrue("remove protection must be refused", outcome is Outcome.Refused)
+        assertEquals(1, manager.requests().size)
+    }
+
+    @Test
+    fun f5_power3_stopClosingAppWithCodeRemovesAppImmediately() {
+        val manager = ChangeManager(context)
+        val secret = manager.newFriendSecret()
+        store.protectionActive = true
+        val (app1, app2) = appsToSuspend().take(2)
+        val now = Instant.now()
+        val counter = Totp.counter(now)
+        val code1 = Totp.code(secret, counter)
+        val wrong = ((code1.toInt() + 1) % 1_000_000).toString().padStart(6, '0')
+
+        assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.ADD, app1, now) is Outcome.Done)
+        assertTrue(manager.editList(AppList.ALWAYS_BLOCKED, ListOp.ADD, app2, now) is Outcome.Done)
+        assertTrue(app1 in store.load()!!.nightClosed)
+        assertTrue(app2 in store.load()!!.alwaysBlocked)
+
+        // Wrong code fails
+        assertTrue(manager.stopClosingWithCode(wrong, AppList.NIGHT_CLOSED, app1, now) is Outcome.Refused)
+        assertTrue(app1 in store.load()!!.nightClosed)
+
+        // Right code removes app1 from night list, changes nothing else
+        assertTrue(manager.stopClosingWithCode(code1, AppList.NIGHT_CLOSED, app1, now) is Outcome.Done)
+        assertFalse(app1 in store.load()!!.nightClosed)
+        assertTrue(app2 in store.load()!!.alwaysBlocked)
+
+        // Reused code fails
+        assertTrue(manager.stopClosingWithCode(code1, AppList.ALWAYS_BLOCKED, app2, now.plusSeconds(2)) is Outcome.Refused)
+        assertTrue(app2 in store.load()!!.alwaysBlocked)
+
+        // Fresh code removes app2 from blocked list
+        val code2 = Totp.code(secret, counter + 1)
+        assertTrue(manager.stopClosingWithCode(code2, AppList.ALWAYS_BLOCKED, app2, now.plusSeconds(35)) is Outcome.Done)
+        assertFalse(app2 in store.load()!!.alwaysBlocked)
+    }
+
+    @Test
+    fun f6_power4_releaseQuarantinedAppWithCodeReleasesImmediately() {
+        val manager = ChangeManager(context)
+        val secret = manager.newFriendSecret()
+        store.protectionActive = true
+        val app = anAppToSuspend()
+        state.noteInstalled(snapshot.installed - app)
+        val now = Instant.now()
+        val counter = Totp.counter(now)
+        val code1 = Totp.code(secret, counter)
+        val wrong = ((code1.toInt() + 1) % 1_000_000).toString().padStart(6, '0')
+
+        PolicyRunner(context).run(config, now)
+        assertTrue(app in state.quarantined)
+
+        // Wrong code fails
+        assertTrue(manager.releaseAppWithCode(wrong, app, now) is Outcome.Refused)
+        assertTrue(app in state.quarantined)
+
+        // Right code releases the app
+        assertTrue(manager.releaseAppWithCode(code1, app, now) is Outcome.Done)
+        assertFalse(app in state.quarantined)
+
+        // Reused code fails
+        assertTrue(manager.releaseAppWithCode(code1, app, now.plusSeconds(2)) is Outcome.Refused)
+    }
+
+    @Test
+    fun f7_power5_approveBrowserWithCodeApprovesImmediately() {
+        val manager = ChangeManager(context)
+        val secret = manager.newFriendSecret()
+        store.protectionActive = true
+        val browser = "com.brave.browser"
+        val now = Instant.now()
+        val counter = Totp.counter(now)
+        val code1 = Totp.code(secret, counter)
+        val wrong = ((code1.toInt() + 1) % 1_000_000).toString().padStart(6, '0')
+
+        assertFalse(browser in state.approvedBrowsers)
+
+        // Wrong code fails
+        assertTrue(manager.approveBrowserWithCode(wrong, browser, now) is Outcome.Refused)
+        assertFalse(browser in state.approvedBrowsers)
+
+        // Right code approves browser, nothing else changed
+        assertTrue(manager.approveBrowserWithCode(code1, browser, now) is Outcome.Done)
+        assertTrue(browser in state.approvedBrowsers)
+
+        // Reused code fails
+        assertTrue(manager.approveBrowserWithCode(code1, browser, now.plusSeconds(2)) is Outcome.Refused)
+    }
+
+    @Test
     fun g1_theSecretIsStoredEncryptedAndComesBackOnlyToThisApp() {
         val secrets = SecretStore(context)
         val secret = ByteArray(20) { (it * 7 + 3).toByte() }
