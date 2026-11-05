@@ -123,11 +123,6 @@ fun WindowScreen(onBack: () -> Unit) {
                     if (open) "Open window is active now" else "Open window is closed",
                     style = MaterialTheme.typography.titleMedium,
                 )
-                Spacer(Modifier.weight(1f))
-                StatusBadge(
-                    kind = if (open) StatusKind.OK else StatusKind.ATTENTION,
-                    label = if (open) "Open" else "Closed",
-                )
             }
             Text(
                 if (open) "The weekly window is open until ${config.windowEnd}."

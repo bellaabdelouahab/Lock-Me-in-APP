@@ -71,7 +71,8 @@ fun RhythmFields(config: LockConfig, onChange: (LockConfig) -> Unit) {
                 ButtonRow {
                     row.forEach { name ->
                         val number = DAYS.indexOf(name) + 1
-                        if (number == config.windowDay) MenuButtonSmall(name) {} else SecondaryButtonSmall(name) { onChange(config.copy(windowDay = number)) }
+                        val shortName = name.take(3)
+                        if (number == config.windowDay) MenuButtonSmall(shortName) {} else SecondaryButtonSmall(shortName) { onChange(config.copy(windowDay = number)) }
                     }
                 }
             }

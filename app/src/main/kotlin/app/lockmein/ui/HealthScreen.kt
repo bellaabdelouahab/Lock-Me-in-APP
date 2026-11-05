@@ -122,13 +122,9 @@ fun HealthScreen(onBack: () -> Unit) {
                         if (failing.size == 1) "1 item needs attention" else "${failing.size} items need attention",
                         style = MaterialTheme.typography.titleMedium,
                     )
-                    Spacer(Modifier.weight(1f))
-                    StatusBadge(StatusKind.ATTENTION, "Attention")
                 } else {
                     Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Palette.Ok, modifier = Modifier.size(22.dp))
-                    Text("All rules verified", style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.weight(1f))
-                    StatusBadge(StatusKind.OK, "OK ($passed/$total)")
+                    Text("All rules verified ($passed/$total)", style = MaterialTheme.typography.titleMedium)
                 }
             }
             Text(
