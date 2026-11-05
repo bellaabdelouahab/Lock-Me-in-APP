@@ -46,6 +46,15 @@ if adb logcat -d | grep -q "FATAL EXCEPTION"; then
   status=1
 fi
 
+# The test build's USB way out: as device owner, one broadcast from the shell must end device ownership.
+adb shell dpm set-device-owner app.lockmein/.AdminReceiver || status=1
+adb shell am broadcast -n app.lockmein/.UsbEscapeReceiver
+sleep 5
+if adb shell dpm list-owners | grep -q app.lockmein; then
+  echo "=== the USB way out did not end device ownership ==="
+  status=1
+fi
+
 # Photograph every screen of the preview build (sample data, nothing applied) so the design can be looked at.
 adb uninstall app.lockmein >/dev/null 2>&1
 ./gradlew :app:installRelease -Ppreview=true --console=plain || exit 1

@@ -42,6 +42,16 @@ fun UpdateCard(onlyIfNewer: Boolean = false) {
         latest = withContext(Dispatchers.IO) { Updater.latest() }
         checked = true
     }
+    // After the download, Android answers in UpdateReceiver. A success restarts the app; a failure is shown here, never swallowed.
+    var waiting by remember { mutableStateOf(false) }
+    LaunchedEffect(waiting) {
+        repeat(90) {
+            if (!waiting) return@LaunchedEffect
+            kotlinx.coroutines.delay(2_000)
+            Updater.lastResult(context)?.let { note = it; progress = null; waiting = false }
+        }
+        if (waiting) { note = "Android has not answered the install. Tap Update now to try again."; progress = null; waiting = false }
+    }
     val newer = Updater.isNewer(latest)
     if (onlyIfNewer && !newer) return
 
@@ -57,13 +67,13 @@ fun UpdateCard(onlyIfNewer: Boolean = false) {
             },
         )
         progress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth(), color = Palette.Bar, trackColor = Palette.Line) }
-        if (newer) MenuButton(progress?.let { "Downloading ${(it * 100).toInt()}%" } ?: "Update now", enabled = progress == null) {
+        if (newer) MenuButton(progress?.let { if (waiting) "Installing..." else "Downloading ${(it * 100).toInt()}%" } ?: "Update now", enabled = progress == null) {
             progress = 0f
             note = null
             scope.launch {
                 val error = withContext(Dispatchers.IO) { Updater.install(context) { progress = it } }
                 note = error ?: "Installing. The app restarts on the new version; protection keeps running."
-                if (error != null) progress = null
+                if (error != null) progress = null else waiting = true
             }
         } else if (!onlyIfNewer) SecondaryButton("Check again", { checks++ }, enabled = checked)
         note?.let { Note(it) }

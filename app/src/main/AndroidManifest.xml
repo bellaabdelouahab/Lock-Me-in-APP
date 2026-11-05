@@ -43,6 +43,12 @@
             android:name=".UpdateReceiver"
             android:exported="false" />
 
+        <!-- Test build only: the USB way out (adb shell am broadcast -n app.lockmein/.UsbEscapeReceiver). Only the shell holds DUMP. -->
+        <receiver
+            android:name=".UsbEscapeReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+
         <receiver
             android:name=".AdminReceiver"
             android:exported="true"

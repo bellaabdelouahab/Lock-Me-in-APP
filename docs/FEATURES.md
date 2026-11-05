@@ -142,7 +142,7 @@ An outside reviewer compared version 0.2.0 with the owner's rules (rule 14, D-20
 4. `adb shell dpm set-device-owner app.lockmein/.AdminReceiver`
 5. Open the app and follow the setup wizard.
 
-The debug build is marked test-only and can be removed over USB (see 6.1). The sealed build blocks that on purpose, so use the test build for a trial of about 3 days. After that, switch to the sealed build by the date you set (the review suggested Saturday 2026-11-07): past that date the test build is a backdoor, because a laptop with adb can remove it.
+The test build can be removed over USB (see 6.1). The sealed build blocks that on purpose, so use the test build for a trial of about 3 days. After that, switch to the sealed build by the date you set (the review suggested Saturday 2026-11-07): past that date the test build is a backdoor, because a laptop with adb can remove it.
 
 ### 5.3 Build it yourself
 `./gradlew :core:test :app:assembleDebug`. The DNS host default is passed with `-PdnsHost=your-id.dns.nextdns.io`. Maven Central rate limits can be bypassed with the `MAVEN_CENTRAL_MIRROR` environment variable.
@@ -150,7 +150,7 @@ The debug build is marked test-only and can be removed over USB (see 6.1). The s
 ## 6. How to stop it
 
 ### 6.1 Test build, over USB
-`adb shell dpm remove-active-admin app.lockmein/.AdminReceiver`, then uninstall. Works only in the debug build.
+`adb shell am broadcast -n app.lockmein/.UsbEscapeReceiver` takes every rule off and ends device ownership, then uninstall. Works only in the test build (the sealed build ignores it, and blocks USB debugging anyway). Builds before 0.4.41 were test-only instead: `adb shell dpm remove-active-admin app.lockmein/.AdminReceiver`.
 
 ### 6.2 Inside the app, any build
 Remove protection (3.9): a 7-day request, then the window and a friend's code.

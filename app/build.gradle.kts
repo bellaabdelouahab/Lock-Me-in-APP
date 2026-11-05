@@ -6,7 +6,8 @@ plugins {
 
 // Three kinds of APK:
 //   -Ppreview=true   installs from the phone's own installer, to look at the screens; cannot start protection.
-//   -PtestOnly=true  the real thing for the first nights: test-only, so it can be removed over USB (adb install -t).
+//   -PtestOnly=true  the real thing for the first nights: removable over USB (adb shell am broadcast -n app.lockmein/.UsbEscapeReceiver).
+//                    Not marked test-only in the manifest: Android lets only a computer install test-only APKs, so the in-app update could not.
 //   neither          the sealed build.
 // Release builds are shrunk (R8), which is what keeps the APK a few MB instead of 24.
 val preview = providers.gradleProperty("preview").orNull == "true"
@@ -52,7 +53,7 @@ android {
             buildConfigField("boolean", "TEST_BUILD", (!preview).toString())
         }
         release {
-            manifestPlaceholders["testOnly"] = testBuild.toString()
+            manifestPlaceholders["testOnly"] = "false"
             buildConfigField("boolean", "PREVIEW", preview.toString())
             buildConfigField("boolean", "TEST_BUILD", testBuild.toString())
             isMinifyEnabled = true

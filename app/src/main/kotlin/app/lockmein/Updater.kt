@@ -39,8 +39,8 @@ object Updater {
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(context.packageName)
-            if (BuildConfig.TEST_BUILD) allowTestPackages(this)
         }
+        saveResult(context, "")
         val id = installer.createSession(params)
         installer.openSession(id).use { session ->
             val connection = open("$BASE/lock-me-in-$kind.apk")
@@ -65,15 +65,6 @@ object Updater {
         null
     }.getOrElse { "The update could not be downloaded: ${it.message ?: "no connection"}" }
 
-    /** The test build is a test-only package, which Android installs only with this (hidden) flag. Without it the install says so. */
-    private fun allowTestPackages(params: PackageInstaller.SessionParams) {
-        runCatching {
-            val field = PackageInstaller.SessionParams::class.java.getDeclaredField("installFlags")
-            field.isAccessible = true
-            field.setInt(params, field.getInt(params) or INSTALL_ALLOW_TEST)
-        }
-    }
-
     private fun open(url: String): HttpURLConnection = (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = 10_000
         readTimeout = 30_000
@@ -81,10 +72,9 @@ object Updater {
         if (responseCode !in 200..299) error("GitHub answered $responseCode")
     }
 
-    fun lastResult(context: Context): String? = context.getSharedPreferences("lock_ui", Context.MODE_PRIVATE).getString(RESULT, null)
+    fun lastResult(context: Context): String? = context.getSharedPreferences("lock_ui", Context.MODE_PRIVATE).getString(RESULT, null)?.ifBlank { null }
     internal fun saveResult(context: Context, text: String) = context.getSharedPreferences("lock_ui", Context.MODE_PRIVATE).edit().putString(RESULT, text).apply()
 
-    private const val INSTALL_ALLOW_TEST = 0x00000004
     private const val RESULT = "update_result"
 }
 
@@ -98,7 +88,7 @@ class UpdateReceiver : BroadcastReceiver() {
                 context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
             PackageInstaller.STATUS_SUCCESS -> Updater.saveResult(context, "Updated.")
-            else -> Updater.saveResult(context, "The update was refused (code $status): ${intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "no reason given"}")
+            else -> Updater.saveResult(context, "The update did not install (code $status): ${intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "no reason given"}. Tap Update now to try again.")
         }
     }
 }
