@@ -113,8 +113,8 @@ class ChangeManager(private val context: Context) {
     fun friendRedoSetup(now: Instant = TrustedClock(context).now()): Outcome =
         applyFriendAction(FriendAction.RedoSetup, now)
 
-    fun approveRequest(id: String, now: Instant = TrustedClock(context).now()): Outcome =
-        approveSundayRequest(id, now)
+    fun approveRequest(id: String, now: Instant = TrustedClock(context).now(), networkTime: Instant? = null): Outcome =
+        approveSundayRequest(id, now, networkTime)
 
     fun dismissRequest(id: String, now: Instant = TrustedClock(context).now()): Outcome =
         dismissSundayRequest(id, now)
@@ -216,7 +216,7 @@ class ChangeManager(private val context: Context) {
     }
 
     /** Approves a waiting request during Sunday settings window review (20:00 to 21:00). */
-    fun approveSundayRequest(id: String, now: Instant = TrustedClock(context).now(), networkTime: Instant? = NetworkClock.now()): Outcome {
+    fun approveSundayRequest(id: String, now: Instant = TrustedClock(context).now(), networkTime: Instant? = null): Outcome {
         val request = state.requests.firstOrNull { it.id == id } ?: return Outcome.Refused("That request is gone.")
         val config = config()
         val decision = gate(config).decideSundayReview(request, now, networkTime)
@@ -237,7 +237,7 @@ class ChangeManager(private val context: Context) {
     }
 
     /** Alias for Sunday review approval. */
-    fun applyRequest(id: String, now: Instant = TrustedClock(context).now(), networkTime: Instant? = NetworkClock.now()): Outcome =
+    fun applyRequest(id: String, now: Instant = TrustedClock(context).now(), networkTime: Instant? = null): Outcome =
         approveSundayRequest(id, now, networkTime)
 
     /** Applies a request and drops it from the queue. */

@@ -3,6 +3,9 @@ package app.lockmein
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import android.os.UserManager
 import android.provider.Settings
 import androidx.test.platform.app.InstrumentationRegistry
@@ -76,6 +79,8 @@ class PolicyApplierTest {
         it !in snapshot.protectedPackages && it != context.packageName && it !in snapshot.browsers && it !in KnownBrowsers.ALL && it != "com.google.android.youtube"
     }.sorted()
 
+    private val packageReceiver = PackageReceiver()
+
     @Before
     fun reset() {
         events.clear()
@@ -85,10 +90,19 @@ class PolicyApplierTest {
         store.redoing = false
         store.setupComplete = true
         store.save(config)
+
+        runCatching { context.unregisterReceiver(packageReceiver) }
+        val filter = IntentFilter(Intent.ACTION_PACKAGE_ADDED).apply { addDataScheme("package") }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(packageReceiver, filter, Context.RECEIVER_EXPORTED)
+        } else {
+            context.registerReceiver(packageReceiver, filter)
+        }
     }
 
     @After
     fun tidy() {
+        runCatching { context.unregisterReceiver(packageReceiver) }
         store.protectionActive = false
         store.setupComplete = false
         state.clear()
