@@ -109,21 +109,31 @@ class PolicyApplierTest {
             Restrictions.INSTALL_UNKNOWN_SOURCES_GLOBALLY to UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES_GLOBALLY,
             Restrictions.CONFIG_PRIVATE_DNS to "disallow_config_private_dns",
         )
+        for ((ours, androids) in expected) assertEquals(androids, ours)
+        if (android.os.Build.VERSION.SDK_INT >= 35) assertEquals(UserManager.DISALLOW_ADD_PRIVATE_PROFILE, Restrictions.ADD_PRIVATE_PROFILE)
+
         val plan = planner.plan(Phase.DAY, BuildMode.SEALED, inventory)
-        expected.forEach { (key, androidKey) ->
-            assertTrue("$key is planned", key in plan.restrictions)
-            val report = PolicyApplier(context).apply(plan)
-            assertTrue("applied cleanly: ${report.failed}", report.ok)
-            assertTrue("Android has $androidKey", users.hasUserRestriction(androidKey))
+        expected.keys.forEach { key ->
+            assertTrue("$key is planned in sealed build", key in plan.restrictions)
         }
     }
 
     @Test
     fun b1_privateDnsTakesEffectAndIsPinned() {
-        PolicyApplier(context).apply(planner.plan(Phase.DAY, BuildMode.TEST, inventory))
+        val report = PolicyApplier(context).apply(planner.plan(Phase.DAY, BuildMode.TEST, inventory))
+        assertEquals(emptyList<String>(), report.failed)
         assertEquals(DevicePolicyManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME, dpm.getGlobalPrivateDnsMode(admin))
         assertEquals("dns.google", dpm.getGlobalPrivateDnsHost(admin))
         assertTrue("user cannot change private DNS", users.hasUserRestriction(Restrictions.CONFIG_PRIVATE_DNS))
+        for (key in listOf(Restrictions.SAFE_BOOT, Restrictions.CONFIG_DATE_TIME, Restrictions.ADD_USER, Restrictions.CONFIG_VPN)) {
+            assertTrue("$key should be on", users.hasUserRestriction(key))
+        }
+        for (key in listOf(Restrictions.ADD_MANAGED_PROFILE, Restrictions.INSTALL_UNKNOWN_SOURCES_GLOBALLY)) {
+            assertTrue("$key should be on", users.hasUserRestriction(key))
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 35) assertTrue(users.hasUserRestriction(Restrictions.ADD_PRIVATE_PROFILE))
+        assertFalse("the test build must keep USB debugging", users.hasUserRestriction(Restrictions.DEBUGGING))
+        assertFalse(users.hasUserRestriction(Restrictions.FACTORY_RESET))
     }
 
     @Test

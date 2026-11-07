@@ -24,12 +24,14 @@ adb push "$test_apk" /data/local/tmp/test-app.apk
 status=$?
 
 if [ "$status" -ne 0 ]; then
+  echo "=== Logcat on failure ==="
+  timeout 20s adb logcat -d | grep -iE "app.lockmein|AndroidRuntime|FATAL|PackageManager|DevicePolicy" | tail -400
   echo "=== Android's private DNS log ==="
-  adb logcat -d | grep -iE "privatedns|PrivateDns|DnsManager|dnsresolver" | tail -40
+  timeout 10s adb logcat -d | grep -iE "privatedns|PrivateDns|DnsManager|dnsresolver" | tail -40
   echo "=== connectivity state ==="
-  adb shell dumpsys connectivity | grep -iE "private dns|validated|dns" | head -30
-  adb shell settings get global private_dns_mode
-  adb shell settings get global private_dns_specifier
+  timeout 10s adb shell dumpsys connectivity | grep -iE "private dns|validated|dns" | head -30
+  timeout 5s adb shell settings get global private_dns_mode
+  timeout 5s adb shell settings get global private_dns_specifier
 fi
 
 # The shipped file is the shrunk release build, which the debug tests above do not cover. Install it as the test build, open it,

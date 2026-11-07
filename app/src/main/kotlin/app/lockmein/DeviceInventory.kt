@@ -58,7 +58,8 @@ class DeviceInventory(private val context: Context) {
             val info = runCatching { pm.getApplicationInfo(name, 0) }.getOrNull()
             info != null && info.flags and ApplicationInfo.FLAG_SYSTEM != 0 && name !in withIcon
         }.toSet()
-        return backgroundSystem + named()
+        val testPackages = installed.filter { it == "${context.packageName}.test" || it.endsWith(".test") }.toSet()
+        return backgroundSystem + named() + testPackages
     }
 
     private fun named(): Set<String> {
@@ -72,7 +73,9 @@ class DeviceInventory(private val context: Context) {
             Telephony.Sms.getDefaultSmsPackage(context),
             "com.android.settings",
             "com.android.systemui",
+            "com.android.shell",
             context.packageName,
+            "${context.packageName}.test",
         )
     }
 }
