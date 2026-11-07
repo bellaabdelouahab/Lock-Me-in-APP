@@ -92,6 +92,7 @@ class ChangeManager(private val context: Context) {
                 state.lastCodeCounter = check.counter
                 state.failedCodeAttempts = 0
                 state.lockoutUntil = null
+                grantUntil = now.plus(GRANT_FOR)
                 Outcome.Done("Code verified.")
             }
         }
@@ -121,6 +122,10 @@ class ChangeManager(private val context: Context) {
 
     /** Applies exactly one action chosen from the bottom sheet after friend's code verification. No second code asked. */
     fun applyFriendAction(action: FriendAction, now: Instant = TrustedClock(context).now()): Outcome {
+        // The accepted code is a one-time pass, checked here and not only by the screen: one action, then it is gone.
+        val pass = grantUntil
+        grantUntil = null
+        if (pass == null || now.isAfter(pass)) return Outcome.Refused("Enter your friend's code first. Each code allows one action.")
         return when (action) {
             is FriendAction.OpenAppForHour -> {
                 state.unblock(action.packageName, now.plus(Duration.ofHours(1)))
@@ -172,6 +177,7 @@ class ChangeManager(private val context: Context) {
 
     /** Called when the user dismisses the bottom sheet without selecting an action, wasting the entered code. */
     fun wasteFriendCode(now: Instant = TrustedClock(context).now()): Outcome {
+        grantUntil = null
         events.add(EventKind.EMERGENCY_REFUSED, "Code wasted without choosing an action", now)
         return Outcome.Refused("This code is now used. Pick one action.")
     }
@@ -460,5 +466,11 @@ class ChangeManager(private val context: Context) {
             if (NetworkClock.now() != null) return true
         }
         return false
+    }
+
+    private companion object {
+        /** Set by an accepted friend's code, used up by the one action. In memory only: if the app dies, the code is spent. */
+        @Volatile var grantUntil: Instant? = null
+        val GRANT_FOR: Duration = Duration.ofMinutes(10)
     }
 }

@@ -340,6 +340,7 @@ class PolicyApplierTest {
         assertTrue("action applied without second code", unblockRes is Outcome.Done)
         assertTrue(app in state.unblocks(mondayNoon).keys)
         assertFalse("app is unsuspended for an hour", dpm.isPackageSuspended(admin, app))
+        assertTrue("one code allows one action only", manager.friendRedoSetup(mondayNoon) is Outcome.Refused)
 
         // Code counter was used up: using the same code again is refused
         val (secondToken, secondRes) = manager.checkHolderCode(code, mondayNoon)
