@@ -23,17 +23,6 @@ class ConfigStore(context: Context) {
 
     fun save(config: LockConfig) = prefs.edit().putString(CONFIG, ConfigCodec.encode(config)).apply()
 
-    /** Migrates config: adds the five packages without dropping existing ones, and ensures windowApps is present. */
-    fun migrate(config: LockConfig): LockConfig {
-        val newBlocked = config.alwaysBlocked + ALWAYS_BLOCKED_DEFAULT
-        val newWindow = if (config.windowApps.isEmpty()) WINDOW_APPS_DEFAULT else config.windowApps
-        return if (newBlocked != config.alwaysBlocked || newWindow != config.windowApps) {
-            config.copy(alwaysBlocked = newBlocked, windowApps = newWindow)
-        } else {
-            config
-        }
-    }
-
     /** True from "Start protection" until the protection is removed. Before that nothing is applied and everything can be changed freely. */
     var protectionActive: Boolean
         get() = prefs.getBoolean(ACTIVE, false)
@@ -56,10 +45,21 @@ class ConfigStore(context: Context) {
         get() = prefs.getBoolean(REDO, false)
         set(value) = prefs.edit().putBoolean(REDO, value).apply()
 
-    private companion object {
-        const val REDO = "redoing"
-        const val COMPLETE = "setup_complete"
-        const val CONFIG = "config_json"
-        const val ACTIVE = "protection_active"
+    companion object {
+        private const val REDO = "redoing"
+        private const val COMPLETE = "setup_complete"
+        private const val CONFIG = "config_json"
+        private const val ACTIVE = "protection_active"
+
+        /** Migrates config: adds the five packages without dropping existing ones, and ensures windowApps is present. */
+        fun migrate(config: LockConfig): LockConfig {
+            val newBlocked = config.alwaysBlocked + ALWAYS_BLOCKED_DEFAULT
+            val newWindow = if (config.windowApps.isEmpty()) WINDOW_APPS_DEFAULT else config.windowApps
+            return if (newBlocked != config.alwaysBlocked || newWindow != config.windowApps) {
+                config.copy(alwaysBlocked = newBlocked, windowApps = newWindow)
+            } else {
+                config
+            }
+        }
     }
 }
