@@ -53,6 +53,7 @@ import app.lockmein.ConfigStore
 import app.lockmein.DeviceInventory
 import app.lockmein.Outcome
 import app.lockmein.Recents
+import app.lockmein.Rules
 import app.lockmein.core.ConfigCodec
 import app.lockmein.core.DnsHost
 import app.lockmein.core.KnownBrowsers

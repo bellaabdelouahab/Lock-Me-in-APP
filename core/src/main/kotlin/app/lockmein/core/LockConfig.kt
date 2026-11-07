@@ -54,6 +54,11 @@ data class LockConfig(
     )
 
     fun fajrConfig() = FajrConfig(latitude, longitude, sunAngleDegrees, fajrOffsetMinutes.toLong())
+
+    companion object {
+        val ALWAYS_BLOCKED_DEFAULT: Set<String> = app.lockmein.core.ALWAYS_BLOCKED_DEFAULT
+        val WINDOW_APPS_DEFAULT: Set<String> = app.lockmein.core.WINDOW_APPS_DEFAULT
+    }
 }
 
 /** Saves and loads [LockConfig] as text, and refuses text that would make a broken lock. */

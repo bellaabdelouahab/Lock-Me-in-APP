@@ -105,24 +105,12 @@ fun RedoSetup() {
         MenuButton("Go through the steps") { navigate(Screen.SETUP) }
         return
     }
-    Note("Go through the steps again to check or change the apps, DNS, browser, hours and place. Your friend's code is kept, so that step is skipped. While the setup is open every change works at once, so opening it waits like any other request, or your friend's code opens it now.")
-    SecondaryButton("Ask to redo (waits, then the weekly window)", {
-        scope.background({ ChangeManager(context).requestRedo() }) { outcome = it }
-    })
-    androidx.compose.material3.OutlinedTextField(
-        value = code,
-        onValueChange = { code = it.filter(Char::isDigit).take(6) },
-        label = { Text("Friend's code") },
-        singleLine = true,
-        shape = CardShape,
-        modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
-    )
-    MenuButton("Redo now with the code", enabled = code.length == 6) {
-        scope.background({ ChangeManager(context).redoWithCode(code) }) {
+    Note("Go through the steps again to check or change the apps, DNS, browser, hours and place. Allowed during the Sunday settings window (20:00 to 21:00) or using a holder code session.")
+    SecondaryButton("Redo setup", {
+        scope.background({ ChangeManager(context).startRedo() }) {
             outcome = it
-            code = ""
             if (it is Outcome.Done) navigate(Screen.SETUP)
         }
-    }
+    })
     OutcomeText(outcome)
 }

@@ -144,11 +144,11 @@ fun WindowScreen(onBack: () -> Unit) {
             Heading("Scheduled removals (${scheduledRemovals.size})")
             scheduledRemovals.forEach { item ->
                 val label = inventory.label(item.packageName)
-                val totalMillis = (item.dueEpochMilli - item.requestedAtEpochMilli).coerceAtLeast(1)
-                val elapsedMillis = (now.toEpochMilli() - item.requestedAtEpochMilli).coerceAtLeast(0)
+                val totalMillis = (item.dueAtMillis - item.scheduledAtMillis).coerceAtLeast(1)
+                val elapsedMillis = (now.toEpochMilli() - item.scheduledAtMillis).coerceAtLeast(0)
                 val progress = (elapsedMillis.toFloat() / totalMillis.toFloat()).coerceIn(0f, 1f)
-                val isDue = now.toEpochMilli() >= item.dueEpochMilli
-                val dueInstant = Instant.ofEpochMilli(item.dueEpochMilli)
+                val isDue = item.isDue(now)
+                val dueInstant = item.dueAt
 
                 AppCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {

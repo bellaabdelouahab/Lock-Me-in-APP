@@ -23,9 +23,8 @@ import app.lockmein.DeviceInventory
 import app.lockmein.LockState
 import app.lockmein.Outcome
 import app.lockmein.core.KnownBrowsers
-import app.lockmein.core.RequestKind
 
-/** The closed browsers. A browser is a new door, so asking for one is a request: it waits, then opens in the weekly window. */
+/** The closed browsers. */
 @Composable
 fun BrowsersScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -40,13 +39,12 @@ fun BrowsersScreen(onBack: () -> Unit) {
     val inventory = remember { DeviceInventory(context) }
     val snapshot = remember(version) { inventory.read() }
     val closed = ((snapshot.browsers + KnownBrowsers.ALL).filter { it in snapshot.installed } - setOfNotNull(config.allowedBrowser) - state.approvedBrowsers).sorted()
-    val waiting = remember(version) { manager.requests().filter { it.kind == RequestKind.BROWSER }.map { it.target }.toSet() }
 
     Page("Browsers", onBack) {
         AppCard {
             Text("Browser policy", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Open: ${config.allowedBrowser?.let(inventory::label) ?: "None"}. Other browsers are closed to prevent filter bypass. Asking for another is a request that waits ${config.loosenWaitDays} days.",
+                "Open: ${config.allowedBrowser?.let(inventory::label) ?: "None"}. Other browsers are closed to prevent filter bypass. Approving another is allowed during the Sunday settings window (20:00 to 21:00) or using a holder code session.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -66,20 +64,18 @@ fun BrowsersScreen(onBack: () -> Unit) {
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
                         Text(inventory.label(pkg), style = MaterialTheme.typography.titleMedium)
                         Text(
-                            if (pkg in waiting) "Requested (waiting for open window)" else "Closed browser",
+                            "Closed browser",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    if (pkg !in waiting) {
-                        TextButton(onClick = {
-                            scope.background({ manager.requestBrowser(pkg) }) {
-                                outcome = it
-                                version++
-                            }
-                        }) {
-                            Text("Request")
+                    TextButton(onClick = {
+                        scope.background({ manager.approveBrowser(pkg) }) {
+                            outcome = it
+                            version++
                         }
+                    }) {
+                        Text("Approve")
                     }
                 }
             }
