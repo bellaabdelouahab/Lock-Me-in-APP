@@ -24,27 +24,29 @@ class PolicyPlannerTest {
         browsers = setOf(brave, chrome, firefox),
         nightClosed = setOf(instagram, music),
         protectedPackages = setOf(phone, launcher, "com.android.systemui", "com.android.settings", "com.android.inputmethod"),
+        alwaysBlocked = emptySet(),
+        windowApps = setOf(youtube),
     )
     private val planner = PolicyPlanner(rules, "abc123.dns.nextdns.io")
     private val installed = setOf(me, brave, chrome, firefox, youtube, music, phone, launcher, audio, instagram, bank, "com.android.mms", "com.android.deskclock", "com.azure.authenticator")
     private val inventory = Inventory(installed)
 
     @Test
-    fun `by day the other browsers and the YouTube app are suspended, social apps and Brave are not`() {
-        val plan = planner.plan(Phase.DAY, BuildMode.SEALED, inventory)
+    fun `by day the other browsers and window apps are suspended, social apps and Brave are not`() {
+        val plan = planner.plan(Phase.DAY, BuildMode.SEALED, inventory, dailyWindowOpen = false)
         assertEquals(setOf(chrome, firefox, youtube), plan.suspended)
         assertTrue(plan.unsuspended.containsAll(setOf(brave, instagram, bank, music, audio)))
     }
 
     @Test
     fun `an approved browser is not suspended`() {
-        val plan = planner.plan(Phase.DAY, BuildMode.SEALED, inventory.copy(approvedBrowsers = setOf(chrome)))
+        val plan = planner.plan(Phase.DAY, BuildMode.SEALED, inventory.copy(approvedBrowsers = setOf(chrome)), dailyWindowOpen = false)
         assertEquals(setOf(firefox, youtube), plan.suspended)
     }
 
     @Test
     fun `at night only the apps picked to close are added, everything else keeps running`() {
-        val plan = planner.plan(Phase.NIGHT, BuildMode.SEALED, inventory)
+        val plan = planner.plan(Phase.NIGHT, BuildMode.SEALED, inventory, dailyWindowOpen = false)
         assertEquals(setOf(chrome, firefox, youtube, music, instagram), plan.suspended)
         assertFalse(plan.suspended.any { it in setOf(brave, bank, audio) || it in rules.protectedPackages || it == me })
     }
@@ -64,16 +66,34 @@ class PolicyPlannerTest {
     }
 
     @Test
-    fun `YouTube is blocked in every phase, the open window included`() {
-        for (phase in Phase.entries) assertTrue(youtube in planner.plan(phase, BuildMode.SEALED, inventory).suspended)
+    fun `planner suspends window apps outside the daily window and not inside`() {
+        // Outside daily window: youtube is suspended
+        val outside = planner.plan(Phase.DAY, BuildMode.SEALED, inventory, dailyWindowOpen = false)
+        assertTrue(youtube in outside.suspended)
+
+        // Inside daily window: youtube is not suspended
+        val inside = planner.plan(Phase.DAY, BuildMode.SEALED, inventory, dailyWindowOpen = true)
+        assertFalse(youtube in inside.suspended)
     }
 
     @Test
-    fun `an app the friend unblocked for an hour is let through, and nothing else`() {
+    fun `YouTube is no longer special and follows the windowApps list`() {
+        // When not in windowApps, YouTube is not suspended
+        val withoutYoutube = PolicyPlanner(rules.copy(windowApps = emptySet()), "abc123.dns.nextdns.io")
+        val plan = withoutYoutube.plan(Phase.DAY, BuildMode.SEALED, inventory, dailyWindowOpen = false)
+        assertFalse(youtube in plan.suspended)
+
+        // When another app is in windowApps, it is suspended outside the window and open inside
+        val customWindow = PolicyPlanner(rules.copy(windowApps = setOf(bank)), "abc123.dns.nextdns.io")
+        assertTrue(bank in customWindow.plan(Phase.DAY, BuildMode.SEALED, inventory, dailyWindowOpen = false).suspended)
+        assertFalse(bank in customWindow.plan(Phase.DAY, BuildMode.SEALED, inventory, dailyWindowOpen = true).suspended)
+    }
+
+    @Test
+    fun `an app the friend unblocked is let through`() {
         val night = planner.plan(Phase.NIGHT, BuildMode.SEALED, inventory.copy(temporarilyAllowed = setOf(instagram)))
         assertFalse(instagram in night.suspended)
         assertTrue(music in night.suspended)
-        assertTrue(youtube in planner.plan(Phase.DAY, BuildMode.SEALED, inventory.copy(temporarilyAllowed = setOf(instagram))).suspended)
     }
 
     @Test

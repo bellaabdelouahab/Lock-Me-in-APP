@@ -43,6 +43,15 @@
             android:name=".UpdateReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".PackageReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
+
         <!-- Test build only: the USB way out (adb shell am broadcast -n app.lockmein/.UsbEscapeReceiver). Only the shell holds DUMP. -->
         <receiver
             android:name=".UsbEscapeReceiver"

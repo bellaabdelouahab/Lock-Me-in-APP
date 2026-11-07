@@ -25,9 +25,9 @@ class LockConfigTest {
     fun `the defaults describe the agreed rhythm`() {
         val schedule = config.scheduleConfig()
         assertEquals(LocalTime.of(22, 0), schedule.nightStart)
-        assertEquals(DayOfWeek.MONDAY, schedule.windowDay)
-        assertEquals(LocalTime.of(9, 0), schedule.windowStart)
-        assertEquals(LocalTime.of(10, 0), schedule.windowEnd)
+        assertEquals(DayOfWeek.SUNDAY, schedule.windowDay)
+        assertEquals(LocalTime.of(20, 0), schedule.windowStart)
+        assertEquals(LocalTime.of(21, 0), schedule.windowEnd)
         assertEquals(19.0, config.fajrConfig().sunAngleDegrees)
     }
 

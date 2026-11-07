@@ -7,7 +7,7 @@ enum class ChangeKind {
     /** Makes the phone more closed. Always allowed. */
     TIGHTEN,
 
-    /** Opens something up: an app, a site, a lock, a setting. It is a request that waits, then applies in the open window. */
+    /** Opens something up: an app, a site, a lock, a setting. Allowed in the settings window or during a code session. */
     LOOSEN,
 }
 
@@ -17,11 +17,10 @@ sealed interface Decision {
 }
 
 /**
- * The one place that says whether a change may happen now.
+ * Says whether a change may happen now.
  *
- * Tightening is instant. Loosening is never instant: it is a [ChangeRequest] that waits [wait] (seven days by default) and then
- * applies only inside the open window, with a phone clock the network agrees with. There is no other way in: the friend's emergency
- * code unblocks one app for an hour (see [Emergency]) but changes no setting.
+ * Tightening is instant. Loosening (removing an app, changing settings) is only allowed in the weekly settings window
+ * or during a 15-minute holder-code session.
  */
 class ChangeGate(
     private val schedule: Schedule,
@@ -30,8 +29,12 @@ class ChangeGate(
 ) {
     fun decide(kind: ChangeKind): Decision = when (kind) {
         ChangeKind.TIGHTEN -> Decision.Allowed("tightening is always allowed")
-        ChangeKind.LOOSEN -> Decision.Denied("opening something up is a request: it waits ${wait.toDays()} days, then applies in the open window")
+        ChangeKind.LOOSEN -> Decision.Denied("opening something up is only allowed in the settings window or during a code session")
     }
+
+    fun canLoosen(inSettingsWindow: Boolean, inSession: Boolean): Decision =
+        if (inSettingsWindow || inSession) Decision.Allowed("in settings window or session")
+        else Decision.Denied("changes are only allowed in the Sunday settings window or during a holder code session")
 
     fun readyAt(request: ChangeRequest): Instant = request.requestedAt.plus(wait)
 

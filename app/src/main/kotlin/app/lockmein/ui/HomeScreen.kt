@@ -57,6 +57,7 @@ import app.lockmein.Release
 import app.lockmein.Rules
 import app.lockmein.Updater
 import app.lockmein.core.AstronomicalFajr
+import app.lockmein.core.CountdownFormatter
 import app.lockmein.core.LockConfig
 import app.lockmein.core.Phase
 import java.time.Duration
@@ -214,23 +215,24 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
 
     // Top Status Card: "Am I protected right now?"
     val nightEnd = fajr.fajr(local.toLocalDate())
-    val (phaseName, statusKind, sentence, phaseIcon) = when (phase) {
+    val countdown = remember(config, now) { CountdownFormatter.compute(schedule, config, now, zone) }
+    val (phaseName, statusKind, _, phaseIcon) = when (phase) {
         Phase.NIGHT -> Quad(
             "Night",
             StatusKind.OK,
-            "Night until ${CLOCK.format(nightEnd)}. ${config.nightClosed.size} apps closed.",
+            "",
             Icons.Filled.NightsStay,
         )
         Phase.OPEN_WINDOW -> Quad(
-            "Open window",
+            "Settings window",
             StatusKind.ATTENTION,
-            "Open window until ${config.windowEnd}. Requests that waited 7 days can be carried out now.",
+            "",
             Icons.Filled.EventAvailable,
         )
         Phase.DAY -> Quad(
             "Day",
             StatusKind.OK,
-            "Day until ${config.nightStart}. Night apps will close at night.",
+            "",
             Icons.Filled.WbSunny,
         )
     }
@@ -258,27 +260,38 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
         }
 
         Text(
-            sentence,
-            style = MaterialTheme.typography.bodyLarge,
+            countdown.bigText,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
         )
 
-        if (unblocks.isNotEmpty()) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            unblocks.forEach { (pkg, until) ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    AppIcon(pkg, size = 24.dp)
-                    Text(
-                        "${inventory.label(pkg)} is open until ${CLOCK.format(until.atZone(zone))}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Palette.Attention,
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-            }
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                countdown.settingsWindowLine,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                countdown.uninstallWindowLine,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                countdown.appsCountLine,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        if (state.inSession(now)) {
+            val sessionRem = Duration.between(now, state.sessionUntil!!)
+            Text(
+                "Change session active (${CountdownFormatter.formatDurationHM(sessionRem)} left)",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Palette.Attention,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -376,14 +389,14 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
         }
     }
 
-    // Shortcut 3: Emergency: use friend's code
+    // Shortcut 3: Holder code
     AppCard(onClick = { navigate(Screen.EMERGENCY) }) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             IconCircle(Icons.Filled.Key, Palette.ClosedContainer, tint = Palette.Closed)
             Column(Modifier.weight(1f)) {
-                Text("Emergency: use friend's code", style = MaterialTheme.typography.titleMedium)
+                Text("Holder code: change session", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Open an app for an hour or carry out an emergency action",
+                    "Ask Mom or your brother for today's code",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -75,6 +75,7 @@ fun WindowScreen(onBack: () -> Unit) {
     val zone = ZoneId.systemDefault()
     val open = schedule.phaseAt(now) == Phase.OPEN_WINDOW
     val waiting = remember(version) { manager.requests() }
+    val scheduledRemovals = remember(version) { state.scheduledRemovals }
     val held = remember(version) { state.quarantined.sorted() }
 
     fun describe(request: ChangeRequest): Pair<String, String?> = when (request.kind) {
@@ -103,7 +104,7 @@ fun WindowScreen(onBack: () -> Unit) {
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                 ) {
                     SecondaryButton(
-                        label = "Emergency: use friend's code",
+                        label = "Holder code: change session",
                         onClick = { navigate(Screen.EMERGENCY) },
                     )
                 }
@@ -138,6 +139,61 @@ fun WindowScreen(onBack: () -> Unit) {
         }
 
         OutcomeText(outcome)
+
+        if (scheduledRemovals.isNotEmpty()) {
+            Heading("Scheduled removals (${scheduledRemovals.size})")
+            scheduledRemovals.forEach { item ->
+                val label = inventory.label(item.packageName)
+                val totalMillis = (item.dueEpochMilli - item.requestedAtEpochMilli).coerceAtLeast(1)
+                val elapsedMillis = (now.toEpochMilli() - item.requestedAtEpochMilli).coerceAtLeast(0)
+                val progress = (elapsedMillis.toFloat() / totalMillis.toFloat()).coerceIn(0f, 1f)
+                val isDue = now.toEpochMilli() >= item.dueEpochMilli
+                val dueInstant = Instant.ofEpochMilli(item.dueEpochMilli)
+
+                AppCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Unblock from ${item.list.name.lowercase().replace('_', ' ')}", style = MaterialTheme.typography.titleMedium)
+                            Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        }
+                        StatusBadge(
+                            kind = if (isDue) StatusKind.OK else StatusKind.ATTENTION,
+                            label = if (isDue) "Due" else "Waiting 7 days",
+                        )
+                    }
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp),
+                        color = if (isDue) Palette.Ok else MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    )
+                    Text(
+                        if (isDue) "Will be removed automatically on next check."
+                        else "Will unblock on ${TIME.format(dueInstant.atZone(zone))}.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(
+                            onClick = {
+                                scope.background({ manager.cancelScheduledRemoval(item.id) }) {
+                                    outcome = it
+                                    version++
+                                }
+                            },
+                        ) {
+                            Text("Cancel", color = Palette.Closed)
+                        }
+                    }
+                }
+            }
+        }
 
         Heading("Waiting requests (${waiting.size})")
         if (waiting.isEmpty()) {

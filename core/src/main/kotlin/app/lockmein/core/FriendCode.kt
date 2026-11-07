@@ -2,6 +2,7 @@ package app.lockmein.core
 
 import java.net.URLEncoder
 import java.security.SecureRandom
+import java.time.Duration
 import java.time.Instant
 
 /** The friend's code: a secret made once, kept out of the owner's reach, and shared with the friend as an authenticator entry. */
@@ -22,14 +23,40 @@ sealed interface CodeCheck {
     data class Accepted(val counter: Long) : CodeCheck
     data object Wrong : CodeCheck
     data object AlreadyUsed : CodeCheck
+    data class LockedOut(val until: Instant) : CodeCheck
 }
 
-/** Checks a typed code and never accepts the same one twice. */
+/** Checks a typed code and never accepts the same one twice, with 5 wrong attempts causing a 30-minute lockout. */
 class CodeChecker(private val secret: ByteArray) {
-    fun check(entered: String, now: Instant, lastUsedCounter: Long?): CodeCheck {
-        val counter = Totp.matchingCounter(secret, entered, now) ?: return CodeCheck.Wrong
-        if (lastUsedCounter != null && counter <= lastUsedCounter) return CodeCheck.AlreadyUsed
+    fun check(
+        entered: String,
+        now: Instant,
+        lastUsedCounter: Long?,
+        failedAttempts: Int = 0,
+        lockoutUntil: Instant? = null,
+    ): CodeCheck {
+        if (lockoutUntil != null && now < lockoutUntil) {
+            return CodeCheck.LockedOut(lockoutUntil)
+        }
+        val counter = Totp.matchingCounter(secret, entered, now)
+        if (counter == null) {
+            val nextFailed = failedAttempts + 1
+            return if (nextFailed >= MAX_FAILED_ATTEMPTS) {
+                CodeCheck.LockedOut(now.plus(LOCKOUT_DURATION))
+            } else {
+                CodeCheck.Wrong
+            }
+        }
+        if (lastUsedCounter != null && counter <= lastUsedCounter) {
+            return CodeCheck.AlreadyUsed
+        }
         return CodeCheck.Accepted(counter)
+    }
+
+    companion object {
+        const val MAX_FAILED_ATTEMPTS = 5
+        val LOCKOUT_DURATION: Duration = Duration.ofMinutes(30)
+        val SESSION_DURATION: Duration = Duration.ofMinutes(15)
     }
 }
 
@@ -39,6 +66,7 @@ object Removal {
         gate is Decision.Denied -> gate
         code is CodeCheck.Wrong -> Decision.Denied("the friend's code is wrong")
         code is CodeCheck.AlreadyUsed -> Decision.Denied("that code was already used; wait for the next one")
+        code is CodeCheck.LockedOut -> Decision.Denied("too many wrong codes: locked out until ${code.until}")
         else -> Decision.Allowed("window and friend's code")
     }
 }

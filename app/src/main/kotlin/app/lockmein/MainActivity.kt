@@ -118,7 +118,7 @@ private fun LockApp(requested: String?) {
                 "WINDOW", "REQUESTS" -> Screen.WINDOW
                 "LISTS", "APPS" -> Screen.LISTS
                 "BROWSERS" -> Screen.BROWSERS
-                "EMERGENCY", "FRIEND_CODE" -> Screen.EMERGENCY
+                "EMERGENCY", "FRIEND_CODE", "HOLDER_CODE", "CODE" -> Screen.EMERGENCY
                 "REPORT" -> Screen.REPORT
                 "SETTINGS" -> Screen.SETTINGS
                 "REMOVE" -> Screen.REMOVE
@@ -148,7 +148,7 @@ private fun LockApp(requested: String?) {
         DrawerItem("Home", Screen.HOME, Icons.Filled.Home),
         DrawerItem("Apps", Screen.LISTS, Icons.Filled.Apps),
         DrawerItem("Requests", Screen.WINDOW, Icons.Filled.EventAvailable),
-        DrawerItem("Friend's code", Screen.EMERGENCY, Icons.Filled.Key),
+        DrawerItem("Holder code", Screen.EMERGENCY, Icons.Filled.Key),
         DrawerItem("Is it working?", Screen.HEALTH, Icons.Filled.CheckCircle),
         DrawerItem("Settings", Screen.SETTINGS, Icons.Filled.Settings),
     )

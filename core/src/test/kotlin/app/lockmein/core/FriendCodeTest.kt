@@ -1,5 +1,6 @@
 package app.lockmein.core
 
+import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -50,6 +51,37 @@ class FriendCodeTest {
     }
 
     @Test
+    fun `5 wrong codes triggers 30 min lockout and expires after 30 min`() {
+        val wrong = ((goodCode.toInt() + 1) % 1_000_000).toString().padStart(6, '0')
+
+        // First 4 wrong codes return CodeCheck.Wrong
+        for (i in 0..3) {
+            val res = checker.check(wrong, now, null, failedAttempts = i)
+            assertEquals(CodeCheck.Wrong, res)
+        }
+
+        // 5th wrong code triggers lockout for 30 minutes
+        val lockedOut = checker.check(wrong, now, null, failedAttempts = 4)
+        val lockedResult = assertIs<CodeCheck.LockedOut>(lockedOut)
+        assertEquals(now.plus(Duration.ofMinutes(30)), lockedResult.until)
+
+        // Attempt during lockout (at 10 minutes) is refused as LockedOut
+        val duringLockout = checker.check(goodCode, now.plus(Duration.ofMinutes(10)), null, failedAttempts = 5, lockoutUntil = lockedResult.until)
+        assertIs<CodeCheck.LockedOut>(duringLockout)
+
+        // After 30 minutes, lockout has expired and correct code is accepted
+        val afterLockout = now.plus(Duration.ofMinutes(31))
+        val goodAfterExpiry = Totp.code(secret, Totp.counter(afterLockout))
+        val accepted = checker.check(goodAfterExpiry, afterLockout, null, failedAttempts = 5, lockoutUntil = lockedResult.until)
+        assertIs<CodeCheck.Accepted>(accepted)
+    }
+
+    @Test
+    fun `session duration is 15 minutes`() {
+        assertEquals(Duration.ofMinutes(15), CodeChecker.SESSION_DURATION)
+    }
+
+    @Test
     fun `removing the protection needs the window and the friend's code together`() {
         val open = Decision.Allowed("open window")
         val closed = Decision.Denied("changes apply in the open window")
@@ -57,6 +89,7 @@ class FriendCodeTest {
         assertIs<Decision.Denied>(Removal.decide(closed, CodeCheck.Accepted(5)))
         assertIs<Decision.Denied>(Removal.decide(open, CodeCheck.Wrong))
         assertIs<Decision.Denied>(Removal.decide(open, CodeCheck.AlreadyUsed))
+        assertIs<Decision.Denied>(Removal.decide(open, CodeCheck.LockedOut(now.plusSeconds(1800))))
         assertEquals(closed, Removal.decide(closed, CodeCheck.Wrong))
     }
 }

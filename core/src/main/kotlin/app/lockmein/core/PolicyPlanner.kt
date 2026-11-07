@@ -24,14 +24,14 @@ data class AppRules(
     val allowedBrowser: String?,
     /** Every browser installed; all but [allowedBrowser] are suspended unless approved. */
     val browsers: Set<String>,
-    /** YouTube is blocked in every phase, the open window included. The window is for changing rules, not for using apps. */
-    val youtubeApp: String = "com.google.android.youtube",
     /** The apps the owner picked to close at night. Everything else keeps running. */
     val nightClosed: Set<String>,
     /** Launcher, keyboard, SystemUI, Settings, dialer: never suspended, in any phase. */
     val protectedPackages: Set<String>,
     /** Apps the owner blocked for good: suspended in every phase, the open window included. */
     val alwaysBlocked: Set<String> = emptySet(),
+    /** Apps suspended except during the daily open window (20:00 to 21:30). */
+    val windowApps: Set<String> = WINDOW_APPS_DEFAULT,
 )
 
 data class Inventory(
@@ -40,7 +40,7 @@ data class Inventory(
     val approvedBrowsers: Set<String> = emptySet(),
     /** New apps that arrived since the last open window, suspended until reviewed. */
     val quarantined: Set<String> = emptySet(),
-    /** Apps the friend's code unblocked for an hour. Only these, only until their time ends. */
+    /** Temporary unblocks. */
     val temporarilyAllowed: Set<String> = emptySet(),
 )
 
@@ -57,8 +57,13 @@ data class PolicyPlan(
 
 /** Turns the phase, the build mode and what is installed into the exact policy to apply. Pure, so it is tested here. */
 class PolicyPlanner(private val rules: AppRules, private val privateDnsHost: String) {
-    fun plan(phase: Phase, mode: BuildMode, inventory: Inventory): PolicyPlan {
-        val suspended = suspendedFor(phase, inventory)
+    fun plan(
+        phase: Phase,
+        mode: BuildMode,
+        inventory: Inventory,
+        dailyWindowOpen: Boolean = false,
+    ): PolicyPlan {
+        val suspended = suspendedFor(phase, inventory, dailyWindowOpen)
         val managed = inventory.installed - rules.protectedPackages - rules.appPackage
         return PolicyPlan(
             restrictions = restrictionsFor(mode),
@@ -86,13 +91,13 @@ class PolicyPlanner(private val rules: AppRules, private val privateDnsHost: Str
         return if (mode == BuildMode.SEALED) always + Restrictions.DEBUGGING + Restrictions.FACTORY_RESET else always
     }
 
-    private fun suspendedFor(phase: Phase, inventory: Inventory): Set<String> {
+    private fun suspendedFor(phase: Phase, inventory: Inventory, dailyWindowOpen: Boolean): Set<String> {
         val managed = inventory.installed - rules.protectedPackages - rules.appPackage
         val otherBrowsers = ((rules.browsers + KnownBrowsers.ALL) - setOfNotNull(rules.allowedBrowser) - inventory.approvedBrowsers).intersect(managed)
         val quarantined = inventory.quarantined.intersect(managed)
-        val youtube = setOf(rules.youtubeApp).intersect(managed)
+        val window = if (!dailyWindowOpen) rules.windowApps.intersect(managed) else emptySet()
         val nightOnly = if (phase == Phase.NIGHT) rules.nightClosed.intersect(managed) else emptySet()
         val blocked = rules.alwaysBlocked.intersect(managed)
-        return (otherBrowsers + quarantined + youtube + nightOnly + blocked) - inventory.temporarilyAllowed
+        return (otherBrowsers + quarantined + window + nightOnly + blocked) - inventory.temporarilyAllowed
     }
 }

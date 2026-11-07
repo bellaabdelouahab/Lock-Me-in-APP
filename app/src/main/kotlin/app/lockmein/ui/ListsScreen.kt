@@ -12,14 +12,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -49,11 +42,20 @@ import app.lockmein.DeviceInventory
 import app.lockmein.LockState
 import app.lockmein.Outcome
 import app.lockmein.PolicyRunner
+import app.lockmein.Rules
+import app.lockmein.TrustedClock
 import app.lockmein.core.AppList
 import app.lockmein.core.ListOp
 import app.lockmein.core.LockConfig
+import app.lockmein.core.ScheduledRemoval
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+private val DATE_FORMAT = DateTimeFormatter.ofPattern("EEE d MMM")
 
 private data class Closed(val packageName: String, val why: String, val closedNow: Boolean, val held: Boolean)
 
@@ -64,17 +66,24 @@ fun ListsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val manager = remember { ChangeManager(context) }
     val store = remember { ConfigStore(context) }
+    val state = remember { LockState(context) }
     val inventory = remember { DeviceInventory(context) }
     val scope = rememberCoroutineScope()
+    val zone = ZoneId.systemDefault()
     var version by remember { mutableIntStateOf(0) }
     var outcome by remember { mutableStateOf<Outcome?>(null) }
     var pickingForList by remember { mutableStateOf<AppList?>(null) }
-    var selectedTab by remember { mutableIntStateOf(0) }
+    val initialTab = remember {
+        (context as? android.app.Activity)?.intent?.getIntExtra("tab", 0) ?: 0
+    }
+    var selectedTab by remember { mutableIntStateOf(initialTab.coerceIn(0, 3)) }
     var searchQuery by remember { mutableStateOf("") }
     var pendingRemoval by remember { mutableStateOf<PendingRemoval?>(null) }
 
     val config = remember(version) { store.load() } ?: return Page("Apps", onBack) { Note("Finish the setup first.") }
     val isSetupComplete = remember(version) { store.setupComplete }
+    val scheduledRemovals = remember(version) { state.scheduledRemovals }
+    val now = TrustedClock(context).now()
 
     fun change(list: AppList, op: ListOp, pkg: String) {
         scope.background({ manager.editList(list, op, pkg) }) {
@@ -84,12 +93,13 @@ fun ListsScreen(onBack: () -> Unit) {
     }
 
     val closed by produceState<List<Closed>?>(null, version) {
-        value = withContext(Dispatchers.IO) { closedNow(context, config) }
+        value = withContext(Dispatchers.IO) { closedNow(context, config, now) }
     }
 
     val tabs = listOf(
         "At night (${config.nightClosed.size})",
-        "Always (${config.alwaysBlocked.size})",
+        "Always blocked (${config.alwaysBlocked.size})",
+        "Window apps (${config.windowApps.size})",
         "Now (${closed?.size ?: 0})",
     )
 
@@ -97,7 +107,7 @@ fun ListsScreen(onBack: () -> Unit) {
         title = "Apps",
         onBack = onBack,
         bottomBar = {
-            if (selectedTab < 2) {
+            if (selectedTab < 3) {
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -109,9 +119,17 @@ fun ListsScreen(onBack: () -> Unit) {
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                     ) {
                         PrimaryButton(
-                            label = if (selectedTab == 0) "+ Add night apps" else "+ Add blocked apps",
+                            label = when (selectedTab) {
+                                0 -> "+ Add night apps"
+                                1 -> "+ Add blocked apps"
+                                else -> "+ Add window apps"
+                            },
                             onClick = {
-                                pickingForList = if (selectedTab == 0) AppList.NIGHT_CLOSED else AppList.ALWAYS_BLOCKED
+                                pickingForList = when (selectedTab) {
+                                    0 -> AppList.NIGHT_CLOSED
+                                    1 -> AppList.ALWAYS_BLOCKED
+                                    else -> AppList.WINDOW_APPS
+                                }
                             },
                         )
                     }
@@ -159,89 +177,85 @@ fun ListsScreen(onBack: () -> Unit) {
                     if (!isSetupComplete) "Setup is not complete yet: changes apply at once. When complete, removing an app waits 7 days."
                     else "From your night start until fajr these apps are closed. Every other app keeps working.",
                 )
-                val filtered = config.nightClosed
-                    .filter { pkg ->
-                        val label = inventory.label(pkg)
-                        searchQuery.isBlank() || label.contains(searchQuery, ignoreCase = true) || pkg.contains(searchQuery, ignoreCase = true)
-                    }
-                    .sortedBy { inventory.label(it).lowercase() }
-
-                if (filtered.isEmpty()) {
-                    AppCard {
-                        Text(
-                            if (searchQuery.isNotBlank()) "No apps match your filter."
-                            else "No apps closed at night. Use the button below to add apps.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                } else {
-                    AppCard {
-                        filtered.forEachIndexed { index, pkg ->
-                            val label = inventory.label(pkg)
-                            AppRow(
-                                packageName = pkg,
-                                title = label,
-                                subtitle = if (isSetupComplete) "Closed at night (removing waits 7 days)" else "Closed at night (works now)",
-                            ) {
-                                TextButton(onClick = {
-                                    pendingRemoval = PendingRemoval(AppList.NIGHT_CLOSED, pkg, label)
-                                }) {
-                                    Text("Remove", color = Palette.Closed)
-                                }
-                            }
-                            if (index < filtered.lastIndex) {
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                            }
+                renderAppList(
+                    apps = config.nightClosed,
+                    listType = AppList.NIGHT_CLOSED,
+                    searchQuery = searchQuery,
+                    inventory = inventory,
+                    scheduledRemovals = scheduledRemovals,
+                    isSetupComplete = isSetupComplete,
+                    onCancelRemoval = { id ->
+                        scope.background({ manager.cancelScheduledRemoval(id) }) {
+                            outcome = it
+                            version++
                         }
-                    }
-                }
+                    },
+                    onRequestRemove = { pkg, label ->
+                        if (isSetupComplete && !manager.canChange()) {
+                            outcome = Outcome.Refused("Removing an app is only allowed in the weekly settings window or during a code session.")
+                        } else {
+                            pendingRemoval = PendingRemoval(AppList.NIGHT_CLOSED, pkg, label)
+                        }
+                    },
+                )
             }
             1 -> {
                 // Always blocked
                 Note(
                     if (!isSetupComplete) "Blocking works at once. Setup is not complete yet, so unblocking also works at once."
-                    else "These apps stay closed in every phase. Adding is instant. Unblocking is a request that waits 7 days.",
+                    else "These apps stay closed in every phase. Adding is instant. Unblocking takes effect 7 days later.",
                 )
-                val filtered = config.alwaysBlocked
-                    .filter { pkg ->
-                        val label = inventory.label(pkg)
-                        searchQuery.isBlank() || label.contains(searchQuery, ignoreCase = true) || pkg.contains(searchQuery, ignoreCase = true)
-                    }
-                    .sortedBy { inventory.label(it).lowercase() }
-
-                if (filtered.isEmpty()) {
-                    AppCard {
-                        Text(
-                            if (searchQuery.isNotBlank()) "No apps match your filter."
-                            else "No apps blocked all the time. Use the button below to add apps.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                } else {
-                    AppCard {
-                        filtered.forEachIndexed { index, pkg ->
-                            val label = inventory.label(pkg)
-                            AppRow(
-                                packageName = pkg,
-                                title = label,
-                                subtitle = if (isSetupComplete) "Always blocked (unblocking waits 7 days)" else "Always blocked (works now)",
-                            ) {
-                                TextButton(onClick = {
-                                    pendingRemoval = PendingRemoval(AppList.ALWAYS_BLOCKED, pkg, label)
-                                }) {
-                                    Text("Remove", color = Palette.Closed)
-                                }
-                            }
-                            if (index < filtered.lastIndex) {
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                            }
+                renderAppList(
+                    apps = config.alwaysBlocked,
+                    listType = AppList.ALWAYS_BLOCKED,
+                    searchQuery = searchQuery,
+                    inventory = inventory,
+                    scheduledRemovals = scheduledRemovals,
+                    isSetupComplete = isSetupComplete,
+                    onCancelRemoval = { id ->
+                        scope.background({ manager.cancelScheduledRemoval(id) }) {
+                            outcome = it
+                            version++
                         }
-                    }
-                }
+                    },
+                    onRequestRemove = { pkg, label ->
+                        if (isSetupComplete && !manager.canChange()) {
+                            outcome = Outcome.Refused("Removing an app is only allowed in the weekly settings window or during a code session.")
+                        } else {
+                            pendingRemoval = PendingRemoval(AppList.ALWAYS_BLOCKED, pkg, label)
+                        }
+                    },
+                )
             }
             2 -> {
+                // Window apps
+                Note(
+                    if (!isSetupComplete) "Setup is not complete yet: changes apply at once."
+                    else "These apps open only during the daily window (20:00 to 21:30) and are suspended the rest of the day. Adding is instant. Removing takes effect 7 days later.",
+                )
+                renderAppList(
+                    apps = config.windowApps,
+                    listType = AppList.WINDOW_APPS,
+                    searchQuery = searchQuery,
+                    inventory = inventory,
+                    scheduledRemovals = scheduledRemovals,
+                    isSetupComplete = isSetupComplete,
+                    onCancelRemoval = { id ->
+                        scope.background({ manager.cancelScheduledRemoval(id) }) {
+                            outcome = it
+                            version++
+                        }
+                    },
+                    onRequestRemove = { pkg, label ->
+                        if (isSetupComplete && !manager.canChange()) {
+                            outcome = Outcome.Refused("Removing an app is only allowed in the weekly settings window or during a code session.")
+                        } else {
+                            pendingRemoval = PendingRemoval(AppList.WINDOW_APPS, pkg, label)
+                        }
+                    },
+                )
+            }
+            3 -> {
                 // Closed right now
                 Note("Read directly from Android. This list reflects apps currently suspended on the device.")
                 val list = closed
@@ -301,15 +315,16 @@ fun ListsScreen(onBack: () -> Unit) {
 
     // Confirmation dialog before removing an app
     pendingRemoval?.let { removal ->
+        val unblockDate = DATE_FORMAT.format(now.plus(Duration.ofDays(7)).atZone(zone))
         val consequences = if (!isSetupComplete) {
             "Works now: removing ${removal.label} will take effect immediately because the setup is not finished yet."
         } else {
-            "Waits 7 days: removing ${removal.label} opens the phone up, so it becomes a request that waits 7 days, then applies in the weekly open window."
+            "Takes effect in 7 days: removing ${removal.label} becomes a scheduled removal that unblocks automatically on $unblockDate. You can cancel it any time."
         }
         ConfirmDialog(
             title = "Remove ${removal.label}?",
             text = consequences,
-            confirmLabel = "Remove",
+            confirmLabel = if (isSetupComplete) "Schedule removal" else "Remove",
             isDestructive = true,
             onDismiss = { pendingRemoval = null },
             onConfirm = {
@@ -323,7 +338,11 @@ fun ListsScreen(onBack: () -> Unit) {
 
     // Add apps picker
     pickingForList?.let { list ->
-        val taken = if (list == AppList.NIGHT_CLOSED) config.nightClosed else config.alwaysBlocked
+        val taken = when (list) {
+            AppList.NIGHT_CLOSED -> config.nightClosed
+            AppList.ALWAYS_BLOCKED -> config.alwaysBlocked
+            AppList.WINDOW_APPS -> config.windowApps
+        }
         val choices = remember(list, version) {
             inventory.launchableApps().filter { it.packageName !in taken && it.packageName != context.packageName }
         }
@@ -340,16 +359,80 @@ fun ListsScreen(onBack: () -> Unit) {
     }
 }
 
-private fun closedNow(context: android.content.Context, config: LockConfig): List<Closed> {
-    val plan = PolicyRunner(context).planFor(config)
+@Composable
+private fun renderAppList(
+    apps: Set<String>,
+    listType: AppList,
+    searchQuery: String,
+    inventory: DeviceInventory,
+    scheduledRemovals: List<ScheduledRemoval>,
+    isSetupComplete: Boolean,
+    onCancelRemoval: (String) -> Unit,
+    onRequestRemove: (String, String) -> Unit,
+) {
+    val zone = ZoneId.systemDefault()
+    val filtered = apps
+        .filter { pkg ->
+            val label = inventory.label(pkg)
+            searchQuery.isBlank() || label.contains(searchQuery, ignoreCase = true) || pkg.contains(searchQuery, ignoreCase = true)
+        }
+        .sortedBy { inventory.label(it).lowercase() }
+
+    if (filtered.isEmpty()) {
+        AppCard {
+            Text(
+                if (searchQuery.isNotBlank()) "No apps match your filter."
+                else "No apps listed here. Use the button below to add apps.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    } else {
+        AppCard {
+            filtered.forEachIndexed { index, pkg ->
+                val label = inventory.label(pkg)
+                val scheduled = scheduledRemovals.firstOrNull { it.list == listType && it.packageName == pkg }
+                val subtitle = when {
+                    scheduled != null -> "Will unblock on ${DATE_FORMAT.format(scheduled.dueAt.atZone(zone))}"
+                    listType == AppList.WINDOW_APPS -> "Open only 20:00 to 21:30"
+                    listType == AppList.NIGHT_CLOSED -> "Closed at night"
+                    else -> "Always blocked"
+                }
+
+                AppRow(
+                    packageName = pkg,
+                    title = label,
+                    subtitle = subtitle,
+                    statusColor = if (scheduled != null) Palette.Attention else null,
+                ) {
+                    if (scheduled != null) {
+                        TextButton(onClick = { onCancelRemoval(scheduled.id) }) {
+                            Text("Cancel", color = Palette.Attention)
+                        }
+                    } else {
+                        TextButton(onClick = { onRequestRemove(pkg, label) }) {
+                            Text("Remove", color = Palette.Closed)
+                        }
+                    }
+                }
+                if (index < filtered.lastIndex) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                }
+            }
+        }
+    }
+}
+
+private fun closedNow(context: android.content.Context, config: LockConfig, now: Instant): List<Closed> {
+    val plan = PolicyRunner(context).planFor(config, now)
     val held = LockState(context).quarantined
     val pm = context.packageManager
     val browser = config.allowedBrowser?.let { DeviceInventory(context).label(it) }
     return plan.suspended.map { pkg ->
         val why = when {
             pkg in config.alwaysBlocked -> "Blocked all the time."
+            pkg in config.windowApps -> "Window app: opens 20:00 to 21:30."
             pkg in held -> "New app: held back until reviewed in Requests."
-            pkg == "com.google.android.youtube" -> "YouTube is closed all the time."
             pkg in config.nightClosed -> "Closed at night, until fajr."
             else -> if (browser == null) "A browser: none stays open." else "A browser: only $browser stays open."
         }

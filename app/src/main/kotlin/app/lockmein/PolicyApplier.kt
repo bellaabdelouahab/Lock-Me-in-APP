@@ -48,6 +48,8 @@ class PolicyApplier(context: Context) {
         dpm.setAutoTimeEnabled(admin, true)
         dpm.setAutoTimeZoneEnabled(admin, true)
 
+        dpm.setShortSupportMessage(admin, "Blocked by Lock Me In. Laptop only, 20:00 to 21:30.")
+
         dpm.setApplicationRestrictions(admin, ChromePolicy.PACKAGE, if (plan.managedChrome) chromeBundle() else Bundle())
 
         for (pkg in plan.uninstallBlocked) dpm.setUninstallBlocked(admin, pkg, true)
@@ -74,6 +76,7 @@ class PolicyApplier(context: Context) {
         dpm.setApplicationRestrictions(admin, ChromePolicy.PACKAGE, Bundle())
         dpm.setUninstallBlocked(admin, packageName, false)
         dpm.setUserControlDisabledPackages(admin, emptyList())
+        dpm.setShortSupportMessage(admin, null)
         if (suspended.isNotEmpty()) failed += dpm.setPackagesSuspended(admin, suspended.toTypedArray(), false).map { "unsuspend $it" }
         return ApplyReport(failed)
     }

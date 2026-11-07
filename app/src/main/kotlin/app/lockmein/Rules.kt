@@ -15,6 +15,7 @@ object Rules {
         nightClosed = config.nightClosed,
         protectedPackages = snapshot.protectedPackages + unsuspendable,
         alwaysBlocked = config.alwaysBlocked,
+        windowApps = config.windowApps,
     )
 
     fun schedule(config: LockConfig, zone: ZoneId = ZoneId.systemDefault()) =

@@ -6,6 +6,18 @@ import kotlinx.serialization.json.Json
 import java.time.DayOfWeek
 import java.time.LocalTime
 
+val ALWAYS_BLOCKED_DEFAULT = setOf(
+    "com.instagram.android",
+    "com.facebook.katana",
+    "com.facebook.lite",
+    "com.zhiliaoapp.musically",
+    "com.ss.android.ugc.trill",
+)
+
+val WINDOW_APPS_DEFAULT = setOf(
+    "com.google.android.youtube",
+)
+
 /**
  * Everything a person chooses in the setup. Plain values only, so it can be saved, exported as text and imported on another phone.
  * It holds no secrets: the friend's code and the accounts never go in here.
@@ -18,14 +30,16 @@ data class LockConfig(
     val allowedBrowser: String? = null,
     /** Apps closed from the night start until fajr. Everything else keeps running. (The old `nightAllowlist`, the reverse, is ignored on load.) */
     val nightClosed: Set<String> = emptySet(),
-    val alwaysBlocked: Set<String> = emptySet(),
+    val alwaysBlocked: Set<String> = ALWAYS_BLOCKED_DEFAULT,
+    /** Apps suspended all day except during the daily open window (20:00 to 21:30). */
+    val windowApps: Set<String> = WINDOW_APPS_DEFAULT,
     /** Start of the night and end of social-app time, "HH:mm". */
     val nightStart: String = "22:00",
-    /** The weekly open window, when waiting requests can be carried out: ISO day (1 = Monday .. 7 = Sunday) and its hours. */
-    val windowDay: Int = 1,
-    val windowStart: String = "09:00",
-    val windowEnd: String = "10:00",
-    /** How long anything that opens the phone up waits before it can be carried out in the window. */
+    /** The weekly settings window, when settings can be changed and removals scheduled: ISO day (7 = Sunday) and its hours. */
+    val windowDay: Int = 7,
+    val windowStart: String = "20:00",
+    val windowEnd: String = "21:00",
+    /** How long anything that opens the phone up waits before it takes effect. */
     val loosenWaitDays: Int = 7,
     val latitude: Double = 30.4278,
     val longitude: Double = -9.5981,
@@ -80,5 +94,6 @@ object ConfigRules {
         if (config.sunAngleDegrees !in 10.0..25.0) add("The sun angle for fajr must be between 10 and 25 degrees.")
         if (config.fajrOffsetMinutes !in -60..60) add("The fajr offset must be within an hour.")
         if (config.allowedBrowser != null && config.allowedBrowser in config.alwaysBlocked) add("The allowed browser cannot also be blocked.")
+        if (config.allowedBrowser != null && config.allowedBrowser in config.windowApps) add("The allowed browser cannot also be a window app.")
     }
 }

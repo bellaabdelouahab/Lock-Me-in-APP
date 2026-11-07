@@ -18,12 +18,17 @@ object PreviewDemo {
                 dnsHost = "demo.dns.nextdns.io",
                 allowedBrowser = "com.android.chrome",
                 nightClosed = apps.take(3).toSet(),
-                alwaysBlocked = apps.drop(3).take(3).toSet(),
+                alwaysBlocked = apps.drop(3).take(3).toSet() + LockConfig.ALWAYS_BLOCKED_DEFAULT,
+                windowApps = LockConfig.WINDOW_APPS_DEFAULT,
             ),
         )
         store.protectionActive = true
+        store.setupComplete = true
         val state = LockState(context)
         val now = Instant.now()
+        apps.getOrNull(3)?.let {
+            state.scheduleRemoval(app.lockmein.core.AppList.ALWAYS_BLOCKED, it, now.minus(Duration.ofDays(2)))
+        }
         state.requests = listOfNotNull(
             apps.getOrNull(7)?.let { ChangeRequest(RequestKind.NIGHT_REMOVE, it, now.minus(Duration.ofDays(3)).toEpochMilli()) },
             ChangeRequest(RequestKind.BROWSER, "com.brave.browser", now.minus(Duration.ofDays(1)).toEpochMilli()),

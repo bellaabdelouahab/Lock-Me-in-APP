@@ -68,7 +68,6 @@ private enum class SettingsDialog {
     NIGHT_START,
     WEEKLY_WINDOW,
     LOCATION,
-    REDO_SETUP,
     UPDATES,
     IMPORT,
 }
@@ -129,7 +128,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             SettingsItem(
                 icon = Icons.Filled.Schedule,
-                title = "Weekly open window",
+                title = "Weekly settings window",
                 value = "$windowDayName ${current.windowStart} to ${current.windowEnd}",
                 onClick = { activeDialog = SettingsDialog.WEEKLY_WINDOW },
             )
@@ -150,8 +149,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                 title = "Redo the setup",
                 value = if (store.redoing) "Setup is currently reopened" else "Go through the steps again",
                 onClick = {
-                    if (store.redoing || !store.setupComplete) navigate(Screen.SETUP)
-                    else activeDialog = SettingsDialog.REDO_SETUP
+                    if (store.redoing || !store.setupComplete) {
+                        navigate(Screen.SETUP)
+                    } else {
+                        scope.background({ manager.startRedo() }) { res ->
+                            outcome = res
+                            if (res is Outcome.Done) navigate(Screen.SETUP)
+                        }
+                    }
                 },
             )
         }
@@ -217,16 +222,20 @@ fun SettingsScreen(onBack: () -> Unit) {
             )
         }
 
-        // Section: Danger zone
-        Heading("Danger zone")
-        AppCard {
-            SettingsItem(
-                icon = Icons.Filled.Warning,
-                title = "Remove protection",
-                value = "Takes 7 days wait, weekly open window, and friend's code",
-                titleColor = Palette.Closed,
-                onClick = { navigate(Screen.REMOVE) },
-            )
+        // Section: Danger zone (only visible during monthly uninstall window: 1st of month 20:00 to 21:00)
+        val schedule = Rules.schedule(current)
+        val now = app.lockmein.TrustedClock(context).now()
+        if (schedule.inUninstallWindow(now)) {
+            Heading("Danger zone")
+            AppCard {
+                SettingsItem(
+                    icon = Icons.Filled.Warning,
+                    title = "Remove Lock Me In",
+                    value = "Monthly uninstall window open until 21:00",
+                    titleColor = Palette.Closed,
+                    onClick = { navigate(Screen.REMOVE) },
+                )
+            }
         }
     }
 
@@ -440,43 +449,6 @@ fun SettingsScreen(onBack: () -> Unit) {
                         activeDialog = SettingsDialog.NONE
                         save(current.copy(latitude = lat, longitude = lon, sunAngleDegrees = ang, fajrOffsetMinutes = off))
                     }) { Text("Save") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { activeDialog = SettingsDialog.NONE }) { Text("Cancel") }
-                },
-            )
-        }
-        SettingsDialog.REDO_SETUP -> {
-            var codeText by remember { mutableStateOf("") }
-            AlertDialog(
-                onDismissRequest = { activeDialog = SettingsDialog.NONE },
-                shape = CardShape,
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                title = { Text("Redo setup", style = MaterialTheme.typography.titleMedium) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            "Reopening setup lets you adjust all settings freely. Asking to redo is a request that waits 7 days, or your friend's code reopens it immediately.",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        CodeField(codeText) { codeText = it }
-                    }
-                },
-                confirmButton = {
-                    if (codeText.length == 6) {
-                        TextButton(onClick = {
-                            activeDialog = SettingsDialog.NONE
-                            scope.background({ manager.redoWithCode(codeText) }) {
-                                outcome = it
-                                if (it is Outcome.Done) navigate(Screen.SETUP)
-                            }
-                        }) { Text("Redo now with code") }
-                    } else {
-                        TextButton(onClick = {
-                            activeDialog = SettingsDialog.NONE
-                            scope.background({ manager.requestRedo() }) { outcome = it }
-                        }) { Text("Ask to redo (waits 7 days)") }
-                    }
                 },
                 dismissButton = {
                     TextButton(onClick = { activeDialog = SettingsDialog.NONE }) { Text("Cancel") }
