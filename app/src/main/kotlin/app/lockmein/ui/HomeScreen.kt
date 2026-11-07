@@ -284,16 +284,6 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
             )
         }
 
-        if (state.inSession(now)) {
-            val sessionRem = Duration.between(now, state.sessionUntil!!)
-            Text(
-                "Change session active (${CountdownFormatter.formatDurationHM(sessionRem)} left)",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Palette.Attention,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
         // Health summary row
@@ -394,7 +384,7 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             IconCircle(Icons.Filled.Key, Palette.ClosedContainer, tint = Palette.Closed)
             Column(Modifier.weight(1f)) {
-                Text("Holder code: change session", style = MaterialTheme.typography.titleMedium)
+                Text("Friend's code", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "Ask Mom or your brother for today's code",
                     style = MaterialTheme.typography.bodySmall,

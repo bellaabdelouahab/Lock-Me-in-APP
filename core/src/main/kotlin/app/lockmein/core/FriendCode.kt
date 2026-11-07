@@ -56,7 +56,54 @@ class CodeChecker(private val secret: ByteArray) {
     companion object {
         const val MAX_FAILED_ATTEMPTS = 5
         val LOCKOUT_DURATION: Duration = Duration.ofMinutes(30)
-        val SESSION_DURATION: Duration = Duration.ofMinutes(15)
+    }
+}
+
+/** The 6 possible actions unlocked by one valid friend code. */
+sealed interface FriendAction {
+    data class OpenAppForHour(val packageName: String) : FriendAction
+    data class ApproveRequest(val requestId: String) : FriendAction
+    data class StopBlockingApp(val list: AppList, val packageName: String) : FriendAction
+    data class ReleaseApp(val packageName: String) : FriendAction
+    data class ApproveBrowser(val packageName: String) : FriendAction
+    data object RedoSetup : FriendAction
+}
+
+/**
+ * Manages the single-action authorization: once a code is validated, exactly one action can be applied without asking for a second code.
+ */
+class FriendCodeAuthorizer(private val checker: CodeChecker) {
+    sealed interface AuthResult {
+        data class Authorized(val token: FriendAuthToken) : AuthResult
+        data class Denied(val check: CodeCheck) : AuthResult
+    }
+
+    data class FriendAuthToken(val counter: Long, var consumed: Boolean = false)
+
+    fun authorize(
+        code: String,
+        now: Instant,
+        lastUsedCounter: Long?,
+        failedAttempts: Int = 0,
+        lockoutUntil: Instant? = null,
+    ): Pair<AuthResult, CodeCheck> {
+        val check = checker.check(code, now, lastUsedCounter, failedAttempts, lockoutUntil)
+        return when (check) {
+            is CodeCheck.Accepted -> AuthResult.Authorized(FriendAuthToken(check.counter)) to check
+            else -> AuthResult.Denied(check) to check
+        }
+    }
+
+    fun applyAction(token: FriendAuthToken, action: FriendAction): Decision {
+        if (token.consumed) return Decision.Denied("This code was already used for an action")
+        token.consumed = true
+        return Decision.Allowed("Action applied with friend code: $action")
+    }
+
+    fun waste(token: FriendAuthToken): Decision {
+        if (token.consumed) return Decision.Denied("Already consumed")
+        token.consumed = true
+        return Decision.Denied("Code wasted without choosing an action")
     }
 }
 

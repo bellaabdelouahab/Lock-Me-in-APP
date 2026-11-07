@@ -4,6 +4,8 @@ import android.content.Context
 import app.lockmein.core.ChangeRequest
 import app.lockmein.core.LockConfig
 import app.lockmein.core.RequestKind
+import app.lockmein.core.RequestResolution
+import app.lockmein.core.ResolvedRequest
 import java.time.Duration
 import java.time.Instant
 
@@ -26,12 +28,14 @@ object PreviewDemo {
         store.setupComplete = true
         val state = LockState(context)
         val now = Instant.now()
-        apps.getOrNull(3)?.let {
-            state.scheduleRemoval(app.lockmein.core.AppList.ALWAYS_BLOCKED, it, now.minus(Duration.ofDays(2)))
-        }
         state.requests = listOfNotNull(
-            apps.getOrNull(7)?.let { ChangeRequest(RequestKind.NIGHT_REMOVE, it, now.minus(Duration.ofDays(3)).toEpochMilli()) },
-            ChangeRequest(RequestKind.BROWSER, "com.brave.browser", now.minus(Duration.ofDays(1)).toEpochMilli()),
+            apps.getOrNull(3)?.let { ChangeRequest(RequestKind.BLOCKED_REMOVE, it, now.minus(Duration.ofDays(3)).toEpochMilli(), count = 4) },
+            apps.getOrNull(7)?.let { ChangeRequest(RequestKind.NIGHT_REMOVE, it, now.minus(Duration.ofDays(2)).toEpochMilli(), count = 2) },
+            ChangeRequest(RequestKind.BROWSER, "com.brave.browser", now.minus(Duration.ofDays(1)).toEpochMilli(), count = 1),
+        )
+        state.requestHistory = listOfNotNull(
+            apps.getOrNull(5)?.let { ResolvedRequest(RequestKind.BLOCKED_REMOVE, it, 5, now.minus(Duration.ofDays(10)).toEpochMilli(), now.minus(Duration.ofDays(3)).toEpochMilli(), RequestResolution.DISMISSED) },
+            apps.getOrNull(6)?.let { ResolvedRequest(RequestKind.RELEASE_APP, it, 1, now.minus(Duration.ofDays(12)).toEpochMilli(), now.minus(Duration.ofDays(5)).toEpochMilli(), RequestResolution.APPROVED) },
         )
     }
 

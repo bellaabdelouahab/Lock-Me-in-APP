@@ -105,11 +105,11 @@ fun RedoSetup() {
         MenuButton("Go through the steps") { navigate(Screen.SETUP) }
         return
     }
-    Note("Go through the steps again to check or change the apps, DNS, browser, hours and place. Allowed during the Sunday settings window (20:00 to 21:00) or using a holder code session.")
+    Note("Go through the steps again to check or change the apps, DNS, browser, hours and place. Requesting redo setup is reviewed on Sunday (20:00 to 21:00), or you can redo immediately using the friend's code.")
     SecondaryButton("Redo setup", {
         scope.background({ ChangeManager(context).startRedo() }) {
             outcome = it
-            if (it is Outcome.Done) navigate(Screen.SETUP)
+            if (store.redoing) navigate(Screen.SETUP)
         }
     })
     OutcomeText(outcome)

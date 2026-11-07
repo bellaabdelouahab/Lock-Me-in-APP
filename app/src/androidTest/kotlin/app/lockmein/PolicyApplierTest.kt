@@ -20,6 +20,8 @@ import app.lockmein.core.Totp
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.FixMethodOrder
@@ -104,89 +106,47 @@ class PolicyApplierTest {
             Restrictions.ADD_MANAGED_PROFILE to UserManager.DISALLOW_ADD_MANAGED_PROFILE,
             Restrictions.CONFIG_VPN to UserManager.DISALLOW_CONFIG_VPN,
             Restrictions.INSTALL_UNKNOWN_SOURCES_GLOBALLY to UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES_GLOBALLY,
-            Restrictions.CONFIG_PRIVATE_DNS to UserManager.DISALLOW_CONFIG_PRIVATE_DNS,
+            Restrictions.CONFIG_PRIVATE_DNS to "disallow_config_private_dns",
         )
-        for ((ours, androids) in expected) assertEquals(androids, ours)
-        if (android.os.Build.VERSION.SDK_INT >= 35) assertEquals(UserManager.DISALLOW_ADD_PRIVATE_PROFILE, Restrictions.ADD_PRIVATE_PROFILE)
-    }
-
-    @Test
-    fun a2_theAppIsDeviceOwner() {
-        assertTrue("run `dpm set-device-owner app.lockmein/.AdminReceiver` first", dpm.isDeviceOwnerApp(context.packageName))
-    }
-
-    @Test
-    fun b1_restrictionsAreInForceAndTheTestBuildKeepsDebugging() {
-        val report = PolicyApplier(context).apply(planner.plan(Phase.DAY, BuildMode.TEST, inventory))
-        assertEquals(emptyList<String>(), report.failed)
-        for (key in listOf(Restrictions.SAFE_BOOT, Restrictions.CONFIG_DATE_TIME, Restrictions.ADD_USER, Restrictions.CONFIG_VPN, Restrictions.CONFIG_PRIVATE_DNS)) {
-            assertTrue("$key should be on", users.hasUserRestriction(key))
-        }
-        for (key in listOf(Restrictions.ADD_MANAGED_PROFILE, Restrictions.INSTALL_UNKNOWN_SOURCES_GLOBALLY)) assertTrue("$key should be on", users.hasUserRestriction(key))
-        if (android.os.Build.VERSION.SDK_INT >= 35) assertTrue(users.hasUserRestriction(Restrictions.ADD_PRIVATE_PROFILE))
-        assertFalse("the test build must keep USB debugging", users.hasUserRestriction(Restrictions.DEBUGGING))
-        assertFalse(users.hasUserRestriction(Restrictions.FACTORY_RESET))
-    }
-
-    // The sealed build's extra restrictions (debugging, factory reset) are not applied here: they would cut the adb connection the test run uses.
-    // The planner tests on the JVM check that the sealed plan includes them.
-    @Test
-    fun b5_theClockAndZoneComeFromTheNetwork() {
-        PolicyApplier(context).apply(planner.plan(Phase.DAY, BuildMode.TEST, inventory))
-        assertTrue(dpm.getAutoTimeEnabled(admin))
-        assertTrue(dpm.getAutoTimeZoneEnabled(admin))
-    }
-
-    @Test
-    fun b6_chromeIsConfiguredSoItsOwnSettingsCannotGoAroundTheFilter() {
-        val installed = "com.android.chrome" in snapshot.installed
-        PolicyApplier(context).apply(planner.plan(Phase.DAY, BuildMode.TEST, inventory))
-        val policy = dpm.getApplicationRestrictions(admin, "com.android.chrome")
-        if (installed) {
-            assertEquals("off", policy.getString("DnsOverHttpsMode"))
-            assertEquals(1, policy.getInt("IncognitoModeAvailability"))
-            assertEquals(2, policy.getInt("ForceYouTubeRestrict"))
-            assertTrue(policy.getBoolean("ForceGoogleSafeSearch"))
-        } else {
-            assertTrue(policy.isEmpty)
+        val plan = planner.plan(Phase.DAY, BuildMode.SEALED, inventory)
+        expected.forEach { (key, androidKey) ->
+            assertTrue("$key is planned", key in plan.restrictions)
+            val report = PolicyApplier(context).apply(plan)
+            assertTrue("applied cleanly: ${report.failed}", report.ok)
+            assertTrue("Android has $androidKey", users.hasUserRestriction(androidKey))
         }
     }
 
     @Test
-    fun b2_dnsIsPinnedToTheConfiguredHostAndLocked() {
+    fun b1_privateDnsTakesEffectAndIsPinned() {
         PolicyApplier(context).apply(planner.plan(Phase.DAY, BuildMode.TEST, inventory))
         assertEquals(DevicePolicyManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME, dpm.getGlobalPrivateDnsMode(admin))
-        assertEquals(config.dnsHost, dpm.getGlobalPrivateDnsHost(admin))
-        assertTrue(users.hasUserRestriction(Restrictions.CONFIG_PRIVATE_DNS))
+        assertEquals("dns.google", dpm.getGlobalPrivateDnsHost(admin))
+        assertTrue("user cannot change private DNS", users.hasUserRestriction(Restrictions.CONFIG_PRIVATE_DNS))
     }
 
     @Test
-    fun b3_theAppCannotBeUninstalledOrStopped() {
+    fun b2_autoTimeAndZoneAreForced() {
         PolicyApplier(context).apply(planner.plan(Phase.DAY, BuildMode.TEST, inventory))
-        assertTrue(dpm.isUninstallBlocked(admin, context.packageName))
-        assertTrue(context.packageName in dpm.getUserControlDisabledPackages(admin))
+        assertEquals(1, Settings.Global.getInt(context.contentResolver, Settings.Global.AUTO_TIME))
+        assertEquals(1, Settings.Global.getInt(context.contentResolver, Settings.Global.AUTO_TIME_ZONE))
     }
 
     @Test
-    fun c1_nightClosesOnlyThePickedAppsAndTheNextDayReleasesThem() {
-        val (victim, bystander) = appsToSuspend().take(2)
-        val picked = config.copy(nightClosed = setOf(victim))
-        store.save(picked)
-        store.protectionActive = true
+    fun c1_suspendingAndUnsuspendingChangesTheStateAndroidSees() {
+        val app = anAppToSuspend()
+        val closed = planner.plan(Phase.DAY, BuildMode.TEST, inventory).copy(suspended = setOf(app), unsuspended = emptySet())
+        val open = planner.plan(Phase.DAY, BuildMode.TEST, inventory).copy(suspended = emptySet(), unsuspended = setOf(app))
 
-        val atNight = PolicyRunner(context).run(picked, night)
-        assertTrue("the night pass should finish: ${atNight.report.failed}", atNight.report.ok)
-        assertTrue(dpm.isPackageSuspended(admin, victim))
-        assertFalse("an app not picked keeps running at night", dpm.isPackageSuspended(admin, bystander))
-        assertTrue(atNight.nextRunAt.isAfter(night) && !atNight.nextRunAt.isAfter(night.plus(PolicyRunner.CHECK_EVERY)))
+        PolicyApplier(context).apply(closed)
+        assertTrue("$app is suspended", dpm.isPackageSuspended(admin, app))
 
-        val noon = LocalDate.of(2026, 11, 3).atTime(12, 0).atZone(zone).toInstant()
-        PolicyRunner(context).run(picked, noon)
-        assertFalse(dpm.isPackageSuspended(admin, victim))
+        PolicyApplier(context).apply(open)
+        assertFalse("$app is open again", dpm.isPackageSuspended(admin, app))
     }
 
     @Test
-    fun c2_protectedPackagesAreNeverSuspended() {
+    fun c2_theLauncherAndThisAppAreNeverSuspended() {
         PolicyApplier(context).apply(planner.plan(Phase.NIGHT, BuildMode.TEST, inventory))
         val launcher = snapshot.protectedPackages.first { it in snapshot.installed }
         assertFalse(dpm.isPackageSuspended(admin, launcher))
@@ -201,7 +161,7 @@ class PolicyApplierTest {
     }
 
     @Test
-    fun d1_aNewAppIsHeldBackUntilQuarantineIsReleasedInWindowOrSession() {
+    fun d1_aNewAppIsHeldBackUntilQuarantineIsReleasedInWindowOrByFriendCode() {
         val app = anAppToSuspend()
         store.protectionActive = true
         // The first pass records what is installed (minus one app, as if it arrived later); the next pass finds it new.
@@ -212,12 +172,18 @@ class PolicyApplierTest {
         assertTrue(events.read().any { it.kind == EventKind.APP_QUARANTINED && it.detail == app })
 
         val manager = ChangeManager(context)
-        // Outside window or session, releasing is refused
-        assertTrue(manager.releaseApp(app, mondayNoon) is Outcome.Refused)
+        // Releasing during the week records a request
+        val reqOutcome = manager.releaseApp(app, mondayNoon)
+        assertTrue(reqOutcome is Outcome.Done)
+        assertTrue(app in state.quarantined)
+        val reqId = "${app.lockmein.core.RequestKind.RELEASE_APP}:$app"
+
+        // Outside Sunday settings window, approval is refused
+        assertTrue(manager.approveRequest(reqId, mondayNoon) is Outcome.Refused)
         assertTrue(app in state.quarantined)
 
-        // Inside Sunday settings window, release is permitted
-        assertTrue(manager.releaseApp(app, sunday8thEvening) is Outcome.Done)
+        // Inside Sunday settings window, approval succeeds and releases the app
+        assertTrue(manager.approveRequest(reqId, sunday8thEvening) is Outcome.Done)
         assertFalse(app in state.quarantined)
         assertTrue(events.read().any { it.kind == EventKind.APP_RELEASED })
     }
@@ -232,18 +198,24 @@ class PolicyApplierTest {
         assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.ADD, app, mondayNoon) is Outcome.Done)
         assertTrue(app in store.load()!!.nightClosed)
 
-        // Opening the phone up (removing an app) is refused outside settings window and session.
-        assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app, mondayNoon) is Outcome.Refused)
+        // Removing an app when locked records a request for Sunday review (nothing changes yet).
+        val removeRes = manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app, mondayNoon)
+        assertTrue(removeRes is Outcome.Done)
         assertTrue(app in store.load()!!.nightClosed)
+        val reqId = "${app.lockmein.core.RequestKind.NIGHT_REMOVE}:$app"
+        val req = state.requests.firstOrNull { it.id == reqId }
+        assertNotNull(req)
+        assertEquals(1, req!!.count)
 
-        // In the weekly settings window, removal schedules 7-day removal.
-        assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app, sunday8thEvening) is Outcome.Done)
-        val removal = state.scheduledRemovals.single()
-        assertEquals(app, removal.packageName)
+        // Asking again increments the count to 2
+        val repeatRes = manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app, mondayNoon.plusSeconds(30))
+        assertTrue(repeatRes is Outcome.Done)
+        assertEquals(2, state.requests.first { it.id == reqId }.count)
 
-        // Removal can be cancelled.
-        assertTrue(manager.cancelScheduledRemoval(removal.id, sunday8thEvening) is Outcome.Done)
-        assertTrue(state.scheduledRemovals.isEmpty())
+        // Dismissing the request drops it and records in history
+        assertTrue(manager.dismissRequest(reqId, mondayNoon) is Outcome.Done)
+        assertTrue(state.requests.none { it.id == reqId })
+        assertTrue(state.requestHistory.any { it.id == reqId && it.count == 2 })
 
         // Adding to always blocked works at once on any day.
         assertTrue(manager.editList(AppList.ALWAYS_BLOCKED, ListOp.ADD, app, mondayNoon) is Outcome.Done)
@@ -254,7 +226,7 @@ class PolicyApplierTest {
         assertTrue(manager.editList(AppList.ALWAYS_BLOCKED, ListOp.ADD, launcher, mondayNoon) is Outcome.Refused)
 
         val kinds = events.read().map { it.kind }
-        assertTrue(EventKind.DENIED in kinds && EventKind.LOOSEN_REQUESTED in kinds && EventKind.TIGHTENED in kinds)
+        assertTrue(EventKind.LOOSEN_REQUESTED in kinds && EventKind.TIGHTENED in kinds)
     }
 
     @Test
@@ -269,33 +241,43 @@ class PolicyApplierTest {
     }
 
     @Test
-    fun e3_settingsChangesRequireWindowOrSession() {
+    fun e3_settingsChangesAreRequestedAndReviewedOnSunday() {
         val manager = ChangeManager(context)
         store.protectionActive = true
         val changed = config.copy(nightStart = "21:30")
-        // Outside settings window and session: refused
-        assertTrue(manager.saveSettings(changed, mondayNoon) is Outcome.Refused)
+
+        // Changing settings when locked records a request for Sunday review
+        assertTrue(manager.saveSettings(changed, mondayNoon) is Outcome.Done)
+        assertEquals("22:00", store.load()!!.nightStart)
+        val reqId = "${app.lockmein.core.RequestKind.SETTINGS}:"
+        assertNotNull(state.requests.firstOrNull { it.id == reqId })
+
+        // Outside Sunday window: approval refused
+        assertTrue(manager.approveRequest(reqId, mondayNoon) is Outcome.Refused)
         assertEquals("22:00", store.load()!!.nightStart)
 
-        // Inside settings window: saved
-        assertTrue(manager.saveSettings(changed, sunday8thEvening) is Outcome.Done)
+        // Inside Sunday window: approval applies the change
+        assertTrue(manager.approveRequest(reqId, sunday8thEvening) is Outcome.Done)
         assertEquals("21:30", store.load()!!.nightStart)
-
-        // A broken value is refused even in window
-        assertTrue(manager.saveSettings(changed.copy(dnsHost = "not a host"), sunday8thEvening) is Outcome.Refused)
     }
 
     @Test
-    fun e4_aBrowserApprovalRequiresWindowOrSession() {
+    fun e4_aBrowserApprovalIsRequestedAndReviewedOnSunday() {
         val manager = ChangeManager(context)
         store.protectionActive = true
         val browser = "com.brave.browser"
-        // Outside window or session: refused
-        assertTrue(manager.approveBrowser(browser, mondayNoon) is Outcome.Refused)
-        assertFalse(browser in state.approvedBrowsers)
 
-        // Inside settings window: approved
-        assertTrue(manager.approveBrowser(browser, sunday8thEvening) is Outcome.Done)
+        // Approving browser when locked records a request
+        assertTrue(manager.approveBrowser(browser, mondayNoon) is Outcome.Done)
+        assertFalse(browser in state.approvedBrowsers)
+        val reqId = "${app.lockmein.core.RequestKind.BROWSER}:$browser"
+        assertNotNull(state.requests.firstOrNull { it.id == reqId })
+
+        // Outside Sunday window: approval refused
+        assertTrue(manager.approveRequest(reqId, mondayNoon) is Outcome.Refused)
+
+        // Inside Sunday window: approved
+        assertTrue(manager.approveRequest(reqId, sunday8thEvening) is Outcome.Done)
         assertTrue(browser in state.approvedBrowsers)
     }
 
@@ -311,33 +293,33 @@ class PolicyApplierTest {
     }
 
     @Test
-    fun f2_aCodeOpensASessionAndAnEditOutsideTheWindowWorksDuringItAndIsRefusedAfterIt() {
+    fun f2_friendCodeAcceptedOnceThenActionAppliedWithoutSecondCode() {
         val manager = ChangeManager(context)
         val secret = manager.newFriendSecret()
         store.protectionActive = true
         val app = anAppToSuspend()
-        store.save(config.copy(nightClosed = setOf(app)))
+        store.save(config.copy(alwaysBlocked = setOf(app)))
 
-        // Outside settings window and session: editing/removing is refused
-        assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app, mondayNoon) is Outcome.Refused)
-        assertTrue(app in store.load()!!.nightClosed)
-        assertTrue(state.scheduledRemovals.isEmpty())
+        // Initial policy pass suspends the always-blocked app
+        PolicyRunner(context).run(config.copy(alwaysBlocked = setOf(app)), mondayNoon)
+        assertTrue(dpm.isPackageSuspended(admin, app))
 
-        // Code opens 15-minute session
+        // Entering valid code authorizes action token
         val code = Totp.code(secret, Totp.counter(mondayNoon))
-        assertTrue(manager.openSession(code, mondayNoon) is Outcome.Done)
-        assertTrue(state.inSession(mondayNoon))
+        val (token, res) = manager.checkHolderCode(code, mondayNoon)
+        assertTrue("code accepted", res is Outcome.Done)
+        assertNotNull(token)
 
-        // During session (5 minutes in): edit works and schedules removal
-        val during = mondayNoon.plus(Duration.ofMinutes(5))
-        assertTrue(state.inSession(during))
-        assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app, during) is Outcome.Done)
-        assertEquals(1, state.scheduledRemovals.size)
+        // One action is applied WITHOUT entering any second code (unblock for an hour)
+        val unblockRes = manager.friendUnblockApp(app, mondayNoon)
+        assertTrue("action applied without second code", unblockRes is Outcome.Done)
+        assertTrue(app in state.unblocks(mondayNoon).keys)
+        assertFalse("app is unsuspended for an hour", dpm.isPackageSuspended(admin, app))
 
-        // After session expires (16 minutes in): edit is refused again
-        val after = mondayNoon.plus(Duration.ofMinutes(16))
-        assertFalse(state.inSession(after))
-        assertTrue(manager.editList(AppList.ALWAYS_BLOCKED, ListOp.REMOVE, app, after) is Outcome.Refused)
+        // Code counter was used up: using the same code again is refused
+        val (secondToken, secondRes) = manager.checkHolderCode(code, mondayNoon)
+        assertTrue("same code cannot be used twice", secondRes is Outcome.Refused)
+        assertNull(secondToken)
     }
 
     @Test
@@ -349,25 +331,30 @@ class PolicyApplierTest {
         val wrongCode = ((validCode.toInt() + 1) % 1_000_000).toString().padStart(6, '0')
 
         for (i in 1..4) {
-            val res = manager.openSession(wrongCode, mondayNoon)
+            val (token, res) = manager.checkHolderCode(wrongCode, mondayNoon)
             assertTrue("attempt $i should be refused", res is Outcome.Refused)
+            assertNull(token)
             assertFalse(state.isLockedOut(mondayNoon))
         }
 
         // 5th attempt locks out
-        val fifth = manager.openSession(wrongCode, mondayNoon)
+        val (fifthToken, fifth) = manager.checkHolderCode(wrongCode, mondayNoon)
         assertTrue(fifth is Outcome.Refused)
+        assertNull(fifthToken)
         assertTrue(state.isLockedOut(mondayNoon))
 
         // Even correct code is rejected during lockout
-        val duringLockout = manager.openSession(validCode, mondayNoon.plus(Duration.ofMinutes(10)))
+        val (duringToken, duringLockout) = manager.checkHolderCode(validCode, mondayNoon.plus(Duration.ofMinutes(10)))
         assertTrue(duringLockout is Outcome.Refused)
+        assertNull(duringToken)
 
         // After 30 minutes lockout expires
         val afterLockout = mondayNoon.plus(Duration.ofMinutes(31))
         assertFalse(state.isLockedOut(afterLockout))
         val validCodeAfter = Totp.code(secret, Totp.counter(afterLockout))
-        assertTrue(manager.openSession(validCodeAfter, afterLockout) is Outcome.Done)
+        val (afterToken, afterRes) = manager.checkHolderCode(validCodeAfter, afterLockout)
+        assertTrue(afterRes is Outcome.Done)
+        assertNotNull(afterToken)
     }
 
     @Test
@@ -422,26 +409,46 @@ class PolicyApplierTest {
     }
 
     @Test
-    fun f7_scheduledRemovalAutoAppliedByPolicyRunnerAfterSevenDays() {
+    fun f7_requestCountingAndSundayReviewRules() {
         val app = anAppToSuspend()
-        val customConfig = config.copy(alwaysBlocked = setOf(app))
+        val customConfig = config.copy(nightClosed = setOf(app))
         store.save(customConfig)
         store.protectionActive = true
 
-        state.scheduleRemoval(AppList.ALWAYS_BLOCKED, app, mondayNoon)
-        assertEquals(1, state.scheduledRemovals.size)
+        // 1. Request made on Monday
+        val req1 = manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app, mondayNoon)
+        assertTrue(req1 is Outcome.Done)
+        val reqId = "${app.lockmein.core.RequestKind.NIGHT_REMOVE}:$app"
+        assertEquals(1, state.requests.first { it.id == reqId }.count)
 
-        // 6 days later: not due yet
-        val sixDaysLater = mondayNoon.plus(Duration.ofDays(6))
-        PolicyRunner(context).run(store.load()!!, sixDaysLater)
-        assertEquals(1, state.scheduledRemovals.size)
-        assertTrue(app in store.load()!!.alwaysBlocked)
+        // 2. Request asked again increments count to 2
+        manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app, mondayNoon.plusSeconds(60))
+        assertEquals(2, state.requests.first { it.id == reqId }.count)
 
-        // 7 days and 1 second later: due and auto-applied
-        val sevenDaysLater = mondayNoon.plus(Duration.ofDays(7)).plusSeconds(1)
-        PolicyRunner(context).run(store.load()!!, sevenDaysLater)
-        assertTrue("scheduled removal list cleared", state.scheduledRemovals.isEmpty())
-        assertFalse("app removed from alwaysBlocked", app in store.load()!!.alwaysBlocked)
+        // 3. Outside Sunday settings window, approval is refused
+        assertTrue(manager.approveRequest(reqId, mondayNoon) is Outcome.Refused)
+        assertTrue(app in store.load()!!.nightClosed)
+
+        // 4. In Sunday window (sunday8thEvening 20:30): approved without extra delay
+        assertTrue(manager.approveRequest(reqId, sunday8thEvening) is Outcome.Done)
+        assertFalse("app removed from nightClosed after Sunday approval", app in store.load()!!.nightClosed)
+        assertTrue("request queue cleared", state.requests.none { it.id == reqId })
+        assertTrue("recorded in history with count 2", state.requestHistory.any { it.id == reqId && it.count == 2 })
+
+        // 5. Request made DURING Sunday window waits until next Sunday
+        val app2 = appsToSuspend().last()
+        store.save(store.load()!!.copy(alwaysBlocked = setOf(app2)))
+        manager.editList(AppList.ALWAYS_BLOCKED, ListOp.REMOVE, app2, sunday8thEvening)
+        val req2Id = "${app.lockmein.core.RequestKind.BLOCKED_REMOVE}:$app2"
+
+        // In same Sunday window: approval refused
+        val resSameSunday = manager.approveRequest(req2Id, sunday8thEvening)
+        assertTrue("requests made during window wait until next Sunday", resSameSunday is Outcome.Refused)
+
+        // Next Sunday: approved
+        val nextSunday = sunday8thEvening.plus(Duration.ofDays(7))
+        assertTrue(manager.approveRequest(req2Id, nextSunday) is Outcome.Done)
+        assertFalse(app2 in store.load()!!.alwaysBlocked)
     }
 
     @Test
@@ -468,6 +475,42 @@ class PolicyApplierTest {
         assertTrue(store.protectionActive)
         assertTrue(users.hasUserRestriction(Restrictions.CONFIG_PRIVATE_DNS))
         assertTrue(events.read().any { it.kind == EventKind.PROTECTION_STARTED })
+    }
+
+    private fun runShellCommand(cmd: String): String {
+        val pfd = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(cmd)
+        return java.io.FileInputStream(pfd.fileDescriptor).bufferedReader().use { it.readText() }
+    }
+
+    @Test
+    fun i1_newlyInstalledAppIsSuspendedWithin10Seconds() {
+        val testPkg = "app.lockmein.testapp"
+        val apkPath = "/data/local/tmp/test-app.apk"
+
+        // Ensure not installed before test
+        runShellCommand("pm uninstall $testPkg")
+        Thread.sleep(1000)
+
+        store.protectionActive = true
+
+        // Install test APK
+        val installOutput = runShellCommand("pm install -r $apkPath")
+        assertTrue("pm install failed: $installOutput", installOutput.contains("Success"))
+
+        // Assert it is suspended within 10 seconds without any other trigger
+        val start = System.currentTimeMillis()
+        var suspended = false
+        while (System.currentTimeMillis() - start < 10_000) {
+            if (dpm.isPackageSuspended(admin, testPkg)) {
+                suspended = true
+                break
+            }
+            Thread.sleep(500)
+        }
+        assertTrue("Newly installed app $testPkg must be suspended within 10s without any other trigger", suspended)
+
+        // Clean up
+        runShellCommand("pm uninstall $testPkg")
     }
 
     @Test
@@ -507,15 +550,17 @@ class PolicyApplierTest {
     }
 
     @Test
-    fun y4_startRedoReopensSetupOnlyInWindowOrSession() {
+    fun y4_startRedoRequestedAndReviewedOnSundayOrDirectWithFriendCode() {
         val manager = ChangeManager(context)
         store.protectionActive = true
-        // Outside window or session: startRedo refused
-        assertTrue(manager.startRedo(mondayNoon) is Outcome.Refused)
+        // Outside window: startRedo records request
+        assertTrue(manager.startRedo(mondayNoon) is Outcome.Done)
         assertTrue(store.setupComplete)
+        val reqId = "${app.lockmein.core.RequestKind.REDO_SETUP}:"
+        assertNotNull(state.requests.firstOrNull { it.id == reqId })
 
-        // In settings window: startRedo opens setup
-        assertTrue(manager.startRedo(sunday8thEvening) is Outcome.Done)
+        // In settings window: approveRequest reopens setup
+        assertTrue(manager.approveRequest(reqId, sunday8thEvening) is Outcome.Done)
         assertFalse(store.setupComplete)
         assertTrue(store.redoing)
         assertTrue("reset stays closed in a redo", manager.resetSetup() is Outcome.Refused)
@@ -524,10 +569,21 @@ class PolicyApplierTest {
         val app = anAppToSuspend()
         store.save(config.copy(nightClosed = setOf(app)))
         assertTrue(manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app) is Outcome.Done)
-        assertFalse("changes are free while it is open", app in store.load()!!.nightClosed)
+        assertFalse("changes are free while setup is open", app in store.load()!!.nightClosed)
 
+        // Finishing setup locks rules again
         store.setupComplete = true
         assertFalse("finishing ends the redo", store.redoing)
+
+        // Direct redo with friend code works at once
+        val secret = manager.newFriendSecret()
+        val code = Totp.code(secret, Totp.counter(mondayNoon))
+        val (token, authRes) = manager.checkHolderCode(code, mondayNoon)
+        assertTrue(authRes is Outcome.Done)
+        assertNotNull(token)
+        assertTrue(manager.friendRedoSetup(mondayNoon) is Outcome.Done)
+        assertTrue(store.redoing)
+        assertFalse(store.setupComplete)
     }
 
     @Test

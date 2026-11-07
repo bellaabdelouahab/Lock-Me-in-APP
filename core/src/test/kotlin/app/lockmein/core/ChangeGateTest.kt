@@ -1,5 +1,6 @@
 package app.lockmein.core
 
+import java.time.DayOfWeek
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalTime
@@ -11,15 +12,21 @@ import kotlin.test.assertTrue
 
 class ChangeGateTest {
     private val zone = ZoneId.of("Africa/Casablanca")
-    private val monday = ScheduleConfig(windowDay = java.time.DayOfWeek.MONDAY, windowStart = LocalTime.of(9, 0), windowEnd = LocalTime.of(10, 0))
-    private val schedule = Schedule(monday, { LocalTime.of(5, 30) }, zone)
+    private val sundayConfig = ScheduleConfig(windowDay = DayOfWeek.SUNDAY, windowStart = LocalTime.of(20, 0), windowEnd = LocalTime.of(21, 0))
+    private val schedule = Schedule(sundayConfig, { LocalTime.of(5, 30) }, zone)
     private val gate = ChangeGate(schedule)
 
-    // 2026-11-02 is a Monday; a request made on 2026-10-25 has waited its seven days by then.
-    // Local times in the schedule's own zone, so the test does not depend on the offset the time-zone data gives Morocco.
     private fun at(text: String): Instant = java.time.LocalDateTime.parse(text).atZone(zone).toInstant()
-    private val asked = at("2026-10-25T12:00:00")
-    private fun request(kind: RequestKind = RequestKind.NIGHT_ADD, target: String = "app.x", time: Instant = asked) =
+
+    // Sunday 2026-11-01 20:00 to 21:00 is the Sunday settings window
+    private val sundayBeforeWindow = at("2026-11-01T18:00:00")
+    private val sundayWindowStart = at("2026-11-01T20:00:00")
+    private val sundayInWindow = at("2026-11-01T20:30:00")
+    private val sundayDuringWindowRequest = at("2026-11-01T20:15:00")
+    private val wednesdayNoon = at("2026-10-28T12:00:00")
+    private val nextSundayInWindow = at("2026-11-08T20:30:00")
+
+    private fun request(kind: RequestKind = RequestKind.BLOCKED_REMOVE, target: String = "app.x", time: Instant = wednesdayNoon) =
         ChangeRequest(kind, target, time.toEpochMilli())
 
     @Test
@@ -28,64 +35,48 @@ class ChangeGateTest {
     }
 
     @Test
-    fun `loosening is never direct, it has to be a request`() {
+    fun `loosening directly on the spot is never allowed, it must be requested`() {
         assertIs<Decision.Denied>(gate.decide(ChangeKind.LOOSEN))
     }
 
     @Test
-    fun `a request waits seven days`() {
-        assertEquals(asked.plus(Duration.ofDays(7)), gate.readyAt(request()))
+    fun `request made before Sunday is approvable during the Sunday settings window`() {
+        val req = request(time = wednesdayNoon)
+        val decision = gate.decideSundayReview(req, sundayInWindow)
+        assertIs<Decision.Allowed>(decision)
     }
 
     @Test
-    fun `after the wait it applies in the Monday window when the clocks agree`() {
-        val inWindow = at("2026-11-02T09:30:00")
-        assertIs<Decision.Allowed>(gate.decideApply(request(), inWindow, networkTime = inWindow))
+    fun `request made on Sunday before the window starts is approvable in that window`() {
+        val req = request(time = sundayBeforeWindow)
+        val decision = gate.decideSundayReview(req, sundayInWindow)
+        assertIs<Decision.Allowed>(decision)
     }
 
     @Test
-    fun `after the wait but outside the window it still does not apply`() {
-        val monday3pm = at("2026-11-02T15:00:00")
-        assertIs<Decision.Denied>(gate.decideApply(request(), monday3pm, networkTime = monday3pm))
+    fun `request made during the Sunday window waits until next Sunday`() {
+        val req = request(time = sundayDuringWindowRequest)
+        // In the same Sunday window: denied
+        val decisionThisSunday = gate.decideSundayReview(req, sundayInWindow)
+        assertIs<Decision.Denied>(decisionThisSunday)
+        assertTrue(decisionThisSunday.why.contains("wait until next Sunday", ignoreCase = true))
+
+        // In next Sunday's window: allowed
+        val decisionNextSunday = gate.decideSundayReview(req, nextSundayInWindow)
+        assertIs<Decision.Allowed>(decisionNextSunday)
     }
 
     @Test
-    fun `inside the window but before the wait is over it does not apply`() {
-        val laterRequest = request(time = at("2026-10-28T12:00:00"))
-        val inWindow = at("2026-11-02T09:30:00")
-        assertIs<Decision.Denied>(gate.decideApply(laterRequest, inWindow, networkTime = inWindow))
+    fun `outside the Sunday settings window approval is denied`() {
+        val req = request(time = wednesdayNoon)
+        val decision = gate.decideSundayReview(req, wednesdayNoon)
+        assertIs<Decision.Denied>(decision)
+        assertTrue(decision.why.contains("Sunday settings window", ignoreCase = true))
     }
 
     @Test
-    fun `without network time or with a disagreeing clock nothing applies`() {
-        val inWindow = at("2026-11-02T09:30:00")
-        assertIs<Decision.Denied>(gate.decideApply(request(), inWindow, networkTime = null))
-        assertIs<Decision.Denied>(gate.decideApply(request(), inWindow, networkTime = inWindow.plus(Duration.ofHours(3))))
-    }
-
-    @Test
-    fun `the first request counts and asking again does not restart the wait`() {
-        val first = request()
-        val second = request(time = asked.plus(Duration.ofDays(3)))
-        assertEquals(listOf(first), Requests.add(listOf(first), second))
-    }
-
-    @Test
-    fun `a settings request replaces the earlier one and starts its wait again`() {
-        val config = LockConfig(dnsHost = "abc.dns.nextdns.io")
-        val first = ChangeRequest(RequestKind.SETTINGS, "settings", asked.toEpochMilli(), config)
-        val later = ChangeRequest(RequestKind.SETTINGS, "settings", asked.plus(Duration.ofDays(6)).toEpochMilli(), config.copy(nightStart = "21:00"))
-        val result = Requests.add(listOf(first), later)
-        assertEquals(listOf(later), result)
-    }
-
-    @Test
-    fun `requests can be cancelled and survive being saved as text`() {
-        val a = request(target = "a")
-        val b = request(RequestKind.BROWSER, "b")
-        val saved = Requests.decode(Requests.encode(listOf(a, b)))
-        assertEquals(listOf(a, b), saved)
-        assertEquals(listOf(b), Requests.cancel(saved, a.id))
-        assertTrue(Requests.decode("not json").isEmpty())
+    fun `dismissing a request is always allowed`() {
+        val req = request(time = wednesdayNoon)
+        assertIs<Decision.Allowed>(gate.decideDismiss(req))
     }
 }

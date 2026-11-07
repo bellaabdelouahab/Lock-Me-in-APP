@@ -3,6 +3,7 @@ package app.lockmein.ui
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,20 +13,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.HourglassTop
-import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -43,12 +47,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.lockmein.ChangeManager
 import app.lockmein.ConfigStore
+import app.lockmein.DeviceInventory
 import app.lockmein.LockState
 import app.lockmein.Outcome
 import app.lockmein.Rules
 import app.lockmein.TrustedClock
-import app.lockmein.core.CountdownFormatter
+import app.lockmein.core.AppList
+import app.lockmein.core.FriendAction
 import app.lockmein.core.FriendCode
+import app.lockmein.core.KnownBrowsers
 import java.time.Duration
 import java.time.Instant
 
@@ -56,31 +63,51 @@ import java.time.Instant
 fun CodeField(code: String, onChange: (String) -> Unit) = OutlinedTextField(
     value = code,
     onValueChange = { onChange(it.filter(Char::isDigit).take(6)) },
-    label = { Text("6-digit holder code") },
+    label = { Text("6-digit friend's code") },
     singleLine = true,
     shape = CardShape,
     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
     modifier = Modifier.fillMaxWidth(),
 )
 
+private enum class ActionPicker {
+    NONE,
+    OPEN_APP,
+    APPROVE_REQUEST,
+    STOP_BLOCKING,
+    RELEASE_APP,
+    APPROVE_BROWSER,
+}
+
+private data class StopBlockingItem(val list: AppList, val listName: String, val packageName: String)
+
 /**
- * Holder code screen:
+ * Friend's code screen:
  * Ask Mom or your brother for today's code.
- * A valid code opens a 15-minute change session.
+ * Validates the 6-digit code once and opens a bottom sheet with 6 actions.
+ * Exactly one action is applied with no second prompt. Closing sheet without choosing wastes the code.
  * 5 wrong codes lock out for 30 minutes.
- * Re-keying requires entering current valid code first.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EmergencyScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val navigate = LocalNavigate.current
     val manager = remember { ChangeManager(context) }
+    val store = remember { ConfigStore(context) }
     val state = remember { LockState(context) }
+    val inventory = remember { DeviceInventory(context) }
     val scope = rememberCoroutineScope()
 
     var code by remember { mutableStateOf("") }
     var outcome by remember { mutableStateOf<Outcome?>(null) }
     var working by remember { mutableStateOf(false) }
     var version by remember { mutableIntStateOf(0) }
+
+    // Bottom sheet state
+    var showActionSheet by remember { mutableStateOf(false) }
+    var actionApplied by remember { mutableStateOf(false) }
+    var currentPicker by remember { mutableStateOf(ActionPicker.NONE) }
 
     // Re-keying state
     var rekeyingStep by remember { mutableIntStateOf(0) } // 0 = idle, 1 = enter current code, 2 = show new QR
@@ -89,89 +116,272 @@ fun EmergencyScreen(onBack: () -> Unit) {
     var rekeyError by remember { mutableStateOf<String?>(null) }
 
     val now = TrustedClock(context).now()
-    val inSession = state.inSession(now)
     val isLockedOut = state.isLockedOut(now)
+    val config = store.load()
 
-    Page("Holder code", onBack) {
-        when {
-            inSession -> {
-                val rem = Duration.between(now, state.sessionUntil!!)
-                AppCard {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Filled.HourglassTop, contentDescription = null, tint = Palette.Ok, modifier = Modifier.size(24.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Change session active", style = MaterialTheme.typography.titleMedium, color = Palette.Ok)
-                            Text(
-                                "${CountdownFormatter.formatDurationHM(rem)} remaining. All settings and lists can be changed freely.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+    Page("Friend's code", onBack) {
+        if (isLockedOut) {
+            val remMinutes = Duration.between(now, state.lockoutUntil!!).toMinutes().coerceAtLeast(1)
+            AppCard {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Icons.Filled.Lock, contentDescription = null, tint = Palette.Closed, modifier = Modifier.size(24.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Locked out after 5 wrong codes", style = MaterialTheme.typography.titleMedium, color = Palette.Closed)
+                        Text(
+                            "Too many wrong attempts. Try again in $remMinutes minutes.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
-            isLockedOut -> {
-                val remMinutes = Duration.between(now, state.lockoutUntil!!).toMinutes().coerceAtLeast(1)
-                AppCard {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Filled.Lock, contentDescription = null, tint = Palette.Closed, modifier = Modifier.size(24.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Locked out after 5 wrong codes", style = MaterialTheme.typography.titleMedium, color = Palette.Closed)
-                            Text(
-                                "Too many wrong attempts. Try again in $remMinutes minutes.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
+        } else {
+            AppCard {
+                Text(
+                    "Ask Mom or your brother for today's code.",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    "Entering today's code validates it and lets you pick one action to apply immediately without asking again.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            else -> {
-                AppCard {
-                    Text(
-                        "Ask Mom or your brother for today's code.",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        "A valid code opens a 15-minute change session. During the session, you can change settings and approve apps just like in the Sunday window.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
 
-                CodeField(code) {
-                    code = it
-                    outcome = null
-                }
+            CodeField(code) {
+                code = it
+                outcome = null
+            }
 
-                OutcomeText(outcome)
+            OutcomeText(outcome)
 
-                PrimaryButton(
-                    label = if (working) "Checking code..." else "Start 15-minute session",
-                    enabled = code.length == 6 && !working,
-                    onClick = {
-                        working = true
-                        scope.background({ manager.openSession(code) }) { res ->
-                            working = false
+            PrimaryButton(
+                label = if (working) "Checking code..." else "Check code",
+                enabled = code.length == 6 && !working,
+                onClick = {
+                    working = true
+                    scope.background({ manager.checkFriendCode(code) }) { res ->
+                        working = false
+                        if (res is Outcome.Done) {
+                            code = ""
+                            actionApplied = false
+                            currentPicker = ActionPicker.NONE
+                            showActionSheet = true
+                        } else {
                             outcome = res
-                            if (res is Outcome.Done) {
-                                code = ""
-                            }
-                            version++
                         }
-                    },
+                        version++
+                    }
+                },
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            SecondaryButton(
+                label = "Re-key friend's code (new QR)",
+                onClick = {
+                    rekeyingStep = 1
+                    code = ""
+                    rekeyError = null
+                },
+            )
+        }
+    }
+
+    // Single-Action Bottom Sheet
+    if (showActionSheet) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                if (!actionApplied) {
+                    manager.wasteFriendCode()
+                    outcome = Outcome.Refused("This code is now used. No action was taken.")
+                }
+                showActionSheet = false
+                currentPicker = ActionPicker.NONE
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    "This code is now used. Pick one action.",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "Closing without choosing will waste this code.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Palette.Attention,
                 )
 
-                Spacer(Modifier.height(8.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                SecondaryButton(
-                    label = "Re-key holder code (new QR)",
-                    onClick = {
-                        rekeyingStep = 1
-                        code = ""
-                        rekeyError = null
-                    },
-                )
+                when (currentPicker) {
+                    ActionPicker.NONE -> {
+                        val waiting = manager.requests()
+                        val held = state.quarantined.toList()
+                        val snapshot = inventory.read()
+                        val closedBrowsers = if (config != null) {
+                            ((snapshot.browsers + KnownBrowsers.ALL).filter { it in snapshot.installed } - setOfNotNull(config.allowedBrowser) - state.approvedBrowsers).sorted()
+                        } else emptyList()
+
+                        // Action 1: Open one app for an hour
+                        ActionRow(
+                            title = "Open one app for an hour",
+                            subtitle = "Temporarily unblock an app for 60 minutes",
+                            onClick = { currentPicker = ActionPicker.OPEN_APP },
+                        )
+
+                        // Action 2: Approve one waiting request now
+                        ActionRow(
+                            title = "Approve one waiting request now",
+                            subtitle = if (waiting.isEmpty()) "No requests waiting" else "${waiting.size} request(s) waiting",
+                            enabled = waiting.isNotEmpty(),
+                            onClick = { currentPicker = ActionPicker.APPROVE_REQUEST },
+                        )
+
+                        // Action 3: Stop blocking one app now
+                        ActionRow(
+                            title = "Stop blocking one app now",
+                            subtitle = "Remove from Always blocked, Window apps, or Night closed without waiting",
+                            onClick = { currentPicker = ActionPicker.STOP_BLOCKING },
+                        )
+
+                        // Action 4: Let one new app through now
+                        ActionRow(
+                            title = "Let one new app through now",
+                            subtitle = if (held.isEmpty()) "No new apps held back" else "${held.size} app(s) quarantined",
+                            enabled = held.isNotEmpty(),
+                            onClick = { currentPicker = ActionPicker.RELEASE_APP },
+                        )
+
+                        // Action 5: Open one closed browser now
+                        ActionRow(
+                            title = "Open one closed browser now",
+                            subtitle = if (closedBrowsers.isEmpty()) "No closed browsers" else "${closedBrowsers.size} browser(s) closed",
+                            enabled = closedBrowsers.isNotEmpty(),
+                            onClick = { currentPicker = ActionPicker.APPROVE_BROWSER },
+                        )
+
+                        // Action 6: Redo the setup now
+                        ActionRow(
+                            title = "Redo the setup now",
+                            subtitle = "Reopen the setup to change apps, settings, or DNS",
+                            onClick = {
+                                actionApplied = true
+                                showActionSheet = false
+                                scope.background({ manager.applyFriendAction(FriendAction.RedoSetup) }) { res ->
+                                    outcome = res
+                                    navigate(Screen.SETUP)
+                                }
+                            },
+                        )
+                    }
+
+                    ActionPicker.OPEN_APP -> {
+                        SubPickerHeader("Choose an app to open for an hour") { currentPicker = ActionPicker.NONE }
+                        val apps = remember { inventory.launchableApps() }
+                        LazyColumn(modifier = Modifier.height(300.dp)) {
+                            items(apps) { app ->
+                                AppPickerRow(label = app.label, subtitle = app.packageName) {
+                                    actionApplied = true
+                                    showActionSheet = false
+                                    scope.background({ manager.applyFriendAction(FriendAction.OpenAppForHour(app.packageName)) }) { res ->
+                                        outcome = res
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    ActionPicker.APPROVE_REQUEST -> {
+                        SubPickerHeader("Choose a waiting request to approve") { currentPicker = ActionPicker.NONE }
+                        val requests = manager.requests()
+                        LazyColumn(modifier = Modifier.height(300.dp)) {
+                            items(requests) { req ->
+                                val label = if (req.target.isNotBlank()) inventory.label(req.target) else req.kind.name
+                                AppPickerRow(label = label, subtitle = "${req.kind} (asked ${req.count} times)") {
+                                    actionApplied = true
+                                    showActionSheet = false
+                                    scope.background({ manager.applyFriendAction(FriendAction.ApproveRequest(req.id)) }) { res ->
+                                        outcome = res
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    ActionPicker.STOP_BLOCKING -> {
+                        SubPickerHeader("Choose an app to stop blocking") { currentPicker = ActionPicker.NONE }
+                        val items = remember {
+                            buildList {
+                                config?.alwaysBlocked?.forEach { add(StopBlockingItem(AppList.ALWAYS_BLOCKED, "Always blocked", it)) }
+                                config?.windowApps?.forEach { add(StopBlockingItem(AppList.WINDOW_APPS, "Window apps", it)) }
+                                config?.nightClosed?.forEach { add(StopBlockingItem(AppList.NIGHT_CLOSED, "Closed at night", it)) }
+                            }
+                        }
+                        if (items.isEmpty()) {
+                            Text("No apps currently in block lists.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else {
+                            LazyColumn(modifier = Modifier.height(300.dp)) {
+                                items(items) { item ->
+                                    val label = inventory.label(item.packageName)
+                                    AppPickerRow(label = label, subtitle = "${item.listName} (${item.packageName})") {
+                                        actionApplied = true
+                                        showActionSheet = false
+                                        scope.background({ manager.applyFriendAction(FriendAction.StopBlockingApp(item.list, item.packageName)) }) { res ->
+                                            outcome = res
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    ActionPicker.RELEASE_APP -> {
+                        SubPickerHeader("Choose a quarantined app to let through") { currentPicker = ActionPicker.NONE }
+                        val held = state.quarantined.toList()
+                        LazyColumn(modifier = Modifier.height(300.dp)) {
+                            items(held) { pkg ->
+                                val label = inventory.label(pkg)
+                                AppPickerRow(label = label, subtitle = pkg) {
+                                    actionApplied = true
+                                    showActionSheet = false
+                                    scope.background({ manager.applyFriendAction(FriendAction.ReleaseApp(pkg)) }) { res ->
+                                        outcome = res
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    ActionPicker.APPROVE_BROWSER -> {
+                        SubPickerHeader("Choose a closed browser to approve") { currentPicker = ActionPicker.NONE }
+                        val snapshot = inventory.read()
+                        val closedBrowsers = if (config != null) {
+                            ((snapshot.browsers + KnownBrowsers.ALL).filter { it in snapshot.installed } - setOfNotNull(config.allowedBrowser) - state.approvedBrowsers).sorted()
+                        } else emptyList()
+                        LazyColumn(modifier = Modifier.height(300.dp)) {
+                            items(closedBrowsers) { pkg ->
+                                val label = inventory.label(pkg)
+                                AppPickerRow(label = label, subtitle = pkg) {
+                                    actionApplied = true
+                                    showActionSheet = false
+                                    scope.background({ manager.applyFriendAction(FriendAction.ApproveBrowser(pkg)) }) { res ->
+                                        outcome = res
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -183,11 +393,11 @@ fun EmergencyScreen(onBack: () -> Unit) {
             onDismissRequest = { rekeyingStep = 0 },
             shape = CardShape,
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            title = { Text("Re-key holder code", style = MaterialTheme.typography.titleMedium) },
+            title = { Text("Re-key friend's code", style = MaterialTheme.typography.titleMedium) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Enter the current valid holder code first to verify your identity.",
+                        "Enter the current valid friend code first to verify your identity.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     CodeField(currentCodeInput) { currentCodeInput = it }
@@ -221,7 +431,7 @@ fun EmergencyScreen(onBack: () -> Unit) {
             onDismissRequest = { /* Must confirm or cancel */ },
             shape = CardShape,
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            title = { Text("Scan new holder QR", style = MaterialTheme.typography.titleMedium) },
+            title = { Text("Scan new friend QR", style = MaterialTheme.typography.titleMedium) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -248,7 +458,7 @@ fun EmergencyScreen(onBack: () -> Unit) {
                         if (ok) {
                             rekeyingStep = 0
                             newSecret = null
-                            outcome = Outcome.Done("Holder code successfully updated.")
+                            outcome = Outcome.Done("Friend's code successfully updated.")
                             version++
                         } else {
                             rekeyError = "Code does not match. Try the next 6-digit code."
@@ -264,6 +474,72 @@ fun EmergencyScreen(onBack: () -> Unit) {
             },
         )
     }
+}
+
+@Composable
+private fun ActionRow(
+    title: String,
+    subtitle: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+            )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+            )
+        }
+        Icon(
+            Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@Composable
+private fun SubPickerHeader(title: String, onBack: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onBack).padding(vertical = 4.dp),
+    ) {
+        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", modifier = Modifier.size(20.dp))
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun AppPickerRow(label: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 }
 
 /**

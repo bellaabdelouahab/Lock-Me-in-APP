@@ -77,8 +77,41 @@ class FriendCodeTest {
     }
 
     @Test
-    fun `session duration is 15 minutes`() {
-        assertEquals(Duration.ofMinutes(15), CodeChecker.SESSION_DURATION)
+    fun `code accepted once then action applied without a second code`() {
+        val authorizer = FriendCodeAuthorizer(checker)
+
+        // 1. Entering valid code authorizes a single action token
+        val (authResult, check) = authorizer.authorize(goodCode, now, lastUsedCounter = null)
+        assertIs<CodeCheck.Accepted>(check)
+        val authorized = assertIs<FriendCodeAuthorizer.AuthResult.Authorized>(authResult)
+        val token = authorized.token
+
+        // 2. Action is applied WITHOUT entering another code
+        val action = FriendAction.OpenAppForHour("com.google.android.youtube")
+        val decision = authorizer.applyAction(token, action)
+        assertIs<Decision.Allowed>(decision)
+        assertTrue(token.consumed)
+
+        // 3. Attempting a second action with the same token is denied (it was used up)
+        val secondAction = FriendAction.RedoSetup
+        val secondDecision = authorizer.applyAction(token, secondAction)
+        assertIs<Decision.Denied>(secondDecision)
+    }
+
+    @Test
+    fun `closing bottom sheet wastes the code and consumes the token`() {
+        val authorizer = FriendCodeAuthorizer(checker)
+        val (authResult, _) = authorizer.authorize(goodCode, now, lastUsedCounter = null)
+        val token = (authResult as FriendCodeAuthorizer.AuthResult.Authorized).token
+
+        // Wasting the token
+        val wasteDecision = authorizer.waste(token)
+        assertIs<Decision.Denied>(wasteDecision)
+        assertTrue(token.consumed)
+
+        // Cannot apply action after being wasted
+        val actionDecision = authorizer.applyAction(token, FriendAction.RedoSetup)
+        assertIs<Decision.Denied>(actionDecision)
     }
 
     @Test

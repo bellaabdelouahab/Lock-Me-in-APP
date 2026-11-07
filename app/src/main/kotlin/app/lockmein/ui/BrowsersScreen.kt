@@ -44,7 +44,7 @@ fun BrowsersScreen(onBack: () -> Unit) {
         AppCard {
             Text("Browser policy", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Open: ${config.allowedBrowser?.let(inventory::label) ?: "None"}. Other browsers are closed to prevent filter bypass. Approving another is allowed during the Sunday settings window (20:00 to 21:00) or using a holder code session.",
+                "Open: ${config.allowedBrowser?.let(inventory::label) ?: "None"}. Other browsers are closed to prevent filter bypass. Approving another requires requesting it for Sunday review (20:00 to 21:00) or using the friend's code.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -75,7 +75,7 @@ fun BrowsersScreen(onBack: () -> Unit) {
                             version++
                         }
                     }) {
-                        Text("Approve")
+                        Text(if (manager.locked) "Ask to approve" else "Approve")
                     }
                 }
             }

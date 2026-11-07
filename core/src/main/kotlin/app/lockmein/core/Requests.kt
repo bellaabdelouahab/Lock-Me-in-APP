@@ -14,6 +14,9 @@ enum class RequestKind {
     /** Take an app off the always-blocked list. */
     BLOCKED_REMOVE,
 
+    /** Take an app off the window apps list. */
+    WINDOW_REMOVE,
+
     /** Open a closed browser. */
     BROWSER,
 
@@ -26,44 +29,102 @@ enum class RequestKind {
     /** Reopen the setup to go through the steps again (all but the friend's code). */
     REDO_SETUP,
 
-    /** Take the whole protection off (the friend's code is still needed when it is carried out). */
+    /** Take the whole protection off (monthly uninstall window). */
     REMOVE_PROTECTION,
 }
 
-/** Something that opens the phone up, waiting for its time. */
+@Serializable
+enum class RequestResolution {
+    APPROVED,
+    DISMISSED,
+}
+
+/** Something that opens the phone up, waiting for Sunday review or friend code approval. */
 @Serializable
 data class ChangeRequest(
     val kind: RequestKind,
     /** The package name, or empty when the request is about no single app. */
     val target: String = "",
     val requestedAtMillis: Long,
+    val count: Int = 1,
+    val requestTimes: List<Long> = listOf(requestedAtMillis),
     val settings: LockConfig? = null,
 ) {
     val id: String get() = "$kind:$target"
     val requestedAt: Instant get() = Instant.ofEpochMilli(requestedAtMillis)
 }
 
-/** The waiting requests: kept as text, one per kind and target. */
+/** A previously approved or dismissed request kept in history with its count. */
+@Serializable
+data class ResolvedRequest(
+    val kind: RequestKind,
+    val target: String = "",
+    val count: Int,
+    val requestedAtMillis: Long,
+    val resolvedAtMillis: Long,
+    val resolution: RequestResolution,
+) {
+    val id: String get() = "$kind:$target"
+    val requestedAt: Instant get() = Instant.ofEpochMilli(requestedAtMillis)
+    val resolvedAt: Instant get() = Instant.ofEpochMilli(resolvedAtMillis)
+}
+
+/** The waiting requests and request history. */
 object Requests {
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
-     * Asking again never restarts a wait: the first request counts. The exception is a settings request, which replaces the earlier one
-     * and starts its wait again, so a small change cannot be swapped for a big one after the wait is over.
+     * Asking again never duplicates a request: it increments the counter and records the timestamp.
+     * The initial requestedAtMillis is preserved so the wait is not pushed out.
+     * For settings, the settings draft is updated with the new one.
      */
-    fun add(requests: List<ChangeRequest>, new: ChangeRequest): List<ChangeRequest> {
+    fun add(requests: List<ChangeRequest>, new: ChangeRequest, nowMillis: Long = new.requestedAtMillis): List<ChangeRequest> {
         val existing = requests.firstOrNull { it.id == new.id }
-        return when {
-            existing == null -> requests + new
-            new.kind == RequestKind.SETTINGS -> requests.filter { it.id != new.id } + new
-            else -> requests
+        return if (existing == null) {
+            requests + new.copy(count = 1, requestTimes = listOf(nowMillis))
+        } else {
+            val updated = existing.copy(
+                count = existing.count + 1,
+                requestTimes = existing.requestTimes + nowMillis,
+                settings = if (new.kind == RequestKind.SETTINGS && new.settings != null) new.settings else existing.settings,
+            )
+            requests.map { if (it.id == new.id) updated else it }
         }
     }
 
+    /** Sorts by most asked first (count descending), then oldest requestedAtMillis first. */
+    fun sortByMostAsked(requests: List<ChangeRequest>): List<ChangeRequest> =
+        requests.sortedWith(compareByDescending<ChangeRequest> { it.count }.thenBy { it.requestedAtMillis })
+
     fun cancel(requests: List<ChangeRequest>, id: String): List<ChangeRequest> = requests.filter { it.id != id }
 
-    fun encode(requests: List<ChangeRequest>): String = json.encodeToString(kotlinx.serialization.builtins.ListSerializer(ChangeRequest.serializer()), requests)
+    fun resolve(
+        requests: List<ChangeRequest>,
+        id: String,
+        resolution: RequestResolution,
+        now: Instant,
+    ): Pair<List<ChangeRequest>, ResolvedRequest?> {
+        val req = requests.firstOrNull { it.id == id } ?: return requests to null
+        val resolved = ResolvedRequest(
+            kind = req.kind,
+            target = req.target,
+            count = req.count,
+            requestedAtMillis = req.requestedAtMillis,
+            resolvedAtMillis = now.toEpochMilli(),
+            resolution = resolution,
+        )
+        return requests.filter { it.id != id } to resolved
+    }
+
+    fun encode(requests: List<ChangeRequest>): String =
+        json.encodeToString(kotlinx.serialization.builtins.ListSerializer(ChangeRequest.serializer()), requests)
 
     fun decode(text: String): List<ChangeRequest> =
         runCatching { json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(ChangeRequest.serializer()), text) }.getOrDefault(emptyList())
+
+    fun encodeHistory(history: List<ResolvedRequest>): String =
+        json.encodeToString(kotlinx.serialization.builtins.ListSerializer(ResolvedRequest.serializer()), history)
+
+    fun decodeHistory(text: String): List<ResolvedRequest> =
+        runCatching { json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(ResolvedRequest.serializer()), text) }.getOrDefault(emptyList())
 }

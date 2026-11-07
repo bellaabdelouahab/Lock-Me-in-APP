@@ -11,8 +11,10 @@ for _ in $(seq 1 30); do
 done
 adb shell "echo | toybox nc -w 5 8.8.8.8 853; echo dot_rc=\$?"
 
-./gradlew :app:installDebug --console=plain || exit 1
+./gradlew :test-app:assembleDebug :app:installDebug --console=plain || exit 1
 adb shell dpm set-device-owner app.lockmein/.AdminReceiver || exit 1
+test_apk=$(find test-app/build/outputs/apk -name "*debug.apk" | head -n 1)
+adb push "$test_apk" /data/local/tmp/test-app.apk
 
 ./gradlew :app:connectedDebugAndroidTest --console=plain
 status=$?

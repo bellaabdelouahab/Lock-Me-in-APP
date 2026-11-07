@@ -103,6 +103,10 @@ fun SettingsScreen(onBack: () -> Unit) {
     Page("Settings", onBack) {
         OutcomeText(outcome)
 
+        if (manager.locked) {
+            Note("Settings are locked. Any change requested here will wait for Sunday review (20:00 to 21:00).")
+        }
+
         // Section: Protection
         Heading("Protection")
         AppCard {
@@ -155,7 +159,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     } else {
                         scope.background({ manager.startRedo() }) { res ->
                             outcome = res
-                            if (res is Outcome.Done) navigate(Screen.SETUP)
+                            if (store.redoing) navigate(Screen.SETUP)
                         }
                     }
                 },

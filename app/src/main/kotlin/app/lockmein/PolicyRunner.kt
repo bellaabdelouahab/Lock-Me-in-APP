@@ -5,14 +5,12 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import app.lockmein.core.AppList
 import app.lockmein.core.BuildMode
 import app.lockmein.core.EventKind
 import app.lockmein.core.Inventory
 import app.lockmein.core.LockConfig
 import app.lockmein.core.PolicyPlan
 import app.lockmein.core.PolicyPlanner
-import app.lockmein.core.ScheduledRemovals
 import java.time.Duration
 import java.time.Instant
 
@@ -38,32 +36,13 @@ class PolicyRunner(private val context: Context) {
         if (BuildConfig.PREVIEW) return RunResult(ApplyReport(emptyList()), now.plus(CHECK_EVERY))
 
         val state = LockState(context)
-        var currentConfig = config
-
-        // Apply any scheduled removals that are now due
-        val dueRemovals = ScheduledRemovals.due(state.scheduledRemovals, now)
-        if (dueRemovals.isNotEmpty()) {
-            var updatedConfig = currentConfig
-            for (removal in dueRemovals) {
-                updatedConfig = when (removal.list) {
-                    AppList.NIGHT_CLOSED -> updatedConfig.copy(nightClosed = updatedConfig.nightClosed - removal.packageName)
-                    AppList.ALWAYS_BLOCKED -> updatedConfig.copy(alwaysBlocked = updatedConfig.alwaysBlocked - removal.packageName)
-                    AppList.WINDOW_APPS -> updatedConfig.copy(windowApps = updatedConfig.windowApps - removal.packageName)
-                }
-                events.add(EventKind.LOOSENED, "Scheduled removal: ${removal.packageName} from ${removal.list}", now)
-            }
-            state.scheduledRemovals = ScheduledRemovals.remaining(state.scheduledRemovals, now)
-            ConfigStore(context).save(updatedConfig)
-            currentConfig = updatedConfig
-        }
-
-        val schedule = Rules.schedule(currentConfig)
+        val schedule = Rules.schedule(config)
         state.noteInstalled(DeviceInventory(context).read().installed).forEach { events.add(EventKind.APP_QUARANTINED, it, now) }
 
-        val plan = planFor(currentConfig, now)
+        val plan = planFor(config, now)
 
         // Before suspending window apps outside the daily window, send the user home if one is in foreground
-        val willSuspendWindowApps = plan.suspended.intersect(currentConfig.windowApps)
+        val willSuspendWindowApps = plan.suspended.intersect(config.windowApps)
         if (willSuspendWindowApps.isNotEmpty()) {
             sendHomeIfForeground(willSuspendWindowApps)
         }
@@ -75,8 +54,7 @@ class PolicyRunner(private val context: Context) {
         val candidates = buildList {
             schedule.nextTransition(now)?.let(::add)
             add(now.plus(CHECK_EVERY))
-            state.sessionUntil?.takeIf { it.isAfter(now) }?.let(::add)
-            addAll(state.scheduledRemovals.map { it.dueAt }.filter { it.isAfter(now) })
+            addAll(state.unblocks(now).values.filter { it.isAfter(now) })
         }
         val next = candidates.min()
         scheduleAt(next, now)
@@ -112,7 +90,7 @@ class PolicyRunner(private val context: Context) {
         return PolicyPlanner(Rules.forDevice(snapshot, context.packageName, config, state.unsuspendable), config.dnsHost).plan(
             schedule.phaseAt(now),
             mode,
-            Inventory(snapshot.installed, state.approvedBrowsers, state.quarantined, emptySet()),
+            Inventory(snapshot.installed, state.approvedBrowsers, state.quarantined, state.unblocks(now).keys),
             dailyWindowOpen = dailyWindowOpen,
         )
     }

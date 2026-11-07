@@ -7,7 +7,7 @@ enum class ChangeKind {
     /** Makes the phone more closed. Always allowed. */
     TIGHTEN,
 
-    /** Opens something up: an app, a site, a lock, a setting. Allowed in the settings window or during a code session. */
+    /** Opens something up: an app, a site, a lock, a setting. Must be requested and reviewed on Sunday, or done via friend's code. */
     LOOSEN,
 }
 
@@ -17,37 +17,49 @@ sealed interface Decision {
 }
 
 /**
- * Says whether a change may happen now.
+ * Rules for approving and reviewing changes.
  *
- * Tightening is instant. Loosening (removing an app, changing settings) is only allowed in the weekly settings window
- * or during a 15-minute holder-code session.
+ * Tightening is instant at any time.
+ * Loosening requires a request reviewed on Sunday 20:00-21:00 (must be requested before the window starts).
+ * Requests made during the Sunday window wait until next Sunday.
  */
 class ChangeGate(
     private val schedule: Schedule,
     private val clockGuard: ClockGuard = ClockGuard(),
-    val wait: Duration = Duration.ofDays(7),
 ) {
     fun decide(kind: ChangeKind): Decision = when (kind) {
         ChangeKind.TIGHTEN -> Decision.Allowed("tightening is always allowed")
-        ChangeKind.LOOSEN -> Decision.Denied("opening something up is only allowed in the settings window or during a code session")
+        ChangeKind.LOOSEN -> Decision.Denied("opening something up must be requested and reviewed on Sunday")
     }
 
-    fun canLoosen(inSettingsWindow: Boolean, inSession: Boolean): Decision =
-        if (inSettingsWindow || inSession) Decision.Allowed("in settings window or session")
-        else Decision.Denied("changes are only allowed in the Sunday settings window or during a holder code session")
-
-    fun readyAt(request: ChangeRequest): Instant = request.requestedAt.plus(wait)
-
-    /** May this waiting request be carried out now? */
-    fun decideApply(request: ChangeRequest, now: Instant, networkTime: Instant?): Decision {
-        when (clockGuard.trust(now, networkTime)) {
-            ClockTrust.DISAGREE -> return Decision.Denied("the phone clock and the network clock disagree")
-            ClockTrust.UNKNOWN -> return Decision.Denied("no network time to confirm the clock")
-            else -> Unit
+    /**
+     * Decides whether a waiting request may be approved right now on Sunday.
+     * Requests made before the current Sunday window start are approvable.
+     * Requests made during the window wait until next Sunday.
+     */
+    fun decideSundayReview(request: ChangeRequest, now: Instant, networkTime: Instant? = null): Decision {
+        if (networkTime != null) {
+            when (clockGuard.trust(now, networkTime)) {
+                ClockTrust.DISAGREE -> return Decision.Denied("the phone clock and the network clock disagree")
+                ClockTrust.UNKNOWN -> return Decision.Denied("no network time to confirm the clock")
+                else -> Unit
+            }
         }
-        val ready = readyAt(request)
-        if (now < ready) return Decision.Denied("the wait ends at $ready")
-        if (schedule.phaseAt(now) != Phase.OPEN_WINDOW) return Decision.Denied("changes apply in the open window, which starts at ${schedule.nextWindowStart(now)}")
-        return Decision.Allowed("waited and in the open window")
+        if (!schedule.inSettingsWindow(now)) {
+            return Decision.Denied("requests can only be approved during the Sunday settings window (20:00 to 21:00)")
+        }
+        val windowStart = schedule.currentSettingsWindowStart(now)
+            ?: return Decision.Denied("not in Sunday settings window")
+        if (request.requestedAt.isBefore(windowStart)) {
+            return Decision.Allowed("requested before Sunday settings window")
+        }
+        return Decision.Denied("requests made during the Sunday window wait until next Sunday")
     }
+
+    /** Alias for Sunday review. */
+    fun decideApply(request: ChangeRequest, now: Instant, networkTime: Instant? = null): Decision =
+        decideSundayReview(request, now, networkTime)
+
+    /** Giving up or dismissing a request is always allowed. */
+    fun decideDismiss(request: ChangeRequest): Decision = Decision.Allowed("dismissing a request is always allowed")
 }

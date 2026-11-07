@@ -18,5 +18,6 @@ class AppListEditorTest {
     fun `an opening edit becomes the matching request`() {
         assertEquals(RequestKind.NIGHT_REMOVE, editor.requestKind(AppList.NIGHT_CLOSED))
         assertEquals(RequestKind.BLOCKED_REMOVE, editor.requestKind(AppList.ALWAYS_BLOCKED))
+        assertEquals(RequestKind.WINDOW_REMOVE, editor.requestKind(AppList.WINDOW_APPS))
     }
 }

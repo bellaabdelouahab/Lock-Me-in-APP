@@ -12,10 +12,12 @@ import app.lockmein.core.CodeChecker
 import app.lockmein.core.ConfigRules
 import app.lockmein.core.Decision
 import app.lockmein.core.EventKind
+import app.lockmein.core.FriendAction
 import app.lockmein.core.FriendCode
 import app.lockmein.core.ListOp
 import app.lockmein.core.LockConfig
 import app.lockmein.core.RequestKind
+import app.lockmein.core.RequestResolution
 import app.lockmein.core.Requests
 import java.time.Duration
 import java.time.Instant
@@ -29,8 +31,9 @@ sealed interface Outcome {
 /**
  * Every change goes through here, so the rules are in one place.
  * Adding apps to lists is tightening and applies instantly.
- * Removing apps or changing settings requires the weekly settings window or a 15-minute holder code session.
- * Removing an app schedules a removal that takes effect 7 days later.
+ * Loosening changes during the week are recorded as requests for Sunday review (20:00 to 21:00).
+ * Sunday settings window is for approving or dismissing waiting requests only (no modifications on the spot).
+ * Friend's code validates once and unlocks exactly one action from a bottom sheet with no second prompt.
  */
 class ChangeManager(private val context: Context) {
     private val store = ConfigStore(context)
@@ -41,27 +44,20 @@ class ChangeManager(private val context: Context) {
     private val editor = AppListEditor()
 
     /** The rules are locked only once the setup completed with every check passing; before that, every change is free. */
-    private val locked get() = store.protectionActive && store.setupComplete
+    val locked get() = store.protectionActive && store.setupComplete
 
     fun config(): LockConfig = checkNotNull(store.load()) { "the setup has not been finished" }
 
-    private fun gate(config: LockConfig) = ChangeGate(Rules.schedule(config), wait = Duration.ofDays(config.loosenWaitDays.toLong()))
+    private fun gate(config: LockConfig) = ChangeGate(Rules.schedule(config))
 
     private fun refused(why: String, what: String, now: Instant): Outcome.Refused {
         events.add(EventKind.DENIED, "$what: $why", now)
         return Outcome.Refused("Not now: $why.")
     }
 
-    /** Checks whether changes (editing settings, scheduled removals, releasing apps, approving browsers) are permitted right now. */
-    fun canChange(now: Instant = TrustedClock(context).now()): Boolean {
-        if (!locked) return true
-        val schedule = Rules.schedule(config())
-        return schedule.inSettingsWindow(now) || state.inSession(now)
-    }
-
-    /** Opens a 15-minute change session using a valid holder code. 5 wrong codes lock out for 30 min. */
-    fun openSession(code: String, now: Instant = TrustedClock(context).now()): Outcome {
-        val secret = secrets.load() ?: return Outcome.Refused("No holder code is set up.")
+    /** Validates a 6-digit friend code. If valid, burns the code counter immediately and clears lockout. */
+    fun checkFriendCode(code: String, now: Instant = TrustedClock(context).now()): Outcome {
+        val secret = secrets.load() ?: return Outcome.Refused("No friend's code is set up.")
         val check = CodeChecker(secret).check(
             entered = code,
             now = now,
@@ -94,12 +90,90 @@ class ChangeManager(private val context: Context) {
             }
             is CodeCheck.Accepted -> {
                 state.lastCodeCounter = check.counter
-                state.startSession(now)
-                events.add(EventKind.LOOSENED, "15-minute change session started", now)
-                PolicyRunner(context).runIfActive(now)
-                Outcome.Done("Session started. You have 15 minutes to make changes.")
+                state.failedCodeAttempts = 0
+                state.lockoutUntil = null
+                Outcome.Done("Code verified.")
             }
         }
+    }
+
+    /** Authorizes friend code and returns token for test and UI flows */
+    fun checkHolderCode(code: String, now: Instant = TrustedClock(context).now()): Pair<app.lockmein.core.FriendCodeAuthorizer.FriendAuthToken?, Outcome> {
+        val outcome = checkFriendCode(code, now)
+        return if (outcome is Outcome.Done) {
+            app.lockmein.core.FriendCodeAuthorizer.FriendAuthToken(state.lastCodeCounter ?: 0L) to outcome
+        } else {
+            null to outcome
+        }
+    }
+
+    fun friendUnblockApp(packageName: String, now: Instant = TrustedClock(context).now()): Outcome =
+        applyFriendAction(FriendAction.OpenAppForHour(packageName), now)
+
+    fun friendRedoSetup(now: Instant = TrustedClock(context).now()): Outcome =
+        applyFriendAction(FriendAction.RedoSetup, now)
+
+    fun approveRequest(id: String, now: Instant = TrustedClock(context).now()): Outcome =
+        approveSundayRequest(id, now)
+
+    fun dismissRequest(id: String, now: Instant = TrustedClock(context).now()): Outcome =
+        dismissSundayRequest(id, now)
+
+    /** Applies exactly one action chosen from the bottom sheet after friend's code verification. No second code asked. */
+    fun applyFriendAction(action: FriendAction, now: Instant = TrustedClock(context).now()): Outcome {
+        return when (action) {
+            is FriendAction.OpenAppForHour -> {
+                state.unblock(action.packageName, now.plus(Duration.ofHours(1)))
+                events.add(EventKind.LOOSENED, "Opened ${action.packageName} for 1 hour with friend code", now)
+                PolicyRunner(context).runIfActive(now)
+                Outcome.Done("Opened ${DeviceInventory(context).label(action.packageName)} for one hour.")
+            }
+            is FriendAction.ApproveRequest -> {
+                val request = state.requests.firstOrNull { it.id == action.requestId }
+                    ?: return Outcome.Refused("That request is no longer waiting.")
+                carryOut(request, config(), now, " with friend code")
+                state.recordResolution(request, RequestResolution.APPROVED, now)
+                Outcome.Done("Approved request.")
+            }
+            is FriendAction.StopBlockingApp -> {
+                val config = config()
+                val untouchable = DeviceInventory(context).read().protectedPackages + context.packageName
+                if (action.packageName in untouchable) return Outcome.Refused("This app keeps the phone working and cannot be listed.")
+                val updated = when (action.list) {
+                    AppList.NIGHT_CLOSED -> config.copy(nightClosed = config.nightClosed - action.packageName)
+                    AppList.ALWAYS_BLOCKED -> config.copy(alwaysBlocked = config.alwaysBlocked - action.packageName)
+                    AppList.WINDOW_APPS -> config.copy(windowApps = config.windowApps - action.packageName)
+                }
+                ConfigRules.problems(updated).firstOrNull()?.let { return Outcome.Refused(it) }
+                store.save(updated)
+                events.add(EventKind.LOOSENED, "Stop blocking ${action.packageName} on ${action.list} with friend code", now)
+                PolicyRunner(context).runIfActive(now)
+                Outcome.Done("Stopped blocking ${DeviceInventory(context).label(action.packageName)}.")
+            }
+            is FriendAction.ReleaseApp -> {
+                state.release(action.packageName)
+                events.add(EventKind.APP_RELEASED, "${action.packageName} with friend code", now)
+                PolicyRunner(context).runIfActive(now)
+                Outcome.Done("Let ${DeviceInventory(context).label(action.packageName)} through.")
+            }
+            is FriendAction.ApproveBrowser -> {
+                state.approveBrowser(action.packageName)
+                events.add(EventKind.BROWSER_APPROVED, "${action.packageName} with friend code", now)
+                PolicyRunner(context).runIfActive(now)
+                Outcome.Done("Approved browser ${DeviceInventory(context).label(action.packageName)}.")
+            }
+            FriendAction.RedoSetup -> {
+                reopenSetup()
+                events.add(EventKind.LOOSENED, "Redo setup with friend code", now)
+                Outcome.Done("The setup is open. Go through the steps, then Start to lock it again.")
+            }
+        }
+    }
+
+    /** Called when the user dismisses the bottom sheet without selecting an action, wasting the entered code. */
+    fun wasteFriendCode(now: Instant = TrustedClock(context).now()): Outcome {
+        events.add(EventKind.EMERGENCY_REFUSED, "Code wasted without choosing an action", now)
+        return Outcome.Refused("This code is now used. Pick one action.")
     }
 
     /** Re-keys the holder secret. Requires the current valid code first. */
@@ -131,8 +205,8 @@ class ChangeManager(private val context: Context) {
         return newFriendSecret()
     }
 
-    /** The waiting requests, oldest first. */
-    fun requests(): List<ChangeRequest> = state.requests.sortedBy { it.requestedAtMillis }
+    /** The waiting requests, sorted by most asked first. */
+    fun requests(): List<ChangeRequest> = Requests.sortByMostAsked(state.requests)
 
     /** Gives up a waiting request. This closes things, so it is always allowed. */
     fun cancelRequest(id: String, now: Instant = TrustedClock(context).now()): Outcome {
@@ -141,21 +215,38 @@ class ChangeManager(private val context: Context) {
         return Outcome.Done("Cancelled.")
     }
 
-    /** Carries out a waiting request, if its wait is over and the open window is running. */
-    fun applyRequest(id: String, now: Instant = TrustedClock(context).now(), networkTime: Instant? = NetworkClock.now()): Outcome {
+    /** Approves a waiting request during Sunday settings window review (20:00 to 21:00). */
+    fun approveSundayRequest(id: String, now: Instant = TrustedClock(context).now(), networkTime: Instant? = NetworkClock.now()): Outcome {
         val request = state.requests.firstOrNull { it.id == id } ?: return Outcome.Refused("That request is gone.")
         val config = config()
-        val decision = gate(config).decideApply(request, now, networkTime)
-        if (decision is Decision.Denied) return refused(decision.why, "apply ${request.id}", now)
-        return carryOut(request, config, now, "")
+        val decision = gate(config).decideSundayReview(request, now, networkTime)
+        if (decision is Decision.Denied) return refused(decision.why, "approve ${request.id}", now)
+        val carryResult = carryOut(request, config, now, "")
+        if (carryResult is Outcome.Done) {
+            state.recordResolution(request, RequestResolution.APPROVED, now)
+        }
+        return carryResult
     }
 
-    /** Applies a request whose wait is over and drops it from the queue. */
+    /** Dismisses a waiting request during Sunday review. */
+    fun dismissSundayRequest(id: String, now: Instant = TrustedClock(context).now()): Outcome {
+        val request = state.requests.firstOrNull { it.id == id } ?: return Outcome.Refused("That request is gone.")
+        state.recordResolution(request, RequestResolution.DISMISSED, now)
+        events.add(EventKind.REQUEST_CANCELLED, "Sunday dismiss ${request.id}", now)
+        return Outcome.Done("Dismissed.")
+    }
+
+    /** Alias for Sunday review approval. */
+    fun applyRequest(id: String, now: Instant = TrustedClock(context).now(), networkTime: Instant? = NetworkClock.now()): Outcome =
+        approveSundayRequest(id, now, networkTime)
+
+    /** Applies a request and drops it from the queue. */
     private fun carryOut(request: ChangeRequest, config: LockConfig, now: Instant, how: String): Outcome {
         val updated: LockConfig = when (request.kind) {
             RequestKind.NIGHT_ADD -> config
             RequestKind.NIGHT_REMOVE -> config.copy(nightClosed = config.nightClosed - request.target)
             RequestKind.BLOCKED_REMOVE -> config.copy(alwaysBlocked = config.alwaysBlocked - request.target)
+            RequestKind.WINDOW_REMOVE -> config.copy(windowApps = config.windowApps - request.target)
             RequestKind.SETTINGS -> request.settings ?: return Outcome.Refused("That request holds no settings.")
             RequestKind.BROWSER -> { state.approveBrowser(request.target); config }
             RequestKind.RELEASE_APP -> { state.release(request.target); config }
@@ -198,10 +289,6 @@ class ChangeManager(private val context: Context) {
         }
 
         // REMOVE (loosening)
-        if (locked && !canChange(now)) {
-            return refused("removing an app is only allowed in the weekly settings window or during a code session", "remove $packageName from $list", now)
-        }
-
         if (!locked) {
             val newList = current - packageName
             val updated = when (list) {
@@ -214,42 +301,40 @@ class ChangeManager(private val context: Context) {
             return Outcome.Done()
         }
 
-        // When locked, removal is a scheduled removal taking effect 7 days later
-        state.scheduleRemoval(list, packageName, now)
-        events.add(EventKind.LOOSEN_REQUESTED, "Scheduled removal: $packageName from $list", now)
-        PolicyRunner(context).runIfActive(now)
-        val due = now.plus(Duration.ofDays(7))
-        return Outcome.Done("Scheduled to unblock in 7 days ($due).")
+        // When locked: removal is only a request reviewed on Sunday
+        val kind = when (list) {
+            AppList.NIGHT_CLOSED -> RequestKind.NIGHT_REMOVE
+            AppList.ALWAYS_BLOCKED -> RequestKind.BLOCKED_REMOVE
+            AppList.WINDOW_APPS -> RequestKind.WINDOW_REMOVE
+        }
+        val req = ChangeRequest(kind, packageName, now.toEpochMilli())
+        val count = state.addRequest(req, now)
+        events.add(EventKind.LOOSEN_REQUESTED, "Requested removal: $packageName from $list (asked $count times)", now)
+        return Outcome.Done("Removal requested. Review on Sunday 20:00 to 21:00.")
     }
 
-    fun cancelScheduledRemoval(id: String, now: Instant = TrustedClock(context).now()): Outcome {
-        state.cancelRemoval(id)
-        events.add(EventKind.REQUEST_CANCELLED, "Cancelled scheduled removal $id", now)
-        return Outcome.Done("Cancelled.")
-    }
-
-    /** Saves changed settings (DNS host, browser, rhythm, location). */
+    /** Saves changed settings (DNS host, browser, rhythm, location). When locked, recorded as request. */
     fun saveSettings(updated: LockConfig, now: Instant = TrustedClock(context).now()): Outcome {
         ConfigRules.problems(updated).firstOrNull()?.let { return Outcome.Refused(it) }
         if (locked) {
-            if (!canChange(now)) {
-                return refused("settings can only be changed in the weekly settings window or during a code session", "save settings", now)
-            }
             if (config() == updated) return Outcome.Done("Nothing changed.")
-            store.save(updated)
-            events.add(EventKind.LOOSENED, "Settings updated in window or session", now)
-            PolicyRunner(context).runIfActive(now)
-            return Outcome.Done("Saved.")
+            val req = ChangeRequest(RequestKind.SETTINGS, "", now.toEpochMilli(), settings = updated)
+            val count = state.addRequest(req, now)
+            events.add(EventKind.LOOSEN_REQUESTED, "Requested settings change (asked $count times)", now)
+            return Outcome.Done("Settings change requested. Review on Sunday 20:00 to 21:00.")
         }
         store.save(updated)
         PolicyRunner(context).runIfActive(now)
         return Outcome.Done("Saved.")
     }
 
-    /** Lets a held-back new app through. */
+    /** Lets a held-back new app through. When locked, recorded as request. */
     fun releaseApp(packageName: String, now: Instant = TrustedClock(context).now()): Outcome {
-        if (locked && !canChange(now)) {
-            return refused("releasing an app is only allowed in the weekly settings window or during a code session", "release $packageName", now)
+        if (locked) {
+            val req = ChangeRequest(RequestKind.RELEASE_APP, packageName, now.toEpochMilli())
+            val count = state.addRequest(req, now)
+            events.add(EventKind.LOOSEN_REQUESTED, "Requested to let $packageName through (asked $count times)", now)
+            return Outcome.Done("Requested to let through. Review on Sunday 20:00 to 21:00.")
         }
         state.release(packageName)
         events.add(EventKind.APP_RELEASED, packageName, now)
@@ -257,10 +342,13 @@ class ChangeManager(private val context: Context) {
         return Outcome.Done("Let through.")
     }
 
-    /** Approves a closed browser. */
+    /** Approves a closed browser. When locked, recorded as request. */
     fun approveBrowser(packageName: String, now: Instant = TrustedClock(context).now()): Outcome {
-        if (locked && !canChange(now)) {
-            return refused("approving a browser is only allowed in the weekly settings window or during a code session", "approve browser $packageName", now)
+        if (locked) {
+            val req = ChangeRequest(RequestKind.BROWSER, packageName, now.toEpochMilli())
+            val count = state.addRequest(req, now)
+            events.add(EventKind.LOOSEN_REQUESTED, "Requested to approve browser $packageName (asked $count times)", now)
+            return Outcome.Done("Browser approval requested. Review on Sunday 20:00 to 21:00.")
         }
         state.approveBrowser(packageName)
         events.add(EventKind.BROWSER_APPROVED, packageName, now)
@@ -347,36 +435,17 @@ class ChangeManager(private val context: Context) {
         return Outcome.Done("Reset. Private DNS is back to automatic, nothing is blocked, and the setup starts again from the beginning.")
     }
 
-    /** Redo setup immediately if inside settings window or active holder session; otherwise refuses. */
+    /** Redo setup immediately if setup is not complete. When locked, requests redo for Sunday review. */
     fun startRedo(now: Instant = TrustedClock(context).now()): Outcome {
-        if (locked && !canChange(now)) {
-            return Outcome.Refused("Only during Sunday settings window (20:00 to 21:00) or using a holder code session.")
+        if (locked) {
+            val req = ChangeRequest(RequestKind.REDO_SETUP, "", now.toEpochMilli())
+            val count = state.addRequest(req, now)
+            events.add(EventKind.LOOSEN_REQUESTED, "Requested redo setup (asked $count times)", now)
+            return Outcome.Done("Redo setup requested. Review on Sunday 20:00 to 21:00.")
         }
         reopenSetup()
         events.add(EventKind.LOOSENED, "Redo setup started", now)
         return Outcome.Done("Setup is open.")
-    }
-
-    /** The holder code skips the wait: the setup reopens at once. */
-    fun redoWithCode(code: String, now: Instant = TrustedClock(context).now()): Outcome {
-        val secret = secrets.load() ?: return Outcome.Refused("No holder code is set up.")
-        val check = CodeChecker(secret).check(
-            entered = code,
-            now = now,
-            lastUsedCounter = state.lastCodeCounter,
-            failedAttempts = state.failedCodeAttempts,
-            lockoutUntil = state.lockoutUntil,
-        )
-        if (check !is CodeCheck.Accepted) {
-            events.add(EventKind.EMERGENCY_REFUSED, "wrong or used code", now)
-            return refused("that code is wrong or was already used", "redo setup", now)
-        }
-        state.lastCodeCounter = check.counter
-        state.failedCodeAttempts = 0
-        state.lockoutUntil = null
-        reopenSetup()
-        events.add(EventKind.LOOSENED, "REDO_SETUP with the holder code", now)
-        return Outcome.Done("The setup is open. Go through the steps, then Start to lock it again.")
     }
 
     /** Lists and settings change freely until Start passes every check again; the protection itself stays on meanwhile. */

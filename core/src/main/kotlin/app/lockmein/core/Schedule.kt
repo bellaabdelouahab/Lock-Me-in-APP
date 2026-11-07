@@ -78,6 +78,13 @@ class Schedule(
         return time >= config.windowStart && time < config.windowEnd
     }
 
+    /** Start of the current weekly settings window, or null if outside the window. */
+    fun currentSettingsWindowStart(instant: Instant): Instant? {
+        if (!inSettingsWindow(instant)) return null
+        val local = instant.atZone(zone)
+        return ZonedDateTime.of(local.toLocalDate(), config.windowStart, zone).toInstant()
+    }
+
     /** Monthly uninstall window: 1st of each month 20:00 to 21:00. Remove Lock Me In allowed. */
     fun inUninstallWindow(instant: Instant): Boolean {
         val local = instant.atZone(zone)
