@@ -15,6 +15,7 @@ import app.lockmein.core.KnownBrowsers
 import app.lockmein.core.LockConfig
 import app.lockmein.core.Phase
 import app.lockmein.core.PolicyPlanner
+import app.lockmein.core.RequestKind
 import app.lockmein.core.Restrictions
 import app.lockmein.core.Totp
 import org.junit.After
@@ -176,7 +177,7 @@ class PolicyApplierTest {
         val reqOutcome = manager.releaseApp(app, mondayNoon)
         assertTrue(reqOutcome is Outcome.Done)
         assertTrue(app in state.quarantined)
-        val reqId = "${app.lockmein.core.RequestKind.RELEASE_APP}:$app"
+        val reqId = "${RequestKind.RELEASE_APP}:$app"
 
         // Outside Sunday settings window, approval is refused
         assertTrue(manager.approveRequest(reqId, mondayNoon) is Outcome.Refused)
@@ -202,7 +203,7 @@ class PolicyApplierTest {
         val removeRes = manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app, mondayNoon)
         assertTrue(removeRes is Outcome.Done)
         assertTrue(app in store.load()!!.nightClosed)
-        val reqId = "${app.lockmein.core.RequestKind.NIGHT_REMOVE}:$app"
+        val reqId = "${RequestKind.NIGHT_REMOVE}:$app"
         val req = state.requests.firstOrNull { it.id == reqId }
         assertNotNull(req)
         assertEquals(1, req!!.count)
@@ -249,7 +250,7 @@ class PolicyApplierTest {
         // Changing settings when locked records a request for Sunday review
         assertTrue(manager.saveSettings(changed, mondayNoon) is Outcome.Done)
         assertEquals("22:00", store.load()!!.nightStart)
-        val reqId = "${app.lockmein.core.RequestKind.SETTINGS}:"
+        val reqId = "${RequestKind.SETTINGS}:"
         assertNotNull(state.requests.firstOrNull { it.id == reqId })
 
         // Outside Sunday window: approval refused
@@ -270,7 +271,7 @@ class PolicyApplierTest {
         // Approving browser when locked records a request
         assertTrue(manager.approveBrowser(browser, mondayNoon) is Outcome.Done)
         assertFalse(browser in state.approvedBrowsers)
-        val reqId = "${app.lockmein.core.RequestKind.BROWSER}:$browser"
+        val reqId = "${RequestKind.BROWSER}:$browser"
         assertNotNull(state.requests.firstOrNull { it.id == reqId })
 
         // Outside Sunday window: approval refused
@@ -410,6 +411,7 @@ class PolicyApplierTest {
 
     @Test
     fun f7_requestCountingAndSundayReviewRules() {
+        val manager = ChangeManager(context)
         val app = anAppToSuspend()
         val customConfig = config.copy(nightClosed = setOf(app))
         store.save(customConfig)
@@ -418,7 +420,7 @@ class PolicyApplierTest {
         // 1. Request made on Monday
         val req1 = manager.editList(AppList.NIGHT_CLOSED, ListOp.REMOVE, app, mondayNoon)
         assertTrue(req1 is Outcome.Done)
-        val reqId = "${app.lockmein.core.RequestKind.NIGHT_REMOVE}:$app"
+        val reqId = "${RequestKind.NIGHT_REMOVE}:$app"
         assertEquals(1, state.requests.first { it.id == reqId }.count)
 
         // 2. Request asked again increments count to 2
@@ -439,7 +441,7 @@ class PolicyApplierTest {
         val app2 = appsToSuspend().last()
         store.save(store.load()!!.copy(alwaysBlocked = setOf(app2)))
         manager.editList(AppList.ALWAYS_BLOCKED, ListOp.REMOVE, app2, sunday8thEvening)
-        val req2Id = "${app.lockmein.core.RequestKind.BLOCKED_REMOVE}:$app2"
+        val req2Id = "${RequestKind.BLOCKED_REMOVE}:$app2"
 
         // In same Sunday window: approval refused
         val resSameSunday = manager.approveRequest(req2Id, sunday8thEvening)
@@ -556,7 +558,7 @@ class PolicyApplierTest {
         // Outside window: startRedo records request
         assertTrue(manager.startRedo(mondayNoon) is Outcome.Done)
         assertTrue(store.setupComplete)
-        val reqId = "${app.lockmein.core.RequestKind.REDO_SETUP}:"
+        val reqId = "${RequestKind.REDO_SETUP}:"
         assertNotNull(state.requests.firstOrNull { it.id == reqId })
 
         // In settings window: approveRequest reopens setup
