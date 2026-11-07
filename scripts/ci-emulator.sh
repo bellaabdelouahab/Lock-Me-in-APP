@@ -14,6 +14,10 @@ adb shell "echo | toybox nc -w 5 8.8.8.8 853; echo dot_rc=\$?"
 ./gradlew :test-app:assembleDebug :app:installDebug --console=plain || exit 1
 adb shell dpm set-device-owner app.lockmein/.AdminReceiver || exit 1
 test_apk=$(find test-app/build/outputs/apk -name "*debug.apk" | head -n 1)
+if [ -z "$test_apk" ] || [ ! -f "$test_apk" ]; then
+  echo "test_apk not found in test-app/build/outputs/apk!"
+  exit 1
+fi
 adb push "$test_apk" /data/local/tmp/test-app.apk
 
 ./gradlew :app:connectedDebugAndroidTest --console=plain
