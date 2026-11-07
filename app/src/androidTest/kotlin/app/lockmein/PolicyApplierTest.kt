@@ -124,7 +124,7 @@ class PolicyApplierTest {
             Restrictions.CONFIG_PRIVATE_DNS to "disallow_config_private_dns",
         )
         for ((ours, androids) in expected) assertEquals(androids, ours)
-        if (android.os.Build.VERSION.SDK_INT >= 35) assertEquals(UserManager.DISALLOW_ADD_PRIVATE_PROFILE, Restrictions.ADD_PRIVATE_PROFILE)
+        if (android.os.Build.VERSION.SDK_INT >= 35) assertEquals("no_add_private_profile" /* UserManager.DISALLOW_ADD_PRIVATE_PROFILE, API 35 */, Restrictions.ADD_PRIVATE_PROFILE)
 
         val plan = planner.plan(Phase.DAY, BuildMode.SEALED, inventory)
         expected.keys.forEach { key ->

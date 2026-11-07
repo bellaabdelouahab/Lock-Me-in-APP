@@ -16,7 +16,8 @@ require(!(preview && testBuild)) { "choose either -Ppreview=true or -PtestOnly=t
 
 android {
     namespace = "app.lockmein"
-    compileSdk = 35
+    // The server check (scripts/check.sh) links with an older aapt2 that only reads up to android-34.
+    compileSdk = providers.gradleProperty("compileSdkOverride").orNull?.toInt() ?: 35
 
     // -PtestRelease=true runs the instrumented tests against the shrunk release build, so CI checks the file that is actually shipped.
     if (providers.gradleProperty("testRelease").orNull == "true") testBuildType = "release"

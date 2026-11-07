@@ -11,17 +11,20 @@ import java.time.Instant
 class EventLog(context: Context) {
     private val file = File(context.filesDir, "events.log")
 
-    @Synchronized
-    fun add(kind: EventKind, detail: String = "", at: Instant = Instant.now()) {
-        val lines = EventLines.trim(read().map(EventLines::encode) + EventLines.encode(LockEvent(at, kind, detail)))
+    // One lock for every instance: the alarm pass, the install receiver and the screens each make their own EventLog, and a
+    // read-then-rewrite from two of them at once would drop events.
+    fun add(kind: EventKind, detail: String = "", at: Instant = Instant.now()) = synchronized(LOCK) {
+        val lines = EventLines.trim(readUnlocked().map(EventLines::encode) + EventLines.encode(LockEvent(at, kind, detail)))
         file.writeText(lines.joinToString("\n", postfix = "\n"))
     }
 
-    @Synchronized
-    fun read(): List<LockEvent> = if (file.exists()) file.readLines().mapNotNull(EventLines::decode) else emptyList()
+    fun read(): List<LockEvent> = synchronized(LOCK) { readUnlocked() }
 
-    @Synchronized
-    fun clear() {
-        file.delete()
+    private fun readUnlocked(): List<LockEvent> = if (file.exists()) file.readLines().mapNotNull(EventLines::decode) else emptyList()
+
+    fun clear() = synchronized(LOCK) { file.delete() }
+
+    private companion object {
+        val LOCK = Any()
     }
 }

@@ -65,11 +65,9 @@ class LockState(context: Context) {
         set(value) = prefs.edit().putString(REQUEST_HISTORY, Requests.encodeHistory(value)).apply()
 
     fun recordResolution(request: ChangeRequest, resolution: RequestResolution, now: Instant) {
-        val (remaining, resolved) = Requests.resolve(requests, request.id, resolution, now)
-        requests = remaining
-        if (resolved != null) {
-            requestHistory = listOf(resolved) + requestHistory
-        }
+        // Works whether or not the request is still queued (carrying one out already drops it from the queue).
+        requests = requests.filter { it.id != request.id }
+        requestHistory = listOf(ResolvedRequest(request.kind, request.target, request.count, request.requestedAtMillis, now.toEpochMilli(), resolution)) + requestHistory
     }
 
     /**
