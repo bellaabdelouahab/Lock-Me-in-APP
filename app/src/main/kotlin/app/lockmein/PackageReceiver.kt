@@ -24,7 +24,7 @@ class PackageReceiver : BroadcastReceiver() {
         if (!store.protectionActive) return
 
         val pendingResult = goAsync()
-        thread(isDaemon = true) {
+        val t = thread(isDaemon = true) {
             try {
                 // Belt and braces: immediately quarantine and suspend if device owner
                 val dpm = context.getSystemService(DevicePolicyManager::class.java)
@@ -44,12 +44,22 @@ class PackageReceiver : BroadcastReceiver() {
 
                 PolicyRunner(context).runIfActive()
             } finally {
+                activeThread = null
                 pendingResult.finish()
             }
         }
+        activeThread = t
     }
 
     companion object {
+        @Volatile
+        var activeThread: Thread? = null
+
+        fun awaitIdle(timeoutMs: Long = 5000) {
+            val t = activeThread ?: return
+            runCatching { t.join(timeoutMs) }
+        }
+
         fun isUntouchable(pkgName: String, appPackage: String): Boolean {
             return pkgName == appPackage ||
                 pkgName == "$appPackage.test" ||

@@ -83,6 +83,7 @@ class PolicyApplierTest {
 
     @Before
     fun reset() {
+        PackageReceiver.awaitIdle()
         events.clear()
         state.clear()
         store.protectionActive = false
@@ -103,6 +104,7 @@ class PolicyApplierTest {
     @After
     fun tidy() {
         runCatching { context.unregisterReceiver(packageReceiver) }
+        PackageReceiver.awaitIdle()
         store.protectionActive = false
         store.setupComplete = false
         state.clear()
@@ -538,6 +540,7 @@ class PolicyApplierTest {
 
         // Clean up
         runShellCommand("pm uninstall $testPkg")
+        PackageReceiver.awaitIdle()
     }
 
     @Test

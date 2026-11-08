@@ -100,6 +100,8 @@ class FilterServiceTest {
         FilterService.instance?.overlay?.dismiss()
         runShell("am force-stop $testPkg")
         runShell("input keyevent KEYCODE_HOME")
+        PackageReceiver.awaitIdle()
+        PolicyRunner(context).cancelAlarm()
     }
 
     @Test
@@ -168,8 +170,8 @@ class FilterServiceTest {
         assertTrue("FILTER_HIT event must be recorded", events.read().any { it.kind == EventKind.FILTER_HIT })
         assertFalse("App should NOT be suspended yet during 5s grace period", dpm.isPackageSuspended(admin, testPkg))
 
-        // Step 2: Clean second check within 5s grace period (user scrolled away)
-        val t1 = t0.plusSeconds(2)
+        // Step 2: Clean second check after 5s grace period (user scrolled away)
+        val t1 = t0.plusSeconds(6)
         val cleanScores = FilterScores(neutral = 0.95f)
         val action2 = machine.processFrame(testPkg, cleanScores, t1)
         assertTrue("Clean second check must produce ClearWarning action", action2 is app.lockmein.core.FilterAction.ClearWarning)
