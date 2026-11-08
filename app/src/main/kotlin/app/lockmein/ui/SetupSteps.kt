@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -405,7 +406,95 @@ fun FriendStep(manager: ChangeManager, verified: Boolean, onVerified: () -> Unit
 }
 
 @Composable
-fun ReviewStep(draft: LockConfig, apps: SetupApps?, friendVerified: Boolean, outcome: Outcome?, working: Boolean, onStart: () -> Unit) {
+fun FilterStep(onEnabled: () -> Unit) {
+    val context = LocalContext.current
+    var isEnabled by remember { mutableStateOf(app.lockmein.FilterService.isEnabled(context)) }
+
+    LaunchedEffect(Unit) {
+        if (BuildConfig.PREVIEW) return@LaunchedEffect
+        while (!isEnabled) {
+            delay(1_500)
+            isEnabled = app.lockmein.FilterService.isEnabled(context)
+            if (isEnabled) onEnabled()
+        }
+    }
+
+    StepHeader(
+        Icons.Filled.Visibility,
+        "Turn on the screen filter",
+        "The on-device AI screen filter watches selected apps to detect sexual or revealing content. It runs entirely on the phone: no image is ever saved, stored, or sent.",
+    )
+
+    if (BuildConfig.PREVIEW) {
+        AppCard {
+            Text("Preview build", fontWeight = FontWeight.SemiBold)
+            Text("In this preview build the accessibility service is simulated. Tap Next to continue.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
+        return
+    }
+
+    if (isEnabled) {
+        AppCard {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(Icons.Filled.CheckCircle, null, tint = Palette.Ok, modifier = Modifier.size(24.dp))
+                Column {
+                    Text("Screen filter is on", fontWeight = FontWeight.SemiBold)
+                    Text("The accessibility service is active and ready.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        return
+    }
+
+    AppCard {
+        Text("1. Allow restricted settings (sideloaded apps)", fontWeight = FontWeight.SemiBold)
+        Text(
+            "On Android 13+ (including HyperOS), sideloaded apps need permission before turning on an accessibility service:\n" +
+            "Open App info for Lock Me In, tap the three dots in the top corner, and tap \"Allow restricted settings\".",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        SecondaryButton("Open App info", {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = android.net.Uri.fromParts("package", context.packageName, null)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        })
+    }
+
+    AppCard {
+        Text("2. Turn on Lock Me In Screen Filter", fontWeight = FontWeight.SemiBold)
+        Text(
+            "In Accessibility settings -> Downloaded apps (or Installed services), find \"Lock Me In\" and toggle it on.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        SecondaryButton("Open Accessibility settings", {
+            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        })
+    }
+
+    AppCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
+            Column(Modifier.weight(1f)) {
+                Text("Waiting for service to turn on", fontWeight = FontWeight.SemiBold)
+                Text("Checks automatically every two seconds.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        SecondaryButton("Check now", {
+            isEnabled = app.lockmein.FilterService.isEnabled(context)
+            if (isEnabled) onEnabled()
+        })
+    }
+}
+
+@Composable
+fun ReviewStep(draft: LockConfig, apps: SetupApps?, friendVerified: Boolean, filterOn: Boolean = true, outcome: Outcome?, working: Boolean, onStart: () -> Unit) {
     val problems = ConfigRules.problems(draft)
     fun label(pkg: String) = apps?.launchable?.firstOrNull { it.packageName == pkg }?.label ?: pkg
     StepHeader(Icons.Filled.CheckCircle, "Ready to start", "Review your rules. Nothing is enforced until you tap Start protection.")
@@ -417,14 +506,16 @@ fun ReviewStep(draft: LockConfig, apps: SetupApps?, friendVerified: Boolean, out
         Text("Night starts: ${draft.nightStart}", style = MaterialTheme.typography.bodyMedium)
         Text("Weekly window: day ${draft.windowDay} (${draft.windowStart} to ${draft.windowEnd})", style = MaterialTheme.typography.bodyMedium)
         Text("Friend code: " + if (friendVerified) "Verified" else "Not verified yet", style = MaterialTheme.typography.bodyMedium)
+        Text("Screen filter: " + if (filterOn) "Active (${draft.watchedApps.size} watched apps)" else "Service off", style = MaterialTheme.typography.bodyMedium)
     }
     problems.forEach { Problem(it) }
     if (!friendVerified) Problem("Verify your friend's code first.")
+    if (!filterOn && !BuildConfig.PREVIEW) Problem("Turn on the screen filter accessibility service first.")
     Note("Once protection starts, any change that opens things up is a 7-day request carried out in the weekly window. Closing things is immediate.")
     OutcomeText(outcome)
     PrimaryButton(
         label = if (working) "Starting..." else "Start protection",
-        enabled = !working && problems.isEmpty() && friendVerified,
+        enabled = !working && problems.isEmpty() && friendVerified && (filterOn || BuildConfig.PREVIEW),
         onClick = onStart,
     )
 }

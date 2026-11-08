@@ -19,8 +19,14 @@ kotlin {
 dependencies {
     api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     testImplementation(kotlin("test"))
+    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.19.2")
 }
 
 tasks.test {
     useJUnitPlatform()
+    maxHeapSize = "2048m"
+    systemProperty("test.modelAccuracy", System.getProperty("test.modelAccuracy") ?: "")
+    testLogging {
+        showStandardStreams = true
+    }
 }

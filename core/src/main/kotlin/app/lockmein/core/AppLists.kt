@@ -10,6 +10,9 @@ enum class AppList {
 
     /** Apps suspended outside the daily open window (20:00 to 21:30). */
     WINDOW_APPS,
+
+    /** Apps monitored by the on-device AI screen filter. */
+    WATCHED,
 }
 
 enum class ListOp { ADD, REMOVE }
@@ -23,5 +26,6 @@ class AppListEditor {
         AppList.NIGHT_CLOSED -> RequestKind.NIGHT_REMOVE
         AppList.ALWAYS_BLOCKED -> RequestKind.BLOCKED_REMOVE
         AppList.WINDOW_APPS -> RequestKind.WINDOW_REMOVE
+        AppList.WATCHED -> RequestKind.WATCHED_REMOVE
     }
 }

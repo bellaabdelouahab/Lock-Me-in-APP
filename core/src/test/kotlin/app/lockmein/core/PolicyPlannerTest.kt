@@ -17,6 +17,7 @@ class PolicyPlannerTest {
     private val audio = "org.local.audio"
     private val instagram = "com.instagram.android"
     private val bank = "ma.bank.app"
+    private val manga = "org.tachiyomi.manga"
 
     private val rules = AppRules(
         appPackage = me,
@@ -26,9 +27,10 @@ class PolicyPlannerTest {
         protectedPackages = setOf(phone, launcher, "com.android.systemui", "com.android.settings", "com.android.inputmethod"),
         alwaysBlocked = emptySet(),
         windowApps = setOf(youtube),
+        watchedApps = setOf(brave, instagram, manga),
     )
     private val planner = PolicyPlanner(rules, "abc123.dns.nextdns.io")
-    private val installed = setOf(me, brave, chrome, firefox, youtube, music, phone, launcher, audio, instagram, bank, "com.android.mms", "com.android.deskclock", "com.azure.authenticator")
+    private val installed = setOf(me, brave, chrome, firefox, youtube, music, phone, launcher, audio, instagram, bank, manga, "com.android.mms", "com.android.deskclock", "com.azure.authenticator")
     private val inventory = Inventory(installed)
 
     @Test
@@ -179,6 +181,41 @@ class PolicyPlannerTest {
         assertFalse(Restrictions.FACTORY_RESET in test)
         assertTrue(Restrictions.DEBUGGING in sealed && Restrictions.FACTORY_RESET in sealed)
         assertTrue(test.all { it in sealed })
+    }
+
+    @Test
+    fun `when the filter service is OFF, all managed watched apps are suspended`() {
+        // By day with service ON: brave and manga are unsuspended
+        val onPlan = planner.plan(Phase.DAY, BuildMode.SEALED, inventory.copy(filterServiceEnabled = true), dailyWindowOpen = false)
+        assertFalse(brave in onPlan.suspended)
+        assertFalse(manga in onPlan.suspended)
+
+        // When service is OFF: every watched app is suspended
+        val offPlan = planner.plan(Phase.DAY, BuildMode.SEALED, inventory.copy(filterServiceEnabled = false), dailyWindowOpen = false)
+        assertTrue(brave in offPlan.suspended)
+        assertTrue(manga in offPlan.suspended)
+        assertTrue(instagram in offPlan.suspended)
+        // Non-watched apps (like audio, bank) are unaffected
+        assertFalse(audio in offPlan.suspended)
+        assertFalse(bank in offPlan.suspended)
+    }
+
+    @Test
+    fun `an app suspended by the filter for 30 minutes is added to suspended`() {
+        val filtered = inventory.copy(filterBlocked = setOf(manga))
+        val plan = planner.plan(Phase.DAY, BuildMode.SEALED, filtered, dailyWindowOpen = false)
+        assertTrue(manga in plan.suspended)
+        assertFalse(bank in plan.suspended)
+    }
+
+    @Test
+    fun `an app unblocked by friend code overrides filter suspension`() {
+        val filteredWithFriendPass = inventory.copy(
+            filterBlocked = setOf(manga),
+            temporarilyAllowed = setOf(manga),
+        )
+        val plan = planner.plan(Phase.DAY, BuildMode.SEALED, filteredWithFriendPass, dailyWindowOpen = false)
+        assertFalse(manga in plan.suspended)
     }
 
     @Test

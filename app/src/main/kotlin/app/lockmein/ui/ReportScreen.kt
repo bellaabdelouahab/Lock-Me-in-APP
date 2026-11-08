@@ -22,9 +22,11 @@ import androidx.compose.ui.unit.dp
 import app.lockmein.BuildConfig
 import app.lockmein.EventLog
 import app.lockmein.Updater
+import app.lockmein.core.EventKind
 import app.lockmein.core.Reports
 import java.time.Instant
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /** The last seven days as numbers. Nothing about what was on the screen is ever recorded. */
 @Composable
@@ -39,7 +41,33 @@ fun ReportScreen(onBack: () -> Unit) {
             val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
             context.startActivity(Intent.createChooser(send, "Share the report").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         })
-        Note("The report stays on this phone unless you share it. It holds events (changes, refusals, new apps), never browsing or screen content.")
+        Note("The report stays on this phone unless you share it. It holds events (changes, refusals, new apps, filter detections), never browsing or screen content.")
+
+        val detections = remember {
+            EventLog(context).read()
+                .filter { it.kind == EventKind.FILTER_HIT || it.kind == EventKind.FILTER_BLOCKED }
+                .takeLast(20)
+                .reversed()
+        }
+        if (detections.isNotEmpty()) {
+            Heading("Filter detections")
+            AppCard {
+                detections.forEachIndexed { index, event ->
+                    val timeStr = DateTimeFormatter.ofPattern("EEE d MMM HH:mm").withZone(ZoneId.systemDefault()).format(event.at)
+                    val label = if (event.kind == EventKind.FILTER_BLOCKED) "Closed (30 min)" else "Warning"
+                    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(label, style = MaterialTheme.typography.titleSmall, color = if (event.kind == EventKind.FILTER_BLOCKED) Palette.Closed else Palette.Attention)
+                            Text(timeStr, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text(event.detail, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (index < detections.lastIndex) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    }
+                }
+            }
+        }
     }
 }
 

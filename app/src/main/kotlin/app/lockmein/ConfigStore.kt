@@ -4,6 +4,7 @@ import android.content.Context
 import app.lockmein.core.ALWAYS_BLOCKED_DEFAULT
 import app.lockmein.core.ConfigCodec
 import app.lockmein.core.LockConfig
+import app.lockmein.core.WATCHED_APPS_DEFAULT
 import app.lockmein.core.WINDOW_APPS_DEFAULT
 
 /** The person's settings, saved as text, and whether protection has been started. Holds no secrets. */
@@ -51,12 +52,13 @@ class ConfigStore(context: Context) {
         private const val CONFIG = "config_json"
         private const val ACTIVE = "protection_active"
 
-        /** Migrates config: adds the five packages without dropping existing ones, and ensures windowApps is present. */
+        /** Migrates config: ensures defaults for alwaysBlocked, windowApps, and watchedApps are present without dropping existing. */
         fun migrate(config: LockConfig): LockConfig {
             val newBlocked = config.alwaysBlocked + ALWAYS_BLOCKED_DEFAULT
             val newWindow = if (config.windowApps.isEmpty()) WINDOW_APPS_DEFAULT else config.windowApps
-            return if (newBlocked != config.alwaysBlocked || newWindow != config.windowApps) {
-                config.copy(alwaysBlocked = newBlocked, windowApps = newWindow)
+            val newWatched = config.watchedApps + WATCHED_APPS_DEFAULT
+            return if (newBlocked != config.alwaysBlocked || newWindow != config.windowApps || newWatched != config.watchedApps) {
+                config.copy(alwaysBlocked = newBlocked, windowApps = newWindow, watchedApps = newWatched)
             } else {
                 config
             }

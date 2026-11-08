@@ -16,6 +16,7 @@ object Rules {
         protectedPackages = snapshot.protectedPackages + unsuspendable,
         alwaysBlocked = config.alwaysBlocked,
         windowApps = config.windowApps,
+        watchedApps = config.watchedApps,
     )
 
     fun schedule(config: LockConfig, zone: ZoneId = ZoneId.systemDefault()) =

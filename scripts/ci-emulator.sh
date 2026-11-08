@@ -22,6 +22,8 @@ if [ -z "$test_apk" ] || [ ! -f "$test_apk" ]; then
   exit 1
 fi
 adb push "$test_apk" /data/local/tmp/test-app.apk
+adb shell settings put secure enabled_accessibility_services app.lockmein/app.lockmein.FilterService
+adb shell settings put secure accessibility_enabled 1
 
 ./gradlew :app:connectedDebugAndroidTest --console=plain
 status=$?
@@ -77,9 +79,10 @@ shot() { # name, extras...
   sleep 3
   adb exec-out screencap -p > "app/build/reports/androidTests/shots/$name.png"
 }
-for n in 0 1 2 3 4 5 6; do shot "setup-$n" --ei step $n; done
+for n in 0 1 2 3 4 5 6 7; do shot "setup-$n" --ei step $n; done
 for s in HOME HEALTH WINDOW LISTS BROWSERS EMERGENCY REPORT SETTINGS REMOVE ABOUT; do shot "$(echo $s | tr A-Z a-z)" --es screen $s --ez demo true; done
 shot "lists-window-apps" --es screen LISTS --ei tab 2 --ez demo true
+shot "lists-watched" --es screen LISTS --ei tab 3 --ez demo true
 shot "code" --es screen EMERGENCY --ez demo true
 shot "drawer" --es screen HOME --ez demo true --ez openDrawer true
 exit "$status"

@@ -17,6 +17,9 @@ enum class RequestKind {
     /** Take an app off the window apps list. */
     WINDOW_REMOVE,
 
+    /** Take an app off the watched apps list. */
+    WATCHED_REMOVE,
+
     /** Open a closed browser. */
     BROWSER,
 

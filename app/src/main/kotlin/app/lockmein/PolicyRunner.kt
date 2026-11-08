@@ -55,6 +55,7 @@ class PolicyRunner(private val context: Context) {
             schedule.nextTransition(now)?.let(::add)
             add(now.plus(CHECK_EVERY))
             addAll(state.unblocks(now).values.filter { it.isAfter(now) })
+            addAll(state.filterBlocked(now).values.filter { it.isAfter(now) })
         }
         val next = candidates.min()
         scheduleAt(next, now)
@@ -81,7 +82,11 @@ class PolicyRunner(private val context: Context) {
     }
 
     /** The policy that should be in force right now. The health check compares the phone against it. */
-    fun planFor(config: LockConfig, now: Instant = TrustedClock(context).now()): PolicyPlan {
+    fun planFor(
+        config: LockConfig,
+        now: Instant = TrustedClock(context).now(),
+        filterServiceEnabled: Boolean = FilterService.isEnabled(context),
+    ): PolicyPlan {
         val snapshot = DeviceInventory(context).read()
         val state = LockState(context)
         val mode = if (BuildConfig.TEST_BUILD) BuildMode.TEST else BuildMode.SEALED
@@ -90,7 +95,14 @@ class PolicyRunner(private val context: Context) {
         return PolicyPlanner(Rules.forDevice(snapshot, context.packageName, config, state.unsuspendable), config.dnsHost).plan(
             schedule.phaseAt(now),
             mode,
-            Inventory(snapshot.installed, state.approvedBrowsers, state.quarantined, state.unblocks(now).keys),
+            Inventory(
+                installed = snapshot.installed,
+                approvedBrowsers = state.approvedBrowsers,
+                quarantined = state.quarantined,
+                temporarilyAllowed = state.unblocks(now).keys,
+                filterBlocked = state.filterBlocked(now).keys,
+                filterServiceEnabled = filterServiceEnabled,
+            ),
             dailyWindowOpen = dailyWindowOpen,
         )
     }

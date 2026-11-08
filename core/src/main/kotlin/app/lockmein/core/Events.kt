@@ -37,6 +37,15 @@ enum class EventKind {
     REMOVAL_REQUESTED,
     PROTECTION_STARTED,
     PROTECTION_REMOVED,
+
+    /** Screen filter detected sexual or revealing content. */
+    FILTER_HIT,
+
+    /** App exited and suspended for 30 minutes following second detection. */
+    FILTER_BLOCKED,
+
+    /** Warning cleared after a clean check. */
+    FILTER_CLEARED,
 }
 
 data class LockEvent(val at: Instant, val kind: EventKind, val detail: String = "")
@@ -62,6 +71,9 @@ data class WeeklyReport(
             appendLine("Changes that closed it more: ${count(EventKind.TIGHTENED)}")
             appendLine("Removal requests: ${count(EventKind.REMOVAL_REQUESTED)}")
             appendLine("Browsers asked for: ${count(EventKind.BROWSER_REQUESTED)}, approved: ${count(EventKind.BROWSER_APPROVED)}")
+            if (count(EventKind.FILTER_BLOCKED) > 0 || count(EventKind.FILTER_HIT) > 0) {
+                appendLine("Screen filter detections: ${count(EventKind.FILTER_HIT)} hits, ${count(EventKind.FILTER_BLOCKED)} blocks")
+            }
             if (newApps.isNotEmpty()) appendLine("New apps held back: ${newApps.joinToString()}")
             refusals.forEach { appendLine("Refused ${day.format(it.at)}: ${it.detail}") }
             problems.forEach { appendLine("Problem ${day.format(it.at)}: ${it.detail}") }

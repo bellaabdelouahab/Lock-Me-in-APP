@@ -41,7 +41,7 @@ import app.lockmein.core.LockConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private const val LAST_STEP = 6
+private const val LAST_STEP = 7
 
 private val STEP_TITLES = listOf(
     "Device owner",
@@ -50,6 +50,7 @@ private val STEP_TITLES = listOf(
     "Night apps",
     "Rhythm and place",
     "Friend's code",
+    "Screen filter",
     "Review and start",
 )
 
@@ -74,6 +75,7 @@ fun SetupScreen(onExit: () -> Unit) {
     var friendVerified by rememberSaveable { mutableStateOf(redo) }
     var dnsChecked by rememberSaveable { mutableStateOf<String?>(null) }
     var browserChosen by rememberSaveable { mutableStateOf(redo) }
+    var filterEnabled by remember { mutableStateOf(app.lockmein.FilterService.isEnabled(context)) }
     var afterStart by remember { mutableStateOf<List<app.lockmein.HealthItem>?>(null) }
     var ownerChecked by remember { mutableIntStateOf(0) }
     var outcome by remember { mutableStateOf<Outcome?>(null) }
@@ -101,6 +103,7 @@ fun SetupScreen(onExit: () -> Unit) {
         2 -> browserChosen
         4 -> ConfigRules.problems(draft.copy(dnsHost = "valid.example.com")).isEmpty()
         5 -> friendVerified
+        6 -> filterEnabled || BuildConfig.PREVIEW
         else -> true
     }
 
@@ -110,6 +113,7 @@ fun SetupScreen(onExit: () -> Unit) {
         2 -> "Pick the browser that stays open, or choose none."
         4 -> "Fix any invalid fields above to continue."
         5 -> "Verify the code with your friend to continue."
+        6 -> "Turn on the screen filter accessibility service to continue."
         else -> null
     }
 
@@ -191,7 +195,8 @@ fun SetupScreen(onExit: () -> Unit) {
             3 -> NightStep(draft, apps) { draft = it }
             4 -> RhythmStep(draft) { draft = it }
             5 -> FriendStep(manager, friendVerified) { friendVerified = true }
-            else -> ReviewStep(draft, apps, friendVerified, outcome, working) {
+            6 -> FilterStep { filterEnabled = true }
+            else -> ReviewStep(draft, apps, friendVerified, filterEnabled || BuildConfig.PREVIEW, outcome, working) {
                 working = true
                 outcome = null
                 store.save(draft)

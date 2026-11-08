@@ -42,6 +42,32 @@ class LockState(context: Context) {
     private fun readUnblocks(): Map<String, Instant> =
         prefs.getStringSet(UNBLOCKS, emptySet()).orEmpty().associate { it.substringBefore('=') to Instant.ofEpochMilli(it.substringAfter('=').toLong()) }
 
+    /** Apps suspended by the screen filter (for 30 minutes), and when each block ends. */
+    fun filterBlocked(now: Instant): Map<String, Instant> = readFilterBlocked().filterValues { it.isAfter(now) }
+
+    fun blockWithFilter(packageName: String, until: Instant) =
+        prefs.edit().putStringSet(FILTER_BLOCKED, (readFilterBlocked() + (packageName to until)).map { (pkg, at) -> "$pkg=${at.toEpochMilli()}" }.toSet()).apply()
+
+    fun clearFilterBlocked() = prefs.edit().remove(FILTER_BLOCKED).apply()
+
+    fun clearFilterBlocked(packageName: String) = prefs.edit().putStringSet(
+        FILTER_BLOCKED,
+        readFilterBlocked().filterKeys { it != packageName }.map { "${it.key}=${it.value.toEpochMilli()}" }.toSet()
+    ).apply()
+
+    private fun readFilterBlocked(): Map<String, Instant> =
+        prefs.getStringSet(FILTER_BLOCKED, emptySet()).orEmpty().associate { it.substringBefore('=') to Instant.ofEpochMilli(it.substringAfter('=').toLong()) }
+
+    /** Last time the screen filter performed a check. */
+    var lastFilterCheckMillis: Long
+        get() = prefs.getLong(LAST_FILTER_CHECK, 0L)
+        set(value) = prefs.edit().putLong(LAST_FILTER_CHECK, value).apply()
+
+    /** Last time the screen filter detected a violation. */
+    var lastFilterHitMillis: Long
+        get() = prefs.getLong(LAST_FILTER_HIT, 0L)
+        set(value) = prefs.edit().putLong(LAST_FILTER_HIT, value).apply()
+
     /** The counter of the last holder code that was accepted, so a code is never used twice. */
     var lastCodeCounter: Long?
         get() = if (prefs.contains(LAST_CODE)) prefs.getLong(LAST_CODE, 0L) else null
@@ -125,5 +151,8 @@ class LockState(context: Context) {
         const val LAST_CODE = "last_code_counter"
         const val FAILED_ATTEMPTS = "failed_code_attempts"
         const val LOCKOUT_UNTIL = "lockout_until"
+        const val FILTER_BLOCKED = "filter_blocked_apps"
+        const val LAST_FILTER_CHECK = "last_filter_check"
+        const val LAST_FILTER_HIT = "last_filter_hit"
     }
 }

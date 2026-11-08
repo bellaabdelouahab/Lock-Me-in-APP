@@ -45,11 +45,13 @@ import app.lockmein.Outcome
 import app.lockmein.PolicyRunner
 import app.lockmein.Rules
 import app.lockmein.TrustedClock
+import app.lockmein.FilterService
 import app.lockmein.core.AppList
 import app.lockmein.core.ListOp
 import app.lockmein.core.LockConfig
 import java.time.Instant
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -71,7 +73,7 @@ fun ListsScreen(onBack: () -> Unit) {
     val initialTab = remember {
         (context as? android.app.Activity)?.intent?.getIntExtra("tab", 0) ?: 0
     }
-    var selectedTab by remember { mutableIntStateOf(initialTab.coerceIn(0, 3)) }
+    var selectedTab by remember { mutableIntStateOf(initialTab.coerceIn(0, 4)) }
     var searchQuery by remember { mutableStateOf("") }
     var pendingRemoval by remember { mutableStateOf<PendingRemoval?>(null) }
 
@@ -95,6 +97,7 @@ fun ListsScreen(onBack: () -> Unit) {
         "At night (${config.nightClosed.size})",
         "Always blocked (${config.alwaysBlocked.size})",
         "Window apps (${config.windowApps.size})",
+        "Watched (${config.watchedApps.size})",
         "Now (${closed?.size ?: 0})",
     )
 
@@ -102,7 +105,7 @@ fun ListsScreen(onBack: () -> Unit) {
         title = "Apps",
         onBack = onBack,
         bottomBar = {
-            if (selectedTab < 3) {
+            if (selectedTab < 4) {
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -117,13 +120,15 @@ fun ListsScreen(onBack: () -> Unit) {
                             label = when (selectedTab) {
                                 0 -> "+ Add night apps"
                                 1 -> "+ Add blocked apps"
-                                else -> "+ Add window apps"
+                                2 -> "+ Add window apps"
+                                else -> "+ Add watched apps"
                             },
                             onClick = {
                                 pickingForList = when (selectedTab) {
                                     0 -> AppList.NIGHT_CLOSED
                                     1 -> AppList.ALWAYS_BLOCKED
-                                    else -> AppList.WINDOW_APPS
+                                    2 -> AppList.WINDOW_APPS
+                                    else -> AppList.WATCHED
                                 }
                             },
                         )
@@ -218,6 +223,23 @@ fun ListsScreen(onBack: () -> Unit) {
                 )
             }
             3 -> {
+                // Watched apps
+                Note(
+                    if (!isSetupComplete) "Setup is not complete yet: changes apply at once."
+                    else "The on-device AI screen filter monitors these apps for explicit and revealing content. Adding is instant. Removing is a request for Sunday review.",
+                )
+                renderAppList(
+                    apps = config.watchedApps,
+                    listType = AppList.WATCHED,
+                    searchQuery = searchQuery,
+                    inventory = inventory,
+                    isLocked = isLocked,
+                    onRequestRemove = { pkg, label ->
+                        pendingRemoval = PendingRemoval(AppList.WATCHED, pkg, label)
+                    },
+                )
+            }
+            4 -> {
                 // Closed right now
                 Note("Read directly from Android. This list reflects apps currently suspended on the device.")
                 val list = closed
@@ -303,6 +325,7 @@ fun ListsScreen(onBack: () -> Unit) {
             AppList.NIGHT_CLOSED -> config.nightClosed
             AppList.ALWAYS_BLOCKED -> config.alwaysBlocked
             AppList.WINDOW_APPS -> config.windowApps
+            AppList.WATCHED -> config.watchedApps
         }
         val choices = remember(list, version) {
             inventory.launchableApps().filter { it.packageName !in taken && it.packageName != context.packageName }
@@ -353,6 +376,7 @@ private fun renderAppList(
                     AppList.WINDOW_APPS -> "Open only 20:00 to 21:30"
                     AppList.NIGHT_CLOSED -> "Closed at night"
                     AppList.ALWAYS_BLOCKED -> "Always blocked"
+                    AppList.WATCHED -> "Watched by screen filter"
                 }
 
                 AppRow(
@@ -383,7 +407,11 @@ private fun closedNow(context: android.content.Context, config: LockConfig, now:
 
     return plan.suspended.map { pkg ->
         val isSuspended = if (isOwner) dpm.isPackageSuspended(admin, pkg) else false
+        val filterBlockedUntil = state.filterBlocked(now)[pkg]
+        val isFilterServiceOff = !FilterService.isEnabled(context)
         val why = when {
+            filterBlockedUntil != null -> "Closed by the filter until ${DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(filterBlockedUntil)}."
+            isFilterServiceOff && pkg in config.watchedApps -> "Watched app: closed because the screen filter is off."
             pkg in held -> "New app: held back until reviewed in Requests."
             pkg in config.alwaysBlocked -> "Always blocked."
             pkg in config.windowApps -> "Window app: closed outside 20:00 to 21:30."

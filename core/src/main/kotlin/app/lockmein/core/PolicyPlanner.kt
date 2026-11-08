@@ -32,6 +32,8 @@ data class AppRules(
     val alwaysBlocked: Set<String> = emptySet(),
     /** Apps suspended except during the daily open window (20:00 to 21:30). */
     val windowApps: Set<String> = WINDOW_APPS_DEFAULT,
+    /** Apps watched by the screen filter: suspended if the filter accessibility service is turned off. */
+    val watchedApps: Set<String> = emptySet(),
 )
 
 data class Inventory(
@@ -42,6 +44,10 @@ data class Inventory(
     val quarantined: Set<String> = emptySet(),
     /** Temporary unblocks. */
     val temporarilyAllowed: Set<String> = emptySet(),
+    /** Apps suspended temporarily by the screen filter (30 minutes). */
+    val filterBlocked: Set<String> = emptySet(),
+    /** Whether the screen filter accessibility service is enabled. If false, watched apps are suspended. */
+    val filterServiceEnabled: Boolean = true,
 )
 
 data class PolicyPlan(
@@ -98,6 +104,8 @@ class PolicyPlanner(private val rules: AppRules, private val privateDnsHost: Str
         val window = if (!dailyWindowOpen) rules.windowApps.intersect(managed) else emptySet()
         val nightOnly = if (phase == Phase.NIGHT) rules.nightClosed.intersect(managed) else emptySet()
         val blocked = rules.alwaysBlocked.intersect(managed)
-        return (otherBrowsers + quarantined + window + nightOnly + blocked) - inventory.temporarilyAllowed
+        val filterBlocked = inventory.filterBlocked.intersect(managed)
+        val filterServiceOff = if (!inventory.filterServiceEnabled) rules.watchedApps.intersect(managed) else emptySet()
+        return (otherBrowsers + quarantined + window + nightOnly + blocked + filterBlocked + filterServiceOff) - inventory.temporarilyAllowed
     }
 }

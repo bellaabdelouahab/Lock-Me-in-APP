@@ -79,6 +79,7 @@ fun WindowScreen(onBack: () -> Unit) {
         RequestKind.NIGHT_REMOVE -> "Stop closing at night" to inventory.label(target)
         RequestKind.BLOCKED_REMOVE -> "Unblock app" to inventory.label(target)
         RequestKind.WINDOW_REMOVE -> "Remove from window apps" to inventory.label(target)
+        RequestKind.WATCHED_REMOVE -> "Remove from watched apps" to inventory.label(target)
         RequestKind.BROWSER -> "Approve browser" to inventory.label(target)
         RequestKind.RELEASE_APP -> "Let new app through" to inventory.label(target)
         RequestKind.SETTINGS -> "Change settings" to null

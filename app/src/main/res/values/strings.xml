@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lock Me In</string>
+    <string name="filter_service_description">Watches the screen inside selected watched apps to protect against explicit or revealing content using on-device AI. No image is ever saved, stored, or sent over the network.</string>
+</resources>

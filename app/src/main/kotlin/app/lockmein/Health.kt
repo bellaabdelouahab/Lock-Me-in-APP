@@ -116,6 +116,26 @@ class Health(private val context: Context) {
             items += HealthItem("Chrome settings", chrome, if (chrome) "Private windows off, safe search on, YouTube strict." else "Chrome is not configured: private windows and its own DNS work.")
         }
 
+        val filterEnabled = FilterService.isEnabled(context)
+        val modelReady = FilterModelClassifier.isModelAvailable(context)
+        val lastCheckMillis = LockState(context).lastFilterCheckMillis
+        val lastCheckDetail = if (lastCheckMillis > 0) {
+            val checkTime = Instant.ofEpochMilli(lastCheckMillis)
+            "last frame checked ${Duration.between(checkTime, now).toMinutes()} min ago"
+        } else {
+            "monitoring active"
+        }
+        val filterOk = filterEnabled && modelReady
+        items += HealthItem(
+            "Screen filter",
+            filterOk,
+            when {
+                !filterEnabled -> "Accessibility service is off: all ${config.watchedApps.size} watched apps are suspended until it is turned on."
+                !modelReady -> "Accessibility service is on, but filter model is missing or failed to load."
+                else -> "Accessibility service is on, model loaded ($lastCheckDetail)."
+            },
+        )
+
         val lastOk = EventLog(context).read().lastOrNull { it.kind == EventKind.PASS_OK || it.kind == EventKind.PASS_FAILED }
         val fresh = lastOk != null && lastOk.kind == EventKind.PASS_OK && Duration.between(lastOk.at, now) < WATCHDOG_LATE
         items += HealthItem(

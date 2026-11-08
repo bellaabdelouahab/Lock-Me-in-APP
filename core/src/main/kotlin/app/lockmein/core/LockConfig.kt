@@ -18,6 +18,13 @@ val WINDOW_APPS_DEFAULT = setOf(
     "com.google.android.youtube",
 )
 
+val WATCHED_APPS_DEFAULT = setOf(
+    "com.brave.browser",
+    "com.android.chrome",
+    "com.facebook.katana",
+    "com.instagram.android",
+)
+
 /**
  * Everything a person chooses in the setup. Plain values only, so it can be saved, exported as text and imported on another phone.
  * It holds no secrets: the friend's code and the accounts never go in here.
@@ -33,6 +40,12 @@ data class LockConfig(
     val alwaysBlocked: Set<String> = ALWAYS_BLOCKED_DEFAULT,
     /** Apps suspended all day except during the daily open window (20:00 to 21:30). */
     val windowApps: Set<String> = WINDOW_APPS_DEFAULT,
+    /** Apps monitored by the on-device AI screen filter. */
+    val watchedApps: Set<String> = WATCHED_APPS_DEFAULT,
+    /** Filter threshold for porn + hentai combined score. */
+    val filterPornHentaiThreshold: Float = 0.50f,
+    /** Filter threshold for sexy score. */
+    val filterSexyThreshold: Float = 0.50f,
     /** Start of the night and end of social-app time, "HH:mm". */
     val nightStart: String = "22:00",
     /** The weekly settings window, when settings can be changed and removals scheduled: ISO day (7 = Sunday) and its hours. */
@@ -58,6 +71,7 @@ data class LockConfig(
     companion object {
         val ALWAYS_BLOCKED_DEFAULT: Set<String> = app.lockmein.core.ALWAYS_BLOCKED_DEFAULT
         val WINDOW_APPS_DEFAULT: Set<String> = app.lockmein.core.WINDOW_APPS_DEFAULT
+        val WATCHED_APPS_DEFAULT: Set<String> = app.lockmein.core.WATCHED_APPS_DEFAULT
     }
 }
 
@@ -98,6 +112,7 @@ object ConfigRules {
         if (config.longitude !in -180.0..180.0) add("Longitude must be between -180 and 180.")
         if (config.sunAngleDegrees !in 10.0..25.0) add("The sun angle for fajr must be between 10 and 25 degrees.")
         if (config.fajrOffsetMinutes !in -60..60) add("The fajr offset must be within an hour.")
+        if (config.filterPornHentaiThreshold !in 0.05f..1.0f || config.filterSexyThreshold !in 0.05f..1.0f) add("The filter thresholds must be between 0.05 and 1.0.")
         if (config.allowedBrowser != null && config.allowedBrowser in config.alwaysBlocked) add("The allowed browser cannot also be blocked.")
         if (config.allowedBrowser != null && config.allowedBrowser in config.windowApps) add("The allowed browser cannot also be a window app.")
     }

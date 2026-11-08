@@ -144,6 +144,27 @@ fun SettingsScreen(onBack: () -> Unit) {
                 value = "${current.latitude}, ${current.longitude} (${current.sunAngleDegrees} deg)",
                 onClick = { activeDialog = SettingsDialog.LOCATION },
             )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            val isFilterOn = app.lockmein.FilterService.isEnabled(context)
+            val lastHitMillis = remember(version) { app.lockmein.LockState(context).lastFilterHitMillis }
+            val filterStatus = if (!isFilterOn) {
+                "Off (tap to open Accessibility settings)"
+            } else if (lastHitMillis > 0) {
+                val hitTime = java.time.Instant.ofEpochMilli(lastHitMillis)
+                val formatter = java.time.format.DateTimeFormatter.ofPattern("d MMM HH:mm").withZone(java.time.ZoneId.systemDefault())
+                "On (last hit ${formatter.format(hitTime)})"
+            } else {
+                "On (no detections)"
+            }
+            SettingsItem(
+                icon = Icons.Filled.Shield,
+                title = "Screen filter",
+                value = filterStatus,
+                onClick = {
+                    val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                },
+            )
         }
 
         // Section: Setup
