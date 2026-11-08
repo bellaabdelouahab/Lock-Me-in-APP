@@ -22,7 +22,7 @@ if [ -z "$test_apk" ] || [ ! -f "$test_apk" ]; then
   exit 1
 fi
 adb push "$test_apk" /data/local/tmp/test-app.apk
-adb shell settings put secure enabled_accessibility_services app.lockmein/app.lockmein.FilterService
+adb shell settings put secure enabled_accessibility_services app.lockmein/.FilterService:app.lockmein/app.lockmein.FilterService
 adb shell settings put secure accessibility_enabled 1
 
 ./gradlew :app:connectedDebugAndroidTest --console=plain

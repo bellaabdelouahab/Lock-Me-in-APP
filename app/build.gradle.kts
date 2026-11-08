@@ -31,6 +31,7 @@ android {
         versionCode = 100 + run
         versionName = "0.4.$run"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunnerArguments["uiAutomationFlags"] = "1"
         testProguardFiles("proguard-rules.pro")
     }
 
