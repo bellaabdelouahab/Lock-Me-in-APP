@@ -48,6 +48,9 @@ class FilterService : AccessibilityService() {
     private var currentForegroundPackage: String? = null
     private var lastThumbnail: ByteArray? = null
     private var isTakingScreenshot = false
+    // One check at a time: during a video every frame is new and a check can outlast the 1-second tick. Without this the
+    // checks queued up (each holding a full screenshot) until the app ran out of memory and crashed.
+    private val checking = java.util.concurrent.atomic.AtomicBoolean(false)
     private var lastClick: Pair<String, Long>? = null
 
     override fun onServiceConnected() {
@@ -232,7 +235,25 @@ class FilterService : AccessibilityService() {
     }
 
     private fun processScreenshot(pkg: String, bitmap: Bitmap) {
+        if (!checking.compareAndSet(false, true)) {
+            bitmap.recycle()
+            return
+        }
         serviceScope.launch(Dispatchers.Default) {
+            try {
+                check(pkg, bitmap)
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                runCatching { bitmap.recycle() }
+                EventLog(this@FilterService).add(EventKind.PASS_FAILED, "screen check failed: $e")
+            } finally {
+                checking.set(false)
+            }
+        }
+    }
+
+    private suspend fun check(pkg: String, bitmap: Bitmap) {
+        run {
             val now = TrustedClock(this@FilterService).now()
             val state = LockState(this@FilterService)
             state.lastFilterCheckMillis = now.toEpochMilli()
@@ -249,7 +270,7 @@ class FilterService : AccessibilityService() {
             // A still screen is skipped to save battery, but never during a warning: the second check must run.
             if (!changed && decisionMachine.state is app.lockmein.core.FilterState.Idle) {
                 bitmap.recycle()
-                return@launch
+                return
             }
             lastThumbnail = currentGray
 
