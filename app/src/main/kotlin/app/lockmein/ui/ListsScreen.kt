@@ -396,29 +396,5 @@ private fun renderAppList(
     }
 }
 
-private fun closedNow(context: android.content.Context, config: LockConfig, now: Instant): List<Closed> {
-    val inventory = DeviceInventory(context).read()
-    val state = LockState(context)
-    val plan = PolicyRunner(context).planFor(config, now)
-    val admin = android.content.ComponentName(context, app.lockmein.AdminReceiver::class.java)
-    val dpm = context.getSystemService(android.app.admin.DevicePolicyManager::class.java)
-    val isOwner = dpm.isDeviceOwnerApp(context.packageName)
-    val held = state.quarantined
-
-    return plan.suspended.map { pkg ->
-        val isSuspended = if (isOwner) dpm.isPackageSuspended(admin, pkg) else false
-        val filterBlockedUntil = state.filterBlocked(now)[pkg]
-        val isFilterServiceOff = !FilterService.isEnabled(context)
-        val why = when {
-            filterBlockedUntil != null -> "Closed by the filter until ${DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(filterBlockedUntil)}."
-            isFilterServiceOff && pkg in config.watchedApps -> "Watched app: closed because the screen filter is off."
-            pkg in held -> "New app: held back until reviewed in Requests."
-            pkg in config.alwaysBlocked -> "Always blocked."
-            pkg in config.windowApps -> "Window app: closed outside 20:00 to 21:30."
-            pkg in config.nightClosed -> "Closed at night."
-            pkg in inventory.browsers -> "Other browser: only ${config.allowedBrowser ?: "none"} is allowed."
-            else -> "Suspended by policy."
-        }
-        Closed(pkg, why, isSuspended, held = pkg in held)
-    }.sortedBy { it.packageName }
-}
+private fun closedNow(context: android.content.Context, config: LockConfig, now: Instant): List<Closed> =
+    app.lockmein.ClosedReasons.all(context, config, now).map { Closed(it.packageName, it.why, it.closedNow, it.held) }

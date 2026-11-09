@@ -51,7 +51,7 @@ class Health(private val context: Context) {
         items += HealthItem(
             "Phone restrictions",
             missing.isEmpty(),
-            if (missing.isEmpty()) "${applicable.size} restrictions in force (VPN, users, unknown apps, safe mode...)." else "Not in force: ${missing.joinToString { it.removePrefix("no_").removePrefix("disallow_").replace('_', ' ') }}.",
+            if (missing.isEmpty()) "${applicable.size} restrictions in force (VPN, users, safe mode...)." else "Not in force: ${missing.joinToString { it.removePrefix("no_").removePrefix("disallow_").replace('_', ' ') }}.",
         )
 
         val time = dpm.getAutoTimeEnabled(admin) && dpm.getAutoTimeZoneEnabled(admin)

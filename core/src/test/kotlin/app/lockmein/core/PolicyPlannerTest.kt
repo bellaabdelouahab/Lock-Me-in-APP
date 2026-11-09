@@ -99,13 +99,14 @@ class PolicyPlannerTest {
     }
 
     @Test
-    fun `every browser the phone knows is closed unless allowed or approved, Brave and the Google app included`() {
+    fun `every browser the phone knows is closed unless allowed or approved, but not the Google app that Gemini needs`() {
         val google = "com.google.android.googlequicksearchbox"
         val more = Inventory(installed + google, approvedBrowsers = emptySet())
         val chromeAllowed = PolicyPlanner(rules.copy(allowedBrowser = chrome), "abc123.dns.nextdns.io")
         val plan = chromeAllowed.plan(Phase.DAY, BuildMode.SEALED, more)
-        assertTrue(setOf(brave, firefox, google).all { it in plan.suspended })
+        assertTrue(setOf(brave, firefox).all { it in plan.suspended })
         assertFalse(chrome in plan.suspended)
+        assertFalse(google in plan.suspended)
     }
 
     @Test

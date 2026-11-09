@@ -20,6 +20,7 @@ import java.nio.channels.FileChannel
 class FilterModelClassifier(private val context: Context) : AutoCloseable {
 
     private var interpreter: Interpreter? = null
+    private val anime = AnimeRatingClassifier(context)
     private var gpuDelegate: GpuDelegate? = null
 
     private val inputBuffer = ByteBuffer
@@ -71,6 +72,12 @@ class FilterModelClassifier(private val context: Context) : AutoCloseable {
     fun predict(bitmap: Bitmap): FilterScores {
         val interp = interpreter ?: return FilterScores()
 
+        val first = predictFirst(interp, bitmap)
+        // Drawings get the second model: it rates suggestive anime / manga / manhwa that has clothes on.
+        return if (first.isDrawing && anime.isReady) first.copy(animeSuggestive = anime.suggestive(bitmap)) else first
+    }
+
+    private fun predictFirst(interp: Interpreter, bitmap: Bitmap): FilterScores {
         val scaled = if (bitmap.width == INPUT_SIZE && bitmap.height == INPUT_SIZE) {
             bitmap
         } else {
@@ -107,6 +114,7 @@ class FilterModelClassifier(private val context: Context) : AutoCloseable {
     }
 
     override fun close() {
+        anime.close()
         interpreter?.close()
         interpreter = null
         gpuDelegate?.close()

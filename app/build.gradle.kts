@@ -31,6 +31,8 @@ android {
         versionCode = 100 + run
         versionName = "0.4.$run"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // The phone is arm64; x86_64 is for the CI emulator. Leaving out 32-bit keeps the two model runtimes from doubling the APK.
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         testInstrumentationRunnerArguments["uiAutomationFlags"] = "1"
         testProguardFiles("proguard-rules.pro")
     }
@@ -93,6 +95,8 @@ dependencies {
     implementation("org.tensorflow:tensorflow-lite:2.16.1")
     implementation("org.tensorflow:tensorflow-lite-gpu:2.16.1")
     implementation("org.tensorflow:tensorflow-lite-gpu-api:2.16.1")
+    // Second filter model (deepghs anime_rating, MIT) ships as ONNX.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
 
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

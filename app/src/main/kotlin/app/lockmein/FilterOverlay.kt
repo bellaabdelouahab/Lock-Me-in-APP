@@ -102,6 +102,41 @@ class FilterOverlay(private val context: Context) {
         }
     }
 
+    private var chip: TextView? = null
+
+    /** Test mode: one line of live scores at the bottom of the screen. Never takes touches. */
+    fun showScores(line: String, hit: Boolean) {
+        val density = context.resources.displayMetrics.density
+        val current = chip ?: TextView(context).apply {
+            textSize = 11f
+            setTextColor(Color.WHITE)
+            setPadding((10 * density).toInt(), (6 * density).toInt(), (10 * density).toInt(), (6 * density).toInt())
+            val params = WindowManager.LayoutParams().apply {
+                type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+                format = PixelFormat.TRANSLUCENT
+                flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                gravity = Gravity.BOTTOM or Gravity.START
+                width = WindowManager.LayoutParams.WRAP_CONTENT
+                height = WindowManager.LayoutParams.WRAP_CONTENT
+                x = (12 * density).toInt()
+                y = (96 * density).toInt()
+            }
+            runCatching { windowManager.addView(this, params) }
+            chip = this
+        }
+        current.text = line
+        current.background = GradientDrawable().apply {
+            setColor(Color.parseColor(if (hit) "#CCB3261E" else "#CC1C1B1F"))
+            cornerRadius = density * 8f
+        }
+    }
+
+    fun hideScores() {
+        chip?.let { runCatching { windowManager.removeView(it) } }
+        chip = null
+    }
+
     fun dismiss() {
         val current = view ?: return
         runCatching {

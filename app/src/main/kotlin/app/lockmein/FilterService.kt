@@ -48,6 +48,7 @@ class FilterService : AccessibilityService() {
     private var currentForegroundPackage: String? = null
     private var lastThumbnail: ByteArray? = null
     private var isTakingScreenshot = false
+    private var lastClick: Pair<String, Long>? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -59,15 +60,27 @@ class FilterService : AccessibilityService() {
             decisionMachine = FilterDecisionMachine(
                 pornHentaiThreshold = config.filterPornHentaiThreshold,
                 sexyThreshold = config.filterSexyThreshold,
+                animeThreshold = config.filterAnimeThreshold,
             )
         }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null || event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
-
+        if (event == null) return
         val pkg = event.packageName?.toString() ?: return
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+            // The label of what was tapped (an app icon on the home screen), to name the app behind a "blocked" dialog.
+            lastClick = event.text.joinToString(" ").trim() to System.currentTimeMillis()
+            return
+        }
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         if (pkg == packageName) return // Ignore Lock Me In's own windows
+
+        if (pkg == "android" && event.className?.contains("SuspendedAppActivity") == true) {
+            replaceBlockedDialog(event)
+            return
+        }
+        catchNewApp(pkg)
 
         if (pkg != currentForegroundPackage) {
             currentForegroundPackage = pkg
@@ -91,6 +104,59 @@ class FilterService : AccessibilityService() {
         serviceScope.cancel()
     }
 
+    /**
+     * Android's own dialog for a closed app only says "blocked by your admin". Close it and open ours, which says why and
+     * until when. The app is named by the dialog text, or else by the icon tapped just before.
+     */
+    private fun replaceBlockedDialog(event: AccessibilityEvent) {
+        val config = ConfigStore(this).load() ?: return
+        val shown = (event.text.joinToString(" ") + " " + (lastClick?.takeIf { System.currentTimeMillis() - it.second < 3_000 }?.first ?: ""))
+        serviceScope.launch(Dispatchers.Default) {
+            val inventory = DeviceInventory(this@FilterService)
+            val closed = ClosedReasons.all(this@FilterService, config).map { it.packageName }
+            val pkg = closed.filter { inventory.label(it).let { label -> label.isNotBlank() && shown.contains(label, ignoreCase = true) } }
+                .maxByOrNull { inventory.label(it).length } ?: return@launch
+            withContext(Dispatchers.Main) {
+                performGlobalAction(GLOBAL_ACTION_BACK)
+                BlockedActivity.open(this@FilterService, pkg)
+            }
+        }
+    }
+
+    /**
+     * A new app opened before the install receiver closed it (it can be quicker than the broadcast): send the user home and
+     * run a pass, which holds it back like any new app.
+     */
+    private fun catchNewApp(pkg: String) {
+        val store = ConfigStore(this)
+        if (!store.protectionActive) return
+        val state = LockState(this)
+        val known = state.knownPackages ?: return
+        if (pkg in known && pkg !in state.quarantined) return
+        if (runCatching { packageManager.getApplicationInfo(pkg, 0) }.isFailure) return // a window from no installed app
+        if (pkg in DeviceInventory(this).read().protectedPackages) return
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        serviceScope.launch(Dispatchers.Default) { PolicyRunner(this@FilterService).runIfActive() }
+    }
+
+    /** Visible text of the active window (titles, captions, tags, the address bar), capped so a long feed stays cheap. */
+    private fun screenText(): String {
+        val root = rootInActiveWindow ?: return ""
+        val out = StringBuilder()
+        val queue = ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>().apply { add(root) }
+        var seen = 0
+        while (queue.isNotEmpty() && seen < MAX_TEXT_NODES && out.length < MAX_TEXT_CHARS) {
+            val node = queue.removeFirst()
+            seen++
+            if (node.isVisibleToUser) {
+                node.text?.let { out.append(it).append('\n') }
+                node.contentDescription?.let { out.append(it).append('\n') }
+            }
+            for (i in 0 until node.childCount) node.getChild(i)?.let(queue::add)
+        }
+        return out.toString()
+    }
+
     @VisibleForTesting
     fun onForegroundAppChangedForTesting(pkg: String) {
         currentForegroundPackage = pkg
@@ -105,6 +171,7 @@ class FilterService : AccessibilityService() {
             startSampling(pkg)
         } else {
             stopSampling()
+            overlay?.hideScores()
             val resetAction = decisionMachine.reset()
             if (resetAction is FilterAction.ClearWarning) {
                 overlay?.dismiss()
@@ -175,8 +242,8 @@ class FilterService : AccessibilityService() {
             val currentGray = FrameDiff.rgbToGrayscale(thumbPixels)
             val changed = FrameDiff.hasChanged(lastThumbnail, currentGray)
 
-            if (!changed) {
-                // Screen is static; skip inference to save battery
+            // A still screen is skipped to save battery, but never during a warning: the second check must run.
+            if (!changed && decisionMachine.state is app.lockmein.core.FilterState.Idle) {
                 bitmap.recycle()
                 return@launch
             }
@@ -184,7 +251,9 @@ class FilterService : AccessibilityService() {
 
             // 2. Inference: check debug test hook or run model on background thread
             val testScores = testScoreInjector?.invoke(pkg)
-            val scores = if (testScores != null) {
+            val text = withContext(Dispatchers.Main) { runCatching { screenText() }.getOrDefault("") }
+            val textMatch = app.lockmein.core.ScreenText.match(text)
+            val imageScores = if (testScores != null) {
                 bitmap.recycle()
                 testScores
             } else {
@@ -197,6 +266,15 @@ class FilterService : AccessibilityService() {
                     bitmap.recycle()
                     FilterScores()
                 }
+            }
+
+            val scores = imageScores.copy(textMatch = textMatch)
+            if (state.filterTestMode) {
+                val hit = scores.isHit(decisionMachine.pornHentaiThreshold, decisionMachine.sexyThreshold, decisionMachine.animeThreshold)
+                val line = "TEST  porn %.2f  sexy %.2f  hentai %.2f  anime %s  text %s".format(
+                    scores.porn, scores.sexy, scores.hentai, if (scores.isDrawing) "%.2f".format(scores.animeSuggestive) else "-", scores.textMatch ?: "-",
+                )
+                withContext(Dispatchers.Main) { overlay?.showScores(line, hit) }
             }
 
             // 3. Process with Decision State Machine
@@ -247,6 +325,8 @@ class FilterService : AccessibilityService() {
 
     companion object {
         const val SAMPLE_INTERVAL_MS = 1000L
+        private const val MAX_TEXT_NODES = 400
+        private const val MAX_TEXT_CHARS = 8_000
 
         @Volatile
         var instance: FilterService? = null

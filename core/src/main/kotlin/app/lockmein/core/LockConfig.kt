@@ -46,6 +46,8 @@ data class LockConfig(
     val filterPornHentaiThreshold: Float = 0.50f,
     /** Filter threshold for sexy score. */
     val filterSexyThreshold: Float = 0.50f,
+    /** Anime model threshold (r15 + r18). At 0.80 it flagged 5% of plainly safe anime (fights, magic, swords) in tests. */
+    val filterAnimeThreshold: Float = 0.80f,
     /** Start of the night and end of social-app time, "HH:mm". */
     val nightStart: String = "22:00",
     /** The weekly settings window, when settings can be changed and removals scheduled: ISO day (7 = Sunday) and its hours. */
@@ -112,7 +114,7 @@ object ConfigRules {
         if (config.longitude !in -180.0..180.0) add("Longitude must be between -180 and 180.")
         if (config.sunAngleDegrees !in 10.0..25.0) add("The sun angle for fajr must be between 10 and 25 degrees.")
         if (config.fajrOffsetMinutes !in -60..60) add("The fajr offset must be within an hour.")
-        if (config.filterPornHentaiThreshold !in 0.05f..1.0f || config.filterSexyThreshold !in 0.05f..1.0f) add("The filter thresholds must be between 0.05 and 1.0.")
+        if (config.filterPornHentaiThreshold !in 0.05f..1.0f || config.filterSexyThreshold !in 0.05f..1.0f || config.filterAnimeThreshold !in 0.05f..1.0f) add("The filter thresholds must be between 0.05 and 1.0.")
         if (config.allowedBrowser != null && config.allowedBrowser in config.alwaysBlocked) add("The allowed browser cannot also be blocked.")
         if (config.allowedBrowser != null && config.allowedBrowser in config.windowApps) add("The allowed browser cannot also be a window app.")
     }

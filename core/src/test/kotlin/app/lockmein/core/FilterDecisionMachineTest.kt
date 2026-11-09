@@ -112,4 +112,13 @@ class FilterDecisionMachineTest {
         // Drawings and neutral do not trigger hits
         assertFalse(FilterScores(drawings = 0.95f, neutral = 0.05f).isHit(0.60f, 0.60f))
     }
+
+    @Test
+    fun `suggestive anime with clothes on and sexual words on screen are hits too`() {
+        val ecchi = FilterScores(drawings = 0.7f, hentai = 0.2f, neutral = 0.1f, animeSuggestive = 0.85f)
+        assertTrue(ecchi.isHit(0.6f, 0.6f, 0.8f))
+        assertFalse(ecchi.copy(animeSuggestive = 0.5f).isHit(0.6f, 0.6f, 0.8f))
+        assertTrue(FilterScores(textMatch = "Ecchi").isHit())
+        assertIs<FilterAction.ShowWarning>(machine.processFrame(pkg, FilterScores(textMatch = "harem"), t0))
+    }
 }

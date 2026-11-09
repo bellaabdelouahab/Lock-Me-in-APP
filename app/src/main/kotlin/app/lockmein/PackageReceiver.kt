@@ -36,7 +36,7 @@ class PackageReceiver : BroadcastReceiver() {
                         state.quarantine(pkgName)
                         runCatching {
                             dpm.setPackagesSuspended(admin, arrayOf(pkgName), true)
-                            dpm.setShortSupportMessage(admin, "Blocked by Lock Me In. Laptop only, 20:00 to 21:30.")
+                            dpm.setShortSupportMessage(admin, SUPPORT_MESSAGE)
                         }
                         EventLog(context).add(EventKind.APP_QUARANTINED, "Immediate suspend on install: $pkgName")
                     }

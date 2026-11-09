@@ -91,7 +91,8 @@ class PolicyPlanner(private val rules: AppRules, private val privateDnsHost: Str
             Restrictions.ADD_MANAGED_PROFILE,
             Restrictions.ADD_PRIVATE_PROFILE,
             Restrictions.CONFIG_VPN,
-            Restrictions.INSTALL_UNKNOWN_SOURCES_GLOBALLY,
+            // Not INSTALL_UNKNOWN_SOURCES_GLOBALLY: installing is allowed; a new app is closed the moment it lands (PackageReceiver,
+            // and FilterService if it is opened before that) until it is let through.
         )
         // The sealed build also closes USB debugging and the factory reset in Settings; the test build leaves a way back.
         return if (mode == BuildMode.SEALED) always + Restrictions.DEBUGGING + Restrictions.FACTORY_RESET else always

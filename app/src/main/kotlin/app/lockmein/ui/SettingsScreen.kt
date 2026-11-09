@@ -165,6 +165,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                     context.startActivity(intent)
                 },
             )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            var testMode by remember { mutableStateOf(app.lockmein.LockState(context).filterTestMode) }
+            SettingsItem(
+                icon = Icons.Filled.Shield,
+                title = "Filter test mode",
+                value = if (testMode) "On: live scores show over watched apps. Red means it would act." else "Off. Turn on to see the scores while you browse.",
+                onClick = { testMode = !testMode; app.lockmein.LockState(context).filterTestMode = testMode },
+            )
         }
 
         // Section: Setup

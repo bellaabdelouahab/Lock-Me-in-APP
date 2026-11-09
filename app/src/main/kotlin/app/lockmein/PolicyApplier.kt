@@ -48,7 +48,7 @@ class PolicyApplier(context: Context) {
         dpm.setAutoTimeEnabled(admin, true)
         dpm.setAutoTimeZoneEnabled(admin, true)
 
-        dpm.setShortSupportMessage(admin, "Blocked by Lock Me In. Laptop only, 20:00 to 21:30.")
+        dpm.setShortSupportMessage(admin, SUPPORT_MESSAGE)
 
         dpm.setApplicationRestrictions(admin, ChromePolicy.PACKAGE, if (plan.managedChrome) chromeBundle() else Bundle())
 

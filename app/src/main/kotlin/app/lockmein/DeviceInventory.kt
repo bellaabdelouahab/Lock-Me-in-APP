@@ -43,7 +43,11 @@ class DeviceInventory(private val context: Context) {
     /** Anything that opens a plain web link as a browser does. */
     private fun browsers(): Set<String> {
         val web = Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com")).addCategory(Intent.CATEGORY_BROWSABLE)
-        return pm.queryIntentActivities(web, PackageManager.MATCH_ALL).map { it.activityInfo.packageName }.toSet()
+        val opensAnyLink = pm.queryIntentActivities(web, PackageManager.MATCH_ALL).map { it.activityInfo.packageName }.toSet()
+        // Only apps that call themselves a browser: work apps (Teams, Outlook...) can also open plain links.
+        val browserApps = pm.queryIntentActivities(Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_BROWSER), PackageManager.MATCH_ALL)
+            .map { it.activityInfo.packageName }.toSet()
+        return opensAnyLink.intersect(browserApps)
     }
 
     /**

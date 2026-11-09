@@ -13,19 +13,33 @@ data class FilterScores(
     val neutral: Float = 1f,
     val porn: Float = 0f,
     val sexy: Float = 0f,
-) {
     /**
-     * Hit rule: porn + hentai >= [pornHentaiThreshold] (default 0.50)
-     * OR sexy >= [sexyThreshold] (default 0.50).
+     * Second model, run only on drawings (anime, manga, manhwa): r15 + r18 from deepghs anime_rating. Catches fanservice and
+     * suggestive art with clothes on, which the first model misses. 0 when the frame is not a drawing.
      */
-    fun isHit(pornHentaiThreshold: Float = 0.50f, sexyThreshold: Float = 0.50f): Boolean {
-        return (porn + hentai >= pornHentaiThreshold) || (sexy >= sexyThreshold)
-    }
+    val animeSuggestive: Float = 0f,
+    /** The sexual word or phrase found in the screen's text, if any. */
+    val textMatch: String? = null,
+) {
+    /** True when the first model sees a drawing, which is when the anime model runs. */
+    val isDrawing: Boolean get() = drawings + hentai >= DRAWING_GATE
+
+    /**
+     * Hit rule: porn + hentai >= [pornHentaiThreshold], OR sexy >= [sexyThreshold], OR (a drawing and)
+     * animeSuggestive >= [animeThreshold], OR a sexual word on screen.
+     */
+    fun isHit(pornHentaiThreshold: Float = 0.50f, sexyThreshold: Float = 0.50f, animeThreshold: Float = 0.80f): Boolean =
+        porn + hentai >= pornHentaiThreshold || sexy >= sexyThreshold || animeSuggestive >= animeThreshold || textMatch != null
 
     override fun toString(): String =
-        "porn=%.2f, hentai=%.2f, sexy=%.2f, drawings=%.2f, neutral=%.2f".format(
-            porn, hentai, sexy, drawings, neutral
+        "porn=%.2f, hentai=%.2f, sexy=%.2f, drawings=%.2f, neutral=%.2f, anime=%.2f%s".format(
+            porn, hentai, sexy, drawings, neutral, animeSuggestive, textMatch?.let { ", text=\"$it\"" } ?: "",
         )
+
+    companion object {
+        /** Measured on 306 photos: with this gate the anime model never ran on a photo of a normally dressed person. */
+        const val DRAWING_GATE = 0.5f
+    }
 }
 
 sealed interface FilterAction {
@@ -68,6 +82,7 @@ sealed interface FilterState {
 class FilterDecisionMachine(
     val pornHentaiThreshold: Float = 0.50f,
     val sexyThreshold: Float = 0.50f,
+    val animeThreshold: Float = 0.80f,
     val warningGraceDuration: Duration = Duration.ofSeconds(5),
     val suspensionDuration: Duration = Duration.ofMinutes(30),
 ) {
@@ -83,7 +98,7 @@ class FilterDecisionMachine(
         scores: FilterScores,
         now: Instant,
     ): FilterAction {
-        val hit = scores.isHit(pornHentaiThreshold, sexyThreshold)
+        val hit = scores.isHit(pornHentaiThreshold, sexyThreshold, animeThreshold)
 
         return when (val current = state) {
             is FilterState.Idle -> {

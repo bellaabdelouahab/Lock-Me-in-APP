@@ -144,9 +144,8 @@ class PolicyApplierTest {
         for (key in listOf(Restrictions.SAFE_BOOT, Restrictions.CONFIG_DATE_TIME, Restrictions.ADD_USER, Restrictions.CONFIG_VPN)) {
             assertTrue("$key should be on", users.hasUserRestriction(key))
         }
-        for (key in listOf(Restrictions.ADD_MANAGED_PROFILE, Restrictions.INSTALL_UNKNOWN_SOURCES_GLOBALLY)) {
-            assertTrue("$key should be on", users.hasUserRestriction(key))
-        }
+        assertTrue(users.hasUserRestriction(Restrictions.ADD_MANAGED_PROFILE))
+        assertFalse("installing apps is allowed; new apps are held back instead", users.hasUserRestriction(Restrictions.INSTALL_UNKNOWN_SOURCES_GLOBALLY))
         if (android.os.Build.VERSION.SDK_INT >= 35) assertTrue(users.hasUserRestriction(Restrictions.ADD_PRIVATE_PROFILE))
         assertFalse("the test build must keep USB debugging", users.hasUserRestriction(Restrictions.DEBUGGING))
         assertFalse(users.hasUserRestriction(Restrictions.FACTORY_RESET))

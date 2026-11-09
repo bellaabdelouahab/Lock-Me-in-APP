@@ -18,8 +18,7 @@ object KnownBrowsers {
         "com.vivaldi.browser",
         "org.torproject.torbrowser",
         "com.kiwibrowser.browser",
-        // The Google app has a feed and opens links in its own browser.
-        "com.google.android.googlequicksearchbox",
+        // Not the Google app: the Gemini app runs through it, so closing it closed Gemini. Its searches still go through the DNS filter.
     )
 }
 
