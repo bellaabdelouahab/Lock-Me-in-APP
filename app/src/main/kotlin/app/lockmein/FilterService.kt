@@ -346,11 +346,6 @@ class FilterService : AccessibilityService() {
                 performGlobalAction(GLOBAL_ACTION_HOME)
 
                 val state = LockState(this)
-                // Test mode only sends you home, so you can go back and keep testing; it never closes the app.
-                if (state.filterTestMode) {
-                    EventLog(this).add(EventKind.FILTER_BLOCKED, "$pkg (test mode: sent home, not closed) scores: $scores", now)
-                    return
-                }
                 val until = now.plus(action.duration)
                 state.blockWithFilter(pkg, until)
                 EventLog(this).add(EventKind.FILTER_BLOCKED, "$pkg until $until scores: $scores", now)
