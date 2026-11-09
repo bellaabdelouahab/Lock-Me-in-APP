@@ -20,7 +20,8 @@ import java.nio.channels.FileChannel
 class FilterModelClassifier(private val context: Context) : AutoCloseable {
 
     private var interpreter: Interpreter? = null
-    private val anime = AnimeRatingClassifier(context)
+    private val anime = OnnxImageScorer.animeRating(context)
+    private val seductive = OnnxImageScorer.seductive(context)
     private var gpuDelegate: GpuDelegate? = null
 
     private val inputBuffer = ByteBuffer
@@ -77,10 +78,12 @@ class FilterModelClassifier(private val context: Context) : AutoCloseable {
         return tiles(bitmap).map { tile ->
             val first = predictFirst(interp, tile)
             // Drawings get the second model: it rates suggestive anime / manga / manhwa that has clothes on.
-            val scores = if (first.isDrawing && anime.isReady) first.copy(animeSuggestive = anime.suggestive(tile)) else first
+            val withAnime = if (first.isDrawing && anime.isReady) first.copy(animeSuggestive = anime.score(tile)) else first
+            // Every tile, photo or drawing: seductive looks, poses and framing.
+            val scores = if (seductive.isReady) withAnime.copy(seductive = seductive.score(tile)) else withAnime
             if (tile !== bitmap) tile.recycle()
             scores
-        }.maxBy(rank)
+        }.let { all -> all.maxBy(rank).copy(seductive = all.maxOf { it.seductive }) }
     }
 
     /** Square tiles along the long side, overlapping by 40%: four on a 1080 x 2400 phone screen. */
@@ -134,6 +137,7 @@ class FilterModelClassifier(private val context: Context) : AutoCloseable {
 
     override fun close() {
         anime.close()
+        seductive.close()
         interpreter?.close()
         interpreter = null
         gpuDelegate?.close()

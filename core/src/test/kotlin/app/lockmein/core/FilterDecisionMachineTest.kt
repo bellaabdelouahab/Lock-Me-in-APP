@@ -121,4 +121,26 @@ class FilterDecisionMachineTest {
         assertTrue(FilterScores(textMatch = "Ecchi").isHit())
         assertIs<FilterAction.ShowWarning>(machine.processFrame(pkg, FilterScores(textMatch = "harem"), t0))
     }
+
+    @Test
+    fun `three borderline frames within 6 seconds are a hit, scattered ones are not`() {
+        val borderline = FilterScores(sexy = 0.50f) // 0.83 of the 0.60 threshold
+        assertEquals(FilterAction.None, machine.processFrame(pkg, borderline, t0))
+        assertEquals(FilterAction.None, machine.processFrame(pkg, borderline, t0.plusSeconds(10)))
+        assertEquals(FilterAction.None, machine.processFrame(pkg, borderline, t0.plusSeconds(20)))
+        assertEquals(FilterAction.None, machine.processFrame(pkg, borderline, t0.plusSeconds(21)))
+        assertIs<FilterAction.ShowWarning>(machine.processFrame(pkg, borderline, t0.plusSeconds(22)))
+        // The second check needs its own evidence: one borderline frame after the warning is not enough.
+        assertIs<FilterAction.ClearWarning>(machine.processFrame(pkg, borderline, t0.plusSeconds(27)))
+    }
+
+    @Test
+    fun `the seductive score only counts once it has a threshold`() {
+        val seductive = FilterScores(seductive = 0.95f)
+        assertFalse(seductive.isHit(0.6f, 0.6f, 0.8f))
+        assertTrue(seductive.isHit(0.6f, 0.6f, 0.8f, seductiveThreshold = 0.9f))
+        assertEquals(FilterAction.None, machine.processFrame(pkg, seductive, t0))
+        val live = FilterDecisionMachine(seductiveThreshold = 0.9f)
+        assertIs<FilterAction.ShowWarning>(live.processFrame(pkg, seductive, t0))
+    }
 }

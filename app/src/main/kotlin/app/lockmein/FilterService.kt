@@ -48,6 +48,8 @@ class FilterService : AccessibilityService() {
     private var currentForegroundPackage: String? = null
     private var lastThumbnail: ByteArray? = null
     private var isTakingScreenshot = false
+    /** The seductive threshold even while that model is test-only, so test mode shows when it would act. */
+    private var seductiveTestThreshold = 1.01f
     // One check at a time: during a video every frame is new and a check can outlast the 1-second tick. Without this the
     // checks queued up (each holding a full screenshot) until the app ran out of memory and crashed.
     private val checking = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -64,7 +66,9 @@ class FilterService : AccessibilityService() {
                 pornHentaiThreshold = config.filterPornHentaiThreshold,
                 sexyThreshold = config.filterSexyThreshold,
                 animeThreshold = config.filterAnimeThreshold,
+                seductiveThreshold = config.filterSeductiveThreshold.takeIf { config.filterSeductiveLive },
             )
+            seductiveTestThreshold = config.filterSeductiveThreshold
         }
     }
 
@@ -286,7 +290,7 @@ class FilterService : AccessibilityService() {
                 if (cls != null && cls.isReady) {
                     val m = decisionMachine
                     // The tile that comes closest to a threshold speaks for the screen.
-                    val result = cls.predict(bitmap) { maxOf(it.porn + it.hentai - m.pornHentaiThreshold, it.sexy - m.sexyThreshold, it.animeSuggestive - m.animeThreshold) }
+                    val result = cls.predict(bitmap) { it.level(m.pornHentaiThreshold, m.sexyThreshold, m.animeThreshold, m.seductiveThreshold) }
                     bitmap.recycle() // Dropped immediately; never written to disk or logs
                     result
                 } else {
@@ -297,9 +301,11 @@ class FilterService : AccessibilityService() {
 
             val scores = imageScores.copy(textMatch = textMatch)
             if (state.filterTestMode) {
-                val hit = scores.isHit(decisionMachine.pornHentaiThreshold, decisionMachine.sexyThreshold, decisionMachine.animeThreshold)
-                val line = "TEST  porn %.2f  sexy %.2f  hentai %.2f  anime %s  text %s".format(
+                val m = decisionMachine
+                val hit = scores.isHit(m.pornHentaiThreshold, m.sexyThreshold, m.animeThreshold, seductiveTestThreshold)
+                val line = "TEST  porn %.2f  sexy %.2f  hentai %.2f  anime %s  text %s  seductive %.2f%s".format(
                     scores.porn, scores.sexy, scores.hentai, if (scores.isDrawing) "%.2f".format(scores.animeSuggestive) else "-", scores.textMatch ?: "-",
+                    scores.seductive, if (m.seductiveThreshold == null) " (test only)" else "",
                 )
                 withContext(Dispatchers.Main) { overlay?.showScores(line, hit) }
             }

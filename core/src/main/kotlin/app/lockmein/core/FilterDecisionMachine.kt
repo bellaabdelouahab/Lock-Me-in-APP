@@ -20,6 +20,11 @@ data class FilterScores(
     val animeSuggestive: Float = 0f,
     /** The sexual word or phrase found in the screen's text, if any. */
     val textMatch: String? = null,
+    /**
+     * Third model: seductive looks, poses and framing, clothes on or off, photos and drawings (a CLIP image encoder with a
+     * judge trained on seductive vs ordinary pictures). 0 when the model is missing.
+     */
+    val seductive: Float = 0f,
 ) {
     /** True when the first model sees a drawing, which is when the anime model runs. */
     val isDrawing: Boolean get() = drawings + hentai >= DRAWING_GATE
@@ -28,12 +33,25 @@ data class FilterScores(
      * Hit rule: porn + hentai >= [pornHentaiThreshold], OR sexy >= [sexyThreshold], OR (a drawing and)
      * animeSuggestive >= [animeThreshold], OR a sexual word on screen.
      */
-    fun isHit(pornHentaiThreshold: Float = 0.50f, sexyThreshold: Float = 0.50f, animeThreshold: Float = 0.80f): Boolean =
-        porn + hentai >= pornHentaiThreshold || sexy >= sexyThreshold || animeSuggestive >= animeThreshold || textMatch != null
+    fun isHit(
+        pornHentaiThreshold: Float = 0.50f,
+        sexyThreshold: Float = 0.50f,
+        animeThreshold: Float = 0.80f,
+        seductiveThreshold: Float? = null,
+    ): Boolean = textMatch != null || level(pornHentaiThreshold, sexyThreshold, animeThreshold, seductiveThreshold) >= 1f
+
+    /** How close the frame is to a hit: the largest score / threshold. 1 or more is a hit. A null seductive threshold leaves that model out. */
+    fun level(pornHentaiThreshold: Float, sexyThreshold: Float, animeThreshold: Float, seductiveThreshold: Float? = null): Float =
+        maxOf(
+            (porn + hentai) / pornHentaiThreshold,
+            sexy / sexyThreshold,
+            animeSuggestive / animeThreshold,
+            seductiveThreshold?.let { seductive / it } ?: 0f,
+        )
 
     override fun toString(): String =
-        "porn=%.2f, hentai=%.2f, sexy=%.2f, drawings=%.2f, neutral=%.2f, anime=%.2f%s".format(
-            porn, hentai, sexy, drawings, neutral, animeSuggestive, textMatch?.let { ", text=\"$it\"" } ?: "",
+        "porn=%.2f, hentai=%.2f, sexy=%.2f, drawings=%.2f, neutral=%.2f, anime=%.2f, seductive=%.2f%s".format(
+            porn, hentai, sexy, drawings, neutral, animeSuggestive, seductive, textMatch?.let { ", text=\"$it\"" } ?: "",
         )
 
     companion object {
@@ -78,16 +96,32 @@ sealed interface FilterState {
 /**
  * Pure state machine implementing the screen filter decision flow:
  * First hit -> show warning -> wait 5 seconds -> second check -> exit+suspend (30 min) or clear.
+ *
+ * A hit is one clear frame, or a run of borderline ones: [NEAR_FRAMES] frames within [NEAR_WINDOW] that each reach
+ * [NEAR_LEVEL] of a threshold. That catches seductive videos where no single frame is clear.
  */
 class FilterDecisionMachine(
     val pornHentaiThreshold: Float = 0.50f,
     val sexyThreshold: Float = 0.50f,
     val animeThreshold: Float = 0.80f,
+    /** Null while the seductive model only shows its score in test mode. */
+    val seductiveThreshold: Float? = null,
     val warningGraceDuration: Duration = Duration.ofSeconds(5),
     val suspensionDuration: Duration = Duration.ofMinutes(30),
 ) {
     var state: FilterState = FilterState.Idle
         private set
+
+    private val near = ArrayDeque<Pair<String, Instant>>()
+
+    /** True for a clear frame, or the [NEAR_FRAMES]th borderline frame of the same app within [NEAR_WINDOW]. */
+    fun isHit(packageName: String, scores: FilterScores, now: Instant): Boolean {
+        if (scores.isHit(pornHentaiThreshold, sexyThreshold, animeThreshold, seductiveThreshold)) return true
+        while (near.isNotEmpty() && (near.first().first != packageName || Duration.between(near.first().second, now) > NEAR_WINDOW)) near.removeFirst()
+        if (scores.level(pornHentaiThreshold, sexyThreshold, animeThreshold, seductiveThreshold) < NEAR_LEVEL) return false
+        near.addLast(packageName to now)
+        return near.size >= NEAR_FRAMES
+    }
 
     /**
      * Processes a frame prediction for the foreground [packageName] at timestamp [now].
@@ -98,7 +132,8 @@ class FilterDecisionMachine(
         scores: FilterScores,
         now: Instant,
     ): FilterAction {
-        val hit = scores.isHit(pornHentaiThreshold, sexyThreshold, animeThreshold)
+        val hit = isHit(packageName, scores, now)
+        if (hit && state is FilterState.Idle) near.clear() // the 5-second second check needs its own evidence
 
         return when (val current = state) {
             is FilterState.Idle -> {
@@ -159,10 +194,17 @@ class FilterDecisionMachine(
     fun reset(): FilterAction {
         val prev = state
         state = FilterState.Idle
+        near.clear()
         return if (prev is FilterState.WarningActive) {
             FilterAction.ClearWarning(prev.packageName, "Service reset")
         } else {
             FilterAction.None
         }
+    }
+
+    companion object {
+        const val NEAR_LEVEL = 0.75f
+        const val NEAR_FRAMES = 3
+        val NEAR_WINDOW: Duration = Duration.ofSeconds(6)
     }
 }
