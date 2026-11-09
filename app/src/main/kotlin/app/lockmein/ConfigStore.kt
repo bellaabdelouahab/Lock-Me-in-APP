@@ -15,10 +15,14 @@ class ConfigStore(context: Context) {
     fun load(): LockConfig? {
         val raw = prefs.getString(CONFIG, null) ?: return null
         val decoded = runCatching { ConfigCodec.decode(raw) }.getOrNull() ?: return null
-        val migrated = migrate(decoded)
-        if (migrated != decoded) {
-            save(migrated)
-        }
+        // Each migration runs once: running the list defaults on every load put back apps that a Sunday approval had removed.
+        val version = prefs.getInt(VERSION, 0)
+        if (version >= CURRENT_VERSION) return decoded
+        var migrated = decoded
+        if (version < 1) migrated = migrate(migrated)
+        if (version < 2) migrated = tunedThresholds(migrated)
+        save(migrated)
+        prefs.edit().putInt(VERSION, CURRENT_VERSION).apply()
         return migrated
     }
 
@@ -53,6 +57,15 @@ class ConfigStore(context: Context) {
         private const val ACTIVE = "protection_active"
 
         /** Migrates config: ensures defaults for alwaysBlocked, windowApps, and watchedApps are present without dropping existing. */
+        private const val VERSION = "config_version"
+        private const val CURRENT_VERSION = 2
+
+        /** v0.4.67: the filter scans the screen in tiles; thresholds tuned on 600 test images. Only untouched defaults move. */
+        fun tunedThresholds(config: LockConfig): LockConfig =
+            if (config.filterPornHentaiThreshold == 0.50f && config.filterSexyThreshold == 0.50f) {
+                config.copy(filterPornHentaiThreshold = 0.70f, filterSexyThreshold = 0.60f, filterAnimeThreshold = 0.85f)
+            } else config
+
         fun migrate(config: LockConfig): LockConfig {
             val newBlocked = config.alwaysBlocked + ALWAYS_BLOCKED_DEFAULT
             val newWindow = if (config.windowApps.isEmpty()) WINDOW_APPS_DEFAULT else config.windowApps

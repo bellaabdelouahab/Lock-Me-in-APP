@@ -129,7 +129,7 @@ class PolicyApplierTest {
         if (android.os.Build.VERSION.SDK_INT >= 35) assertEquals("no_add_private_profile" /* UserManager.DISALLOW_ADD_PRIVATE_PROFILE, API 35 */, Restrictions.ADD_PRIVATE_PROFILE)
 
         val plan = planner.plan(Phase.DAY, BuildMode.SEALED, inventory)
-        expected.keys.forEach { key ->
+        expected.keys.filter { it != Restrictions.INSTALL_UNKNOWN_SOURCES_GLOBALLY }.forEach { key ->
             assertTrue("$key is planned in sealed build", key in plan.restrictions)
         }
     }

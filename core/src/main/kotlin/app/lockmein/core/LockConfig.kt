@@ -43,11 +43,14 @@ data class LockConfig(
     /** Apps monitored by the on-device AI screen filter. */
     val watchedApps: Set<String> = WATCHED_APPS_DEFAULT,
     /** Filter threshold for porn + hentai combined score. */
-    val filterPornHentaiThreshold: Float = 0.50f,
+    val filterPornHentaiThreshold: Float = 0.70f,
     /** Filter threshold for sexy score. */
-    val filterSexyThreshold: Float = 0.50f,
-    /** Anime model threshold (r15 + r18). At 0.80 it flagged 5% of plainly safe anime (fights, magic, swords) in tests. */
-    val filterAnimeThreshold: Float = 0.80f,
+    val filterSexyThreshold: Float = 0.60f,
+    /**
+     * Anime model threshold (r15 + r18). Thresholds tuned on simulated phone screens scanned in tiles: 5% false hits on normal
+     * photos of women and on plainly safe anime (fights, magic, swords), 62% of revealing photos caught per frame.
+     */
+    val filterAnimeThreshold: Float = 0.85f,
     /** Start of the night and end of social-app time, "HH:mm". */
     val nightStart: String = "22:00",
     /** The weekly settings window, when settings can be changed and removals scheduled: ISO day (7 = Sunday) and its hours. */

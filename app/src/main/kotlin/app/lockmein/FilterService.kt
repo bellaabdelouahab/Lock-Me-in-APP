@@ -259,7 +259,9 @@ class FilterService : AccessibilityService() {
             } else {
                 val cls = classifier
                 if (cls != null && cls.isReady) {
-                    val result = cls.predict(bitmap)
+                    val m = decisionMachine
+                    // The tile that comes closest to a threshold speaks for the screen.
+                    val result = cls.predict(bitmap) { maxOf(it.porn + it.hentai - m.pornHentaiThreshold, it.sexy - m.sexyThreshold, it.animeSuggestive - m.animeThreshold) }
                     bitmap.recycle() // Dropped immediately; never written to disk or logs
                     result
                 } else {

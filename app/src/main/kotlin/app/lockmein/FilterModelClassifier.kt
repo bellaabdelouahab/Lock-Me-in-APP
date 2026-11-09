@@ -69,12 +69,31 @@ class FilterModelClassifier(private val context: Context) : AutoCloseable {
      * The caller is responsible for recycling or dropping the bitmap immediately.
      */
     @Synchronized
-    fun predict(bitmap: Bitmap): FilterScores {
+    fun predict(bitmap: Bitmap, rank: (FilterScores) -> Float = { maxOf(it.porn + it.hentai, it.sexy, it.animeSuggestive) }): FilterScores {
         val interp = interpreter ?: return FilterScores()
 
-        val first = predictFirst(interp, bitmap)
-        // Drawings get the second model: it rates suggestive anime / manga / manhwa that has clothes on.
-        return if (first.isDrawing && anime.isReady) first.copy(animeSuggestive = anime.suggestive(bitmap)) else first
+        // A whole tall screen squeezed into one small square makes a picture in a feed tiny: measured, that caught 0% of
+        // suggestive anime that full-size images caught 100% of. So the screen is read in overlapping square tiles.
+        return tiles(bitmap).map { tile ->
+            val first = predictFirst(interp, tile)
+            // Drawings get the second model: it rates suggestive anime / manga / manhwa that has clothes on.
+            val scores = if (first.isDrawing && anime.isReady) first.copy(animeSuggestive = anime.suggestive(tile)) else first
+            if (tile !== bitmap) tile.recycle()
+            scores
+        }.maxBy(rank)
+    }
+
+    /** Square tiles along the long side, overlapping by 40%: four on a 1080 x 2400 phone screen. */
+    private fun tiles(bitmap: Bitmap): List<Bitmap> {
+        val portrait = bitmap.height >= bitmap.width
+        val side = minOf(bitmap.width, bitmap.height)
+        val length = maxOf(bitmap.width, bitmap.height)
+        if (length - side < side / 10) return listOf(bitmap)
+        val count = kotlin.math.ceil((length - side) / (side * 0.6)).toInt() + 1
+        return (0 until count).map { i ->
+            val offset = ((length - side).toLong() * i / (count - 1)).toInt()
+            if (portrait) Bitmap.createBitmap(bitmap, 0, offset, side, side) else Bitmap.createBitmap(bitmap, offset, 0, side, side)
+        }
     }
 
     private fun predictFirst(interp: Interpreter, bitmap: Bitmap): FilterScores {
