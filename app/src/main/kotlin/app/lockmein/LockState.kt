@@ -63,11 +63,6 @@ class LockState(context: Context) {
         get() = prefs.getLong(LAST_FILTER_CHECK, 0L)
         set(value) = prefs.edit().putLong(LAST_FILTER_CHECK, value).apply()
 
-    /** Test mode: a small strip over watched apps shows the live filter scores, to tune the thresholds on real content. */
-    var filterTestMode: Boolean
-        get() = prefs.getBoolean("filter_test_mode", false)
-        set(value) = prefs.edit().putBoolean("filter_test_mode", value).apply()
-
     /** Last time the screen filter detected a violation. */
     var lastFilterHitMillis: Long
         get() = prefs.getLong(LAST_FILTER_HIT, 0L)

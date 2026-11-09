@@ -23,8 +23,10 @@ class FilterOverlay(private val context: Context) {
 
     val isShowing: Boolean get() = view != null
 
-    fun show(message: String = "Sexual or revealing content detected. Scroll away or switch now.") {
+    /** Shows the warning with a countdown to the second check: leave the content before it reaches 0. */
+    fun show(seconds: Int = 5) {
         if (view != null) return
+        val message = { left: Int -> "Sexual or revealing content. Leave it in $left s or the app closes for 30 s." }
 
         val density = context.resources.displayMetrics.density
         val dp = { value: Int -> (value * density).toInt() }
@@ -74,7 +76,18 @@ class FilterOverlay(private val context: Context) {
                 addView(title)
 
                 val body = TextView(context).apply {
-                    text = message
+                    text = message(seconds)
+                    // Counts down once a second while the banner is up.
+                    var left = seconds
+                    val tick = object : Runnable {
+                        override fun run() {
+                            if (view == null || left <= 1) return
+                            left--
+                            text = message(left)
+                            postDelayed(this, 1000)
+                        }
+                    }
+                    postDelayed(tick, 1000)
                     setTextColor(Color.parseColor("#CAC4D0"))
                     textSize = 12f
                 }
@@ -100,41 +113,6 @@ class FilterOverlay(private val context: Context) {
             windowManager.addView(root, params)
             view = root
         }
-    }
-
-    private var chip: TextView? = null
-
-    /** Test mode: one line of live scores at the bottom of the screen. Never takes touches. */
-    fun showScores(line: String, hit: Boolean) {
-        val density = context.resources.displayMetrics.density
-        val current = chip ?: TextView(context).apply {
-            textSize = 11f
-            setTextColor(Color.WHITE)
-            setPadding((10 * density).toInt(), (6 * density).toInt(), (10 * density).toInt(), (6 * density).toInt())
-            val params = WindowManager.LayoutParams().apply {
-                type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
-                format = PixelFormat.TRANSLUCENT
-                flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                gravity = Gravity.BOTTOM or Gravity.START
-                width = WindowManager.LayoutParams.WRAP_CONTENT
-                height = WindowManager.LayoutParams.WRAP_CONTENT
-                x = (12 * density).toInt()
-                y = (96 * density).toInt()
-            }
-            runCatching { windowManager.addView(this, params) }
-            chip = this
-        }
-        current.text = line
-        current.background = GradientDrawable().apply {
-            setColor(Color.parseColor(if (hit) "#CCB3261E" else "#CC1C1B1F"))
-            cornerRadius = density * 8f
-        }
-    }
-
-    fun hideScores() {
-        chip?.let { runCatching { windowManager.removeView(it) } }
-        chip = null
     }
 
     fun dismiss() {

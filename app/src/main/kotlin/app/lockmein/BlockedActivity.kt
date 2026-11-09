@@ -30,9 +30,10 @@ class BlockedActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val pkg = intent.getStringExtra(EXTRA_PACKAGE).orEmpty()
         val label = DeviceInventory(this).label(pkg)
+        val known = intent.getStringExtra(EXTRA_REASON)
         setContent {
             LockTheme {
-                val why by produceState<String?>(null) { value = withContext(Dispatchers.IO) { ClosedReasons.of(this@BlockedActivity, pkg) } }
+                val why by produceState(known) { if (known != null) return@produceState; value = withContext(Dispatchers.IO) { ClosedReasons.of(this@BlockedActivity, pkg) } }
                 Page("$label is closed", bottomBar = { MenuButton("OK") { goHome() } }) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         AppIcon(pkg, 48.dp)
@@ -52,10 +53,12 @@ class BlockedActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_PACKAGE = "package"
+        const val EXTRA_REASON = "reason"
 
-        fun open(context: Context, packageName: String) = context.startActivity(
-            Intent(context, BlockedActivity::class.java).putExtra(EXTRA_PACKAGE, packageName)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS),
+        /** No opening animation: it replaces Android's dialog, so it must be there at once. */
+        fun open(context: Context, packageName: String, reason: String? = null) = context.startActivity(
+            Intent(context, BlockedActivity::class.java).putExtra(EXTRA_PACKAGE, packageName).putExtra(EXTRA_REASON, reason)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS or Intent.FLAG_ACTIVITY_NO_ANIMATION),
         )
     }
 }

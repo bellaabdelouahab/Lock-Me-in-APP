@@ -48,8 +48,8 @@ class FilterService : AccessibilityService() {
     private var currentForegroundPackage: String? = null
     private var lastThumbnail: ByteArray? = null
     private var isTakingScreenshot = false
-    /** The seductive threshold even while that model is test-only, so test mode shows when it would act. */
-    private var seductiveTestThreshold = 1.01f
+    /** Closed apps by lower-case label, with the reason, kept fresh so the closed-app screen opens at once. */
+    @Volatile private var closedByLabel: Map<String, Pair<String, String>> = emptyMap()
     // One check at a time: during a video every frame is new and a check can outlast the 1-second tick. Without this the
     // checks queued up (each holding a full screenshot) until the app ran out of memory and crashed.
     private val checking = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -60,6 +60,7 @@ class FilterService : AccessibilityService() {
         instance = this
         classifier = FilterModelClassifier(this)
         overlay = FilterOverlay(this)
+        refreshClosed()
         val config = ConfigStore(this).load()
         if (config != null) {
             decisionMachine = FilterDecisionMachine(
@@ -68,7 +69,6 @@ class FilterService : AccessibilityService() {
                 animeThreshold = config.filterAnimeThreshold,
                 seductiveThreshold = config.filterSeductiveThreshold.takeIf { config.filterSeductiveLive },
             )
-            seductiveTestThreshold = config.filterSeductiveThreshold
         }
     }
 
@@ -96,6 +96,7 @@ class FilterService : AccessibilityService() {
         if (pkg != currentForegroundPackage) {
             currentForegroundPackage = pkg
             onForegroundAppChanged(pkg)
+            refreshClosed()
         }
     }
 
@@ -120,8 +121,14 @@ class FilterService : AccessibilityService() {
      * until when. The app is named by the dialog text, or else by the icon tapped just before.
      */
     private fun replaceBlockedDialog(event: AccessibilityEvent) {
-        val config = ConfigStore(this).load() ?: return
         val shown = (event.text.joinToString(" ") + " " + (lastClick?.takeIf { System.currentTimeMillis() - it.second < 3_000 }?.first ?: ""))
+        // Fast path: the closed apps are already known, so ours replaces Android's dialog in the same frame, with its reason.
+        closedByLabel.entries.filter { shown.contains(it.key, ignoreCase = true) }.maxByOrNull { it.key.length }?.let { (_, app) ->
+            closeDialog(event)
+            BlockedActivity.open(this, app.first, app.second)
+            return
+        }
+        val config = ConfigStore(this).load() ?: return
         serviceScope.launch(Dispatchers.Default) {
             val inventory = DeviceInventory(this@FilterService)
             val closed = ClosedReasons.all(this@FilterService, config).map { it.packageName }
@@ -131,6 +138,34 @@ class FilterService : AccessibilityService() {
                 performGlobalAction(GLOBAL_ACTION_BACK)
                 BlockedActivity.open(this@FilterService, pkg)
             }
+        }
+    }
+
+    /** Taps the dialog's own button (no BACK, which could land on our screen instead). Falls back to BACK. */
+    private fun closeDialog(event: AccessibilityEvent) {
+        val root = event.source ?: rootInActiveWindow
+        val queue = ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>().apply { root?.let { add(it) } }
+        while (queue.isNotEmpty()) {
+            val node = queue.removeFirst()
+            if (node.isClickable && node.className?.contains("Button") == true) {
+                node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+                return
+            }
+            for (i in 0 until node.childCount) node.getChild(i)?.let { queue.add(it) }
+        }
+        performGlobalAction(GLOBAL_ACTION_BACK)
+    }
+
+    /** Re-reads which apps are closed and why (off the main thread). */
+    private fun refreshClosed() {
+        serviceScope.launch(Dispatchers.Default) {
+            val config = ConfigStore(this@FilterService).load() ?: return@launch
+            val inventory = DeviceInventory(this@FilterService)
+            closedByLabel = runCatching {
+                ClosedReasons.all(this@FilterService, config).filter { it.closedNow }
+                    .mapNotNull { r -> inventory.label(r.packageName).takeIf { it.isNotBlank() }?.let { it.lowercase() to (r.packageName to r.why) } }
+                    .toMap()
+            }.getOrDefault(closedByLabel)
         }
     }
 
@@ -182,7 +217,6 @@ class FilterService : AccessibilityService() {
             startSampling(pkg)
         } else {
             stopSampling()
-            overlay?.hideScores()
             val resetAction = decisionMachine.reset()
             if (resetAction is FilterAction.ClearWarning) {
                 overlay?.dismiss()
@@ -300,15 +334,6 @@ class FilterService : AccessibilityService() {
             }
 
             val scores = imageScores.copy(textMatch = textMatch)
-            if (state.filterTestMode) {
-                val m = decisionMachine
-                val hit = scores.isHit(m.pornHentaiThreshold, m.sexyThreshold, m.animeThreshold, seductiveTestThreshold)
-                val line = "TEST  porn %.2f  sexy %.2f  hentai %.2f  anime %s  text %s  seductive %.2f%s".format(
-                    scores.porn, scores.sexy, scores.hentai, if (scores.isDrawing) "%.2f".format(scores.animeSuggestive) else "-", scores.textMatch ?: "-",
-                    scores.seductive, if (m.seductiveThreshold == null) " (test only)" else "",
-                )
-                withContext(Dispatchers.Main) { overlay?.showScores(line, hit) }
-            }
 
             // 3. Process with Decision State Machine
             val action = decisionMachine.processFrame(pkg, scores, now)
@@ -352,6 +377,7 @@ class FilterService : AccessibilityService() {
 
                 // Reapply policy to suspend the package via device owner
                 PolicyRunner(this).runIfActive(now)
+                refreshClosed()
             }
         }
     }

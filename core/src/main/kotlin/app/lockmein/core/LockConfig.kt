@@ -56,8 +56,8 @@ data class LockConfig(
      * 1% of everyday photos of women flagged; 67% of seductive anime caught, 10% of ordinary anime flagged.
      */
     val filterSeductiveThreshold: Float = 0.80f,
-    /** False while the seductive model only shows its score in filter test mode; true once it closes apps too. */
-    val filterSeductiveLive: Boolean = false,
+    /** The seductive model acts like the others (warning, 5-second countdown, 30-second close). */
+    val filterSeductiveLive: Boolean = true,
     /** Start of the night and end of social-app time, "HH:mm". */
     val nightStart: String = "22:00",
     /** The weekly settings window, when settings can be changed and removals scheduled: ISO day (7 = Sunday) and its hours. */

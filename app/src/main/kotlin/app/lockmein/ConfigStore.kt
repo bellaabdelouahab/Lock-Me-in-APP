@@ -21,6 +21,7 @@ class ConfigStore(context: Context) {
         var migrated = decoded
         if (version < 1) migrated = migrate(migrated)
         if (version < 2) migrated = tunedThresholds(migrated)
+        if (version < 3) migrated = migrated.copy(filterSeductiveLive = true) // v0.4.80: out of test mode
         save(migrated)
         prefs.edit().putInt(VERSION, CURRENT_VERSION).apply()
         return migrated
@@ -58,7 +59,7 @@ class ConfigStore(context: Context) {
 
         /** Migrates config: ensures defaults for alwaysBlocked, windowApps, and watchedApps are present without dropping existing. */
         private const val VERSION = "config_version"
-        private const val CURRENT_VERSION = 2
+        private const val CURRENT_VERSION = 3
 
         /** v0.4.67: the filter scans the screen in tiles; thresholds tuned on 600 test images. Only untouched defaults move. */
         fun tunedThresholds(config: LockConfig): LockConfig =
