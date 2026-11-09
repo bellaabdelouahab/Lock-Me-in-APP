@@ -70,13 +70,17 @@ class FilterService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
             // The label of what was tapped (an app icon on the home screen), to name the app behind a "blocked" dialog.
-            lastClick = event.text.joinToString(" ").trim() to System.currentTimeMillis()
+            lastClick = (event.text.joinToString(" ") + " " + (event.contentDescription ?: "")).trim() to System.currentTimeMillis()
             return
         }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         if (pkg == packageName) return // Ignore Lock Me In's own windows
 
-        if (pkg == "android" && event.className?.contains("SuspendedAppActivity") == true) {
+        // Android's dialog for a closed app: for a device owner it is Settings' "blocked by admin" dialog showing our support
+        // message (no app name); for other suspensions it is SuspendedAppActivity. Either way, recognised by its class or our text.
+        val cls = event.className?.toString().orEmpty()
+        val dialogText = event.text.joinToString(" ")
+        if (dialogText.contains(SUPPORT_MESSAGE_START) || cls.contains("SuspendedAppActivity") || cls.contains("ActionDisabledByAdmin") || cls.contains("AdminSupportDetails")) {
             replaceBlockedDialog(event)
             return
         }
@@ -328,6 +332,7 @@ class FilterService : AccessibilityService() {
     companion object {
         const val SAMPLE_INTERVAL_MS = 1000L
         private const val MAX_TEXT_NODES = 400
+        private val SUPPORT_MESSAGE_START = SUPPORT_MESSAGE.take(24)
         private const val MAX_TEXT_CHARS = 8_000
 
         @Volatile
