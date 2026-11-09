@@ -75,10 +75,10 @@ sealed interface FilterAction {
         val reason: String = "Clean check",
     ) : FilterAction
 
-    /** Second hit after 5 seconds: return to home screen and suspend app for [duration]. */
+    /** Second hit after 5 seconds: return to home screen and close the app for [duration] (30 seconds: long enough to pull you out). */
     data class ExitAndSuspend(
         val packageName: String,
-        val duration: Duration = Duration.ofMinutes(30),
+        val duration: Duration = Duration.ofSeconds(30),
         val scores: FilterScores,
     ) : FilterAction
 }
@@ -107,7 +107,7 @@ class FilterDecisionMachine(
     /** Null while the seductive model only shows its score in test mode. */
     val seductiveThreshold: Float? = null,
     val warningGraceDuration: Duration = Duration.ofSeconds(5),
-    val suspensionDuration: Duration = Duration.ofMinutes(30),
+    val suspensionDuration: Duration = Duration.ofSeconds(30),
 ) {
     var state: FilterState = FilterState.Idle
         private set
