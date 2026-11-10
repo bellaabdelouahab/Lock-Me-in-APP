@@ -48,19 +48,16 @@ class FilterService : AccessibilityService() {
     private var currentForegroundPackage: String? = null
     private var lastThumbnail: ByteArray? = null
     private var isTakingScreenshot = false
-    /** Closed apps by lower-case label, with the reason, kept fresh so the closed-app screen opens at once. */
-    @Volatile private var closedByLabel: Map<String, Pair<String, String>> = emptyMap()
+    private var screenshotAt = 0L
     // One check at a time: during a video every frame is new and a check can outlast the 1-second tick. Without this the
     // checks queued up (each holding a full screenshot) until the app ran out of memory and crashed.
     private val checking = java.util.concurrent.atomic.AtomicBoolean(false)
-    private var lastClick: Pair<String, Long>? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
         classifier = FilterModelClassifier(this)
         overlay = FilterOverlay(this)
-        refreshClosed()
         val config = ConfigStore(this).load()
         if (config != null) {
             decisionMachine = FilterDecisionMachine(
@@ -75,29 +72,25 @@ class FilterService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val pkg = event.packageName?.toString() ?: return
-        if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
-            // The label of what was tapped (an app icon on the home screen), to name the app behind a "blocked" dialog.
-            lastClick = (event.text.joinToString(" ") + " " + (event.contentDescription ?: "")).trim() to System.currentTimeMillis()
-            return
-        }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         if (pkg == packageName) return // Ignore Lock Me In's own windows
 
-        // Android's dialog for a closed app: for a device owner it is Settings' "blocked by admin" dialog showing our support
-        // message (no app name); for other suspensions it is SuspendedAppActivity. Either way, recognised by its class or our text.
-        val cls = event.className?.toString().orEmpty()
-        val dialogText = event.text.joinToString(" ")
-        if (dialogText.contains(SUPPORT_MESSAGE_START) || cls.contains("SuspendedAppActivity") || cls.contains("ActionDisabledByAdmin") || cls.contains("AdminSupportDetails")) {
-            replaceBlockedDialog(event)
-            return
-        }
-        catchNewApp(pkg)
+        // A notification banner, the pulled-down shade or the keyboard also send this event. Only the app window that has focus
+        // counts, otherwise the filter thought you had left the browser and stayed off when the banner went away.
+        val app = foregroundApp() ?: return
+        catchNewApp(app)
 
-        if (pkg != currentForegroundPackage) {
-            currentForegroundPackage = pkg
-            onForegroundAppChanged(pkg)
-            refreshClosed()
+        if (app != currentForegroundPackage) {
+            currentForegroundPackage = app
+            onForegroundAppChanged(app)
         }
+    }
+
+    /** The package of the focused (else topmost) app window; null when no app window is on screen. */
+    private fun foregroundApp(): String? {
+        val apps = runCatching { windows }.getOrNull().orEmpty().filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+        val top = apps.firstOrNull { it.isFocused } ?: apps.firstOrNull { it.isActive } ?: apps.firstOrNull() ?: return null
+        return top.root?.packageName?.toString()
     }
 
     override fun onInterrupt() {
@@ -114,59 +107,6 @@ class FilterService : AccessibilityService() {
         classifier?.close()
         classifier = null
         serviceScope.cancel()
-    }
-
-    /**
-     * Android's own dialog for a closed app only says "blocked by your admin". Close it and open ours, which says why and
-     * until when. The app is named by the dialog text, or else by the icon tapped just before.
-     */
-    private fun replaceBlockedDialog(event: AccessibilityEvent) {
-        val shown = (event.text.joinToString(" ") + " " + (lastClick?.takeIf { System.currentTimeMillis() - it.second < 3_000 }?.first ?: ""))
-        // Fast path: the closed apps are already known, so ours replaces Android's dialog in the same frame, with its reason.
-        closedByLabel.entries.filter { shown.contains(it.key, ignoreCase = true) }.maxByOrNull { it.key.length }?.let { (_, app) ->
-            closeDialog(event)
-            BlockedActivity.open(this, app.first, app.second)
-            return
-        }
-        val config = ConfigStore(this).load() ?: return
-        serviceScope.launch(Dispatchers.Default) {
-            val inventory = DeviceInventory(this@FilterService)
-            val closed = ClosedReasons.all(this@FilterService, config).map { it.packageName }
-            val pkg = closed.filter { inventory.label(it).let { label -> label.isNotBlank() && shown.contains(label, ignoreCase = true) } }
-                .maxByOrNull { inventory.label(it).length } ?: return@launch
-            withContext(Dispatchers.Main) {
-                performGlobalAction(GLOBAL_ACTION_BACK)
-                BlockedActivity.open(this@FilterService, pkg)
-            }
-        }
-    }
-
-    /** Taps the dialog's own button (no BACK, which could land on our screen instead). Falls back to BACK. */
-    private fun closeDialog(event: AccessibilityEvent) {
-        val root = event.source ?: rootInActiveWindow
-        val queue = ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>().apply { root?.let { add(it) } }
-        while (queue.isNotEmpty()) {
-            val node = queue.removeFirst()
-            if (node.isClickable && node.className?.contains("Button") == true) {
-                node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
-                return
-            }
-            for (i in 0 until node.childCount) node.getChild(i)?.let { queue.add(it) }
-        }
-        performGlobalAction(GLOBAL_ACTION_BACK)
-    }
-
-    /** Re-reads which apps are closed and why (off the main thread). */
-    private fun refreshClosed() {
-        serviceScope.launch(Dispatchers.Default) {
-            val config = ConfigStore(this@FilterService).load() ?: return@launch
-            val inventory = DeviceInventory(this@FilterService)
-            closedByLabel = runCatching {
-                ClosedReasons.all(this@FilterService, config).filter { it.closedNow }
-                    .mapNotNull { r -> inventory.label(r.packageName).takeIf { it.isNotBlank() }?.let { it.lowercase() to (r.packageName to r.why) } }
-                    .toMap()
-            }.getOrDefault(closedByLabel)
-        }
     }
 
     /**
@@ -229,6 +169,8 @@ class FilterService : AccessibilityService() {
 
         samplingJob = serviceScope.launch {
             while (isActive && currentForegroundPackage == pkg) {
+                // A screenshot whose answer never came must not stop the filter: after 3 s it is given up on.
+                if (isTakingScreenshot && System.currentTimeMillis() - screenshotAt > 3_000) isTakingScreenshot = false
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !isTakingScreenshot) {
                     captureAndProcess(pkg)
                 }
@@ -247,18 +189,21 @@ class FilterService : AccessibilityService() {
     private fun captureAndProcess(pkg: String) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
         isTakingScreenshot = true
+        screenshotAt = System.currentTimeMillis()
 
         val displayId = Display.DEFAULT_DISPLAY
         takeScreenshot(displayId, mainExecutor, object : TakeScreenshotCallback {
             override fun onSuccess(result: ScreenshotResult) {
                 val hwBuffer = result.hardwareBuffer
-                val colorSpace = result.colorSpace
-                val hwBitmap = Bitmap.wrapHardwareBuffer(hwBuffer, colorSpace)
-                val softwareBitmap = hwBitmap?.copy(Bitmap.Config.ARGB_8888, false)
-
-                hwBuffer.close()
-                hwBitmap?.recycle()
-                isTakingScreenshot = false
+                val softwareBitmap = try {
+                    val hwBitmap = Bitmap.wrapHardwareBuffer(hwBuffer, result.colorSpace)
+                    hwBitmap?.copy(Bitmap.Config.ARGB_8888, false).also { hwBitmap?.recycle() }
+                } catch (e: Exception) {
+                    null
+                } finally {
+                    hwBuffer.close()
+                    isTakingScreenshot = false
+                }
 
                 if (softwareBitmap != null) {
                     processScreenshot(pkg, softwareBitmap)
@@ -377,7 +322,6 @@ class FilterService : AccessibilityService() {
 
                 // Reapply policy to suspend the package via device owner
                 PolicyRunner(this).runIfActive(now)
-                refreshClosed()
             }
         }
     }

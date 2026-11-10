@@ -38,7 +38,7 @@ data class FilterScores(
         sexyThreshold: Float = 0.50f,
         animeThreshold: Float = 0.80f,
         seductiveThreshold: Float? = null,
-    ): Boolean = textMatch != null || level(pornHentaiThreshold, sexyThreshold, animeThreshold, seductiveThreshold) >= 1f
+    ): Boolean = level(pornHentaiThreshold, sexyThreshold, animeThreshold, seductiveThreshold) >= 1f // words alone never act; they are only logged
 
     /** How close the frame is to a hit: the largest score / threshold. 1 or more is a hit. A null seductive threshold leaves that model out. */
     fun level(pornHentaiThreshold: Float, sexyThreshold: Float, animeThreshold: Float, seductiveThreshold: Float? = null): Float =

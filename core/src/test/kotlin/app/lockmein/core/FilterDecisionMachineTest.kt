@@ -114,12 +114,12 @@ class FilterDecisionMachineTest {
     }
 
     @Test
-    fun `suggestive anime with clothes on and sexual words on screen are hits too`() {
+    fun `suggestive anime with clothes on is a hit, sexual words on screen alone are not`() {
         val ecchi = FilterScores(drawings = 0.7f, hentai = 0.2f, neutral = 0.1f, animeSuggestive = 0.85f)
         assertTrue(ecchi.isHit(0.6f, 0.6f, 0.8f))
         assertFalse(ecchi.copy(animeSuggestive = 0.5f).isHit(0.6f, 0.6f, 0.8f))
-        assertTrue(FilterScores(textMatch = "Ecchi").isHit())
-        assertIs<FilterAction.ShowWarning>(machine.processFrame(pkg, FilterScores(textMatch = "harem"), t0))
+        assertFalse(FilterScores(textMatch = "Ecchi").isHit())
+        assertEquals(FilterAction.None, machine.processFrame(pkg, FilterScores(textMatch = "harem"), t0))
     }
 
     @Test

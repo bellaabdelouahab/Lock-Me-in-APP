@@ -3,6 +3,9 @@ package app.lockmein.ui
 import android.app.admin.DevicePolicyManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -243,11 +246,11 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Ring(
                 progress = fraction(spanStart, spanEnd, now),
-                size = 132.dp,
-                stroke = 12.dp,
+                size = 128.dp,
+                stroke = 10.dp,
                 color = if (phase == Phase.NIGHT) MaterialTheme.colorScheme.primary else Palette.Attention,
             ) {
-                Text(short(Duration.between(now, spanEnd)), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(short(Duration.between(now, spanEnd)), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Text("until $nextPhaseName", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -330,7 +333,7 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
             Modifier.weight(1f),
             title = "Window apps",
             value = if (appsOpenNow) short(Duration.between(now, todayClose)) else short(Duration.between(now, nextOpen)),
-            caption = if (appsOpenNow) "left, open until ${CLOCK.format(windowClose)}" else "until they open at ${CLOCK.format(windowOpen)}",
+            caption = if (appsOpenNow) "Open until ${CLOCK.format(windowClose)}" else "Open at ${CLOCK.format(windowOpen)}",
             progress = if (appsOpenNow) fraction(todayOpen, todayClose, now) else fraction(nextOpen.minus(Duration.ofDays(1)).plus(Duration.between(todayOpen, todayClose)), nextOpen, now),
             color = if (appsOpenNow) Palette.Ok else MaterialTheme.colorScheme.primary,
         ) { navigate(Screen.LISTS) }
@@ -338,7 +341,7 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
             Modifier.weight(1f),
             title = "Sunday review",
             value = short(Duration.between(now, nextSettings)),
-            caption = "until ${DAY_TIME.format(nextSettings.atZone(zone))}" + if (waiting.isNotEmpty()) ", ${waiting.size} waiting" else "",
+            caption = DAY_TIME.format(nextSettings.atZone(zone)) + if (waiting.isNotEmpty()) ", ${waiting.size} waiting" else "",
             progress = fraction(nextSettings.minus(Duration.ofDays(7)), nextSettings, now),
             color = MaterialTheme.colorScheme.secondary,
         ) { navigate(Screen.WINDOW) }
@@ -348,20 +351,28 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
             Modifier.weight(1f),
             title = "Closed now",
             value = closedNow?.toString() ?: "...",
-            caption = "apps closed right now",
+            caption = "Apps closed right now",
+            icon = Icons.Filled.Block,
+            color = Palette.Closed,
         ) { navigate(Screen.LISTS) }
         InsightTile(
             Modifier.weight(1f),
             title = "Screen filter",
             value = filterWeek?.first?.toString() ?: "...",
-            caption = filterWeek?.let { "warnings this week, ${it.second} closed" } ?: "warnings this week",
+            caption = filterWeek?.let { "Warnings this week, ${it.second} closed" } ?: "Warnings this week",
+            icon = Icons.Filled.Shield,
+            color = Palette.Attention,
         ) { navigate(Screen.REPORT) }
     }
-    Text(
-        listOf(countdown.uninstallWindowLine, countdown.appsCountLine).filter { it.isNotBlank() }.joinToString("\n"),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    AppCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            IconCircle(Icons.Filled.Schedule, MaterialTheme.colorScheme.secondaryContainer, size = 40.dp, tint = MaterialTheme.colorScheme.secondary)
+            Column(Modifier.weight(1f)) {
+                Text(countdown.uninstallWindowLine, style = MaterialTheme.typography.bodyMedium)
+                Text(countdown.appsCountLine, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
 
     Spacer(Modifier.height(8.dp))
 
@@ -398,19 +409,19 @@ private fun fraction(start: Instant, end: Instant, now: Instant): Float {
     return (Duration.between(start, now).toMillis().toFloat() / total).coerceIn(0f, 1f)
 }
 
-/** "3 h 12 min", "45 min", "2 d 4 h". */
+/** "3h 12m", "45m", "2d 4h". */
 private fun short(d: Duration): String {
     val m = d.toMinutes().coerceAtLeast(0)
     return when {
-        m >= 48 * 60 -> "${m / 1440} d ${m % 1440 / 60} h"
-        m >= 60 -> "${m / 60} h ${m % 60} min"
-        else -> "$m min"
+        m >= 48 * 60 -> "${m / 1440}d ${m % 1440 / 60}h"
+        m >= 60 -> "${m / 60}h ${m % 60}m"
+        else -> "${m}m"
     }
 }
 
 @Composable
 private fun Ring(progress: Float, size: Dp, stroke: Dp, color: Color, content: @Composable ColumnScope.() -> Unit) {
-    val track = MaterialTheme.colorScheme.surfaceVariant
+    val track = color.copy(alpha = 0.18f)
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val s = stroke.toPx()
@@ -432,7 +443,12 @@ private fun QuickAction(icon: ImageVector, label: String, badge: Int = 0, onClic
     ) {
         Box {
             IconCircle(icon, MaterialTheme.colorScheme.primaryContainer, size = 52.dp, tint = MaterialTheme.colorScheme.primary)
-            if (badge > 0) StatusBadge(kind = StatusKind.ATTENTION, label = "$badge", modifier = Modifier.align(Alignment.TopEnd))
+            if (badge > 0) {
+                Box(
+                    Modifier.align(Alignment.TopEnd).size(20.dp).background(Palette.Attention, androidx.compose.foundation.shape.CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) { Text("$badge", style = MaterialTheme.typography.labelSmall, color = Color.White, fontWeight = FontWeight.Bold) }
+            }
         }
         Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
     }
@@ -445,15 +461,22 @@ private fun InsightTile(
     value: String,
     caption: String,
     progress: Float? = null,
+    icon: ImageVector? = null,
     color: Color = MaterialTheme.colorScheme.primary,
     onClick: () -> Unit,
 ) {
     AppCard(modifier = modifier, onClick = onClick) {
-        Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (progress != null) Ring(progress, 36.dp, 5.dp, color) {}
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (progress != null) {
+                Ring(progress, 40.dp, 5.dp, color) {}
+            } else if (icon != null) {
+                IconCircle(icon, color.copy(alpha = 0.18f), size = 40.dp, tint = color)
+            }
+            Column {
+                Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            }
         }
-        Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, minLines = 2, maxLines = 2)
+        Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
     }
 }
