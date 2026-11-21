@@ -1,5 +1,6 @@
 package app.lockmein.ui
 
+import androidx.compose.material.icons.filled.Lock
 import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -104,7 +105,17 @@ fun SettingsScreen(onBack: () -> Unit) {
         OutcomeText(outcome)
 
         if (manager.locked) {
-            Note("Settings are locked. Any change requested here will wait for Sunday review (20:00 to 21:00).")
+            AppCard(accent = Palette.Attention) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    GlowCircle(Icons.Filled.Lock, Palette.Attention, size = 36.dp)
+                    Text(
+                        "Settings are locked. Any change requested here will wait for Sunday review (20:00 to 21:00).",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
         }
 
         // Section: Protection
@@ -134,6 +145,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             SettingsItem(
                 icon = Icons.Filled.Schedule,
                 title = "Weekly settings window",
+                tint = Palette.Info,
                 value = "$windowDayName ${current.windowStart} to ${current.windowEnd}",
                 onClick = { activeDialog = SettingsDialog.WEEKLY_WINDOW },
             )
@@ -141,6 +153,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             SettingsItem(
                 icon = Icons.Filled.LocationOn,
                 title = "Location and fajr",
+                tint = Palette.Info,
                 value = "${current.latitude}, ${current.longitude} (${current.sunAngleDegrees} deg)",
                 onClick = { activeDialog = SettingsDialog.LOCATION },
             )
@@ -160,6 +173,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 icon = Icons.Filled.Shield,
                 title = "Screen filter",
                 value = filterStatus,
+                tint = if (isFilterOn) Palette.Ok else Palette.Attention,
                 onClick = {
                     val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     context.startActivity(intent)
@@ -204,7 +218,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Icon(Icons.Filled.VisibilityOff, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                GlowCircle(Icons.Filled.VisibilityOff, MaterialTheme.colorScheme.primary, size = 36.dp)
                 Column(Modifier.weight(1f)) {
                     Text("Hide from recent apps", style = MaterialTheme.typography.titleMedium)
                     Text(
@@ -253,7 +267,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         val now = app.lockmein.TrustedClock(context).now()
         if (schedule.inUninstallWindow(now)) {
             Heading("Danger zone")
-            AppCard {
+            AppCard(accent = Palette.Closed) {
                 SettingsItem(
                     icon = Icons.Filled.Warning,
                     title = "Remove Lock Me In",
@@ -282,7 +296,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             label = { Text("DNS Host") },
                             placeholder = { Text("abc123.dns.nextdns.io") },
                             singleLine = true,
-                            shape = CardShape,
+                            shape = FieldShape,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Text(
@@ -377,7 +391,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             label = { Text("Time (HH:mm)") },
                             placeholder = { Text("22:00") },
                             singleLine = true,
-                            shape = CardShape,
+                            shape = FieldShape,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Text("From this time until fajr, night apps are closed.", style = MaterialTheme.typography.bodySmall)
@@ -422,7 +436,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             onValueChange = { startText = it },
                             label = { Text("Window opens (HH:mm)") },
                             singleLine = true,
-                            shape = CardShape,
+                            shape = FieldShape,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         OutlinedTextField(
@@ -430,7 +444,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             onValueChange = { endText = it },
                             label = { Text("Window closes (HH:mm)") },
                             singleLine = true,
-                            shape = CardShape,
+                            shape = FieldShape,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
@@ -460,10 +474,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Fajr is calculated from your coordinates.", style = MaterialTheme.typography.bodySmall)
-                        OutlinedTextField(value = latText, onValueChange = { latText = it }, label = { Text("Latitude") }, singleLine = true, shape = CardShape, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = lonText, onValueChange = { lonText = it }, label = { Text("Longitude") }, singleLine = true, shape = CardShape, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = angleText, onValueChange = { angleText = it }, label = { Text("Sun angle (deg)") }, singleLine = true, shape = CardShape, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = offsetText, onValueChange = { offsetText = it }, label = { Text("Fajr offset (minutes)") }, singleLine = true, shape = CardShape, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = latText, onValueChange = { latText = it }, label = { Text("Latitude") }, singleLine = true, shape = FieldShape, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = lonText, onValueChange = { lonText = it }, label = { Text("Longitude") }, singleLine = true, shape = FieldShape, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = angleText, onValueChange = { angleText = it }, label = { Text("Sun angle (deg)") }, singleLine = true, shape = FieldShape, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = offsetText, onValueChange = { offsetText = it }, label = { Text("Fajr offset (minutes)") }, singleLine = true, shape = FieldShape, modifier = Modifier.fillMaxWidth())
                     }
                 },
                 confirmButton = {
@@ -509,7 +523,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             value = importContent,
                             onValueChange = { importContent = it },
                             minLines = 3,
-                            shape = CardShape,
+                            shape = FieldShape,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
@@ -544,6 +558,7 @@ private fun SettingsItem(
     title: String,
     value: String,
     titleColor: androidx.compose.ui.graphics.Color? = null,
+    tint: androidx.compose.ui.graphics.Color? = null,
     onClick: () -> Unit,
 ) {
     Row(
@@ -554,7 +569,7 @@ private fun SettingsItem(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = titleColor ?: MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+        GlowCircle(icon, titleColor ?: tint ?: MaterialTheme.colorScheme.primary, size = 36.dp)
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = titleColor ?: MaterialTheme.colorScheme.onSurface)
             Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

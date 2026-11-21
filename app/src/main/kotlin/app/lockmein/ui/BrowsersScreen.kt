@@ -3,6 +3,8 @@ package app.lockmein.ui
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,7 +44,7 @@ fun BrowsersScreen(onBack: () -> Unit) {
 
     Page("Browsers", onBack) {
         AppCard {
-            Text("Browser policy", style = MaterialTheme.typography.titleMedium)
+            CardTitle(Icons.Filled.Language, MaterialTheme.colorScheme.primary, "Browser policy")
             Text(
                 "Open: ${config.allowedBrowser?.let(inventory::label) ?: "None"}. Other browsers are closed to prevent filter bypass. Approving another requires requesting it for Sunday review (20:00 to 21:00) or using the friend's code.",
                 style = MaterialTheme.typography.bodySmall,
@@ -58,7 +60,7 @@ fun BrowsersScreen(onBack: () -> Unit) {
             }
         }
         closed.forEach { pkg ->
-            AppCard {
+            AppCard(accent = Palette.Closed) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     AppIcon(pkg, size = 40.dp)
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
@@ -66,7 +68,7 @@ fun BrowsersScreen(onBack: () -> Unit) {
                         Text(
                             "Closed browser",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Palette.Closed,
                         )
                     }
                     TextButton(onClick = {

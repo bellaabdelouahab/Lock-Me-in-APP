@@ -20,7 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -106,41 +106,33 @@ fun ListsScreen(onBack: () -> Unit) {
         onBack = onBack,
         bottomBar = {
             if (selectedTab < 4) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                ) {
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                    ) {
-                        PrimaryButton(
-                            label = when (selectedTab) {
-                                0 -> "+ Add night apps"
-                                1 -> "+ Add blocked apps"
-                                2 -> "+ Add window apps"
-                                else -> "+ Add watched apps"
-                            },
-                            onClick = {
-                                pickingForList = when (selectedTab) {
-                                    0 -> AppList.NIGHT_CLOSED
-                                    1 -> AppList.ALWAYS_BLOCKED
-                                    2 -> AppList.WINDOW_APPS
-                                    else -> AppList.WATCHED
-                                }
-                            },
-                        )
-                    }
+                BottomBar {
+                    PrimaryButton(
+                        label = when (selectedTab) {
+                            0 -> "+ Add night apps"
+                            1 -> "+ Add blocked apps"
+                            2 -> "+ Add window apps"
+                            else -> "+ Add watched apps"
+                        },
+                        onClick = {
+                            pickingForList = when (selectedTab) {
+                                0 -> AppList.NIGHT_CLOSED
+                                1 -> AppList.ALWAYS_BLOCKED
+                                2 -> AppList.WINDOW_APPS
+                                else -> AppList.WATCHED
+                            }
+                        },
+                    )
                 }
             }
         },
     ) {
-        TabRow(
+        // Scrollable, so every tab shows its whole name and count instead of being cut to "At" or "Windo".
+        ScrollableTabRow(
             selectedTabIndex = selectedTab,
-            containerColor = MaterialTheme.colorScheme.surface,
-            divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) },
+            edgePadding = 0.dp,
+            containerColor = MaterialTheme.colorScheme.background,
+            divider = { HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = if (Palette.isDark) 0.22f else 0.16f)) },
         ) {
             tabs.forEachIndexed { index, title ->
                 Tab(
@@ -164,7 +156,7 @@ fun ListsScreen(onBack: () -> Unit) {
             placeholder = { Text("Filter apps in this tab") },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
             singleLine = true,
-            shape = CardShape,
+            shape = FieldShape,
             modifier = Modifier.fillMaxWidth(),
         )
 
@@ -265,7 +257,7 @@ fun ListsScreen(onBack: () -> Unit) {
                                 Text("No closed apps match your filter.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         } else {
-                            AppCard {
+                            AppCard(accent = Palette.Closed) {
                                 filtered.forEachIndexed { index, app ->
                                     val label = inventory.label(app.packageName)
                                     AppRow(
@@ -369,7 +361,15 @@ private fun renderAppList(
             )
         }
     } else {
-        AppCard {
+        // Each list edged in what it does: teal at night, red blocked, blue on a schedule, amber watched.
+        AppCard(
+            accent = when (listType) {
+                AppList.NIGHT_CLOSED -> MaterialTheme.colorScheme.primary
+                AppList.ALWAYS_BLOCKED -> Palette.Closed
+                AppList.WINDOW_APPS -> Palette.Info
+                AppList.WATCHED -> Palette.Attention
+            },
+        ) {
             filtered.forEachIndexed { index, pkg ->
                 val label = inventory.label(pkg)
                 val subtitle = when (listType) {

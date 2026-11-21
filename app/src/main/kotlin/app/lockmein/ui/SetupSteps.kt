@@ -1,5 +1,7 @@
 package app.lockmein.ui
 
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Info
 import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.content.Intent
@@ -82,7 +84,7 @@ private const val BACKUP_PHRASE = "I backed up"
 @Composable
 fun StepHeader(icon: ImageVector, title: String, subtitle: String) {
     Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+        GlowCircle(icon, MaterialTheme.colorScheme.primary, size = 52.dp)
         Text(title, style = MaterialTheme.typography.titleLarge)
         Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -95,18 +97,9 @@ private fun openSettings(context: Context, action: String) {
 
 @Composable
 private fun Chore(number: Int, text: String, ticked: Boolean, onTick: (Boolean) -> Unit, button: String? = null, onButton: (() -> Unit)? = null) {
-    AppCard {
+    AppCard(accent = if (ticked) Palette.Ok else null) {
         Row(Modifier.fillMaxWidth().clickable { onTick(!ticked) }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(
-                Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(if (ticked) Palette.Ok else MaterialTheme.colorScheme.surfaceContainerHighest),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (ticked) Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                else Text("$number", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
-            }
+            NumberDisc(number, done = ticked)
             Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
         }
         if (button != null && onButton != null) SecondaryButton(button, onButton)
@@ -139,18 +132,15 @@ fun OwnerStep(onBecameOwner: () -> Unit) {
 
     StepHeader(Icons.Filled.Usb, "Make this app the device owner", "Android's management layer enforces the policy even when the app is closed. Only a computer can activate it over USB.")
     if (BuildConfig.PREVIEW) {
-        AppCard {
-            Text("Preview build", fontWeight = FontWeight.SemiBold)
+        AppCard(accent = Palette.Info) {
+            CardTitle(Icons.Filled.Info, Palette.Info, "Preview build")
             Text("This preview build cannot become device owner and changes nothing on your phone. This step is skipped. Tap Next to continue.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         return
     }
     if (owner) {
-        AppCard {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(Icons.Filled.CheckCircle, null, tint = Palette.Ok, modifier = Modifier.size(24.dp))
-                Text("This app is the device owner.", fontWeight = FontWeight.SemiBold)
-            }
+        AppCard(accent = Palette.Ok) {
+            CardTitle(Icons.Filled.CheckCircle, Palette.Ok, "This app is the device owner.")
         }
         return
     }
@@ -162,7 +152,7 @@ fun OwnerStep(onBecameOwner: () -> Unit) {
             onValueChange = { backupPhrase = it },
             label = { Text("Type: $BACKUP_PHRASE") },
             singleLine = true,
-            shape = CardShape,
+            shape = FieldShape,
             modifier = Modifier.fillMaxWidth(),
             trailingIcon = { if (backup) Icon(Icons.Filled.CheckCircle, null, tint = Palette.Ok) },
         )
@@ -196,7 +186,7 @@ fun OwnerStep(onBecameOwner: () -> Unit) {
         Text("5. On a computer with adb", fontWeight = FontWeight.SemiBold)
         Text("Connect the phone, allow the prompt on the screen, and run:", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         Surface(
-            shape = CardShape,
+            shape = FieldShape,
             color = MaterialTheme.colorScheme.surfaceContainerHighest,
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -259,15 +249,8 @@ fun DnsStep(draft: LockConfig, onChange: (LockConfig) -> Unit, onChecked: (Strin
 
 @Composable
 private fun PickRow(selected: Boolean, label: String, tag: String? = null, packageName: String? = null, onSelect: () -> Unit) {
-    Card(
-        Modifier.fillMaxWidth().clickable(onClick = onSelect),
-        shape = CardShape,
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-        ),
-        border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    AppCard(accent = if (selected) MaterialTheme.colorScheme.primary else null, onClick = onSelect) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             RadioButton(selected, onClick = onSelect)
             if (packageName != null) AppIcon(packageName, 36.dp)
             Column(Modifier.weight(1f)) {
@@ -297,15 +280,8 @@ fun NightStep(draft: LockConfig, apps: SetupApps?, onChange: (LockConfig) -> Uni
     if (apps == null) return Note("Reading installed apps...")
     apps.launchable.forEach { app ->
         val on = app.packageName in draft.nightClosed
-        Card(
-            Modifier.fillMaxWidth().clickable { onChange(toggle(draft, app.packageName, !on)) },
-            shape = CardShape,
-            colors = CardDefaults.cardColors(
-                containerColor = if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-            ),
-            border = BorderStroke(1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
-        ) {
-            Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        AppCard(accent = if (on) MaterialTheme.colorScheme.primary else null, onClick = { onChange(toggle(draft, app.packageName, !on)) }) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 AppIcon(app.packageName, 36.dp)
                 Column(Modifier.weight(1f)) {
                     Text(app.label, style = MaterialTheme.typography.titleMedium)
@@ -330,12 +306,7 @@ fun RhythmStep(draft: LockConfig, onChange: (LockConfig) -> Unit) {
 @Composable
 private fun HowItWorks(number: Int, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(
-            Modifier.size(24.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("$number", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-        }
+        NumberDisc(number, size = 26.dp)
         Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
     }
 }
@@ -361,11 +332,8 @@ fun FriendStep(manager: ChangeManager, verified: Boolean, onVerified: () -> Unit
             )
         }
         if (verified) {
-            AppCard {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Icon(Icons.Filled.CheckCircle, null, tint = Palette.Ok, modifier = Modifier.size(24.dp))
-                    Text("Friend code is verified and ready.", fontWeight = FontWeight.SemiBold)
-                }
+            AppCard(accent = Palette.Ok) {
+                CardTitle(Icons.Filled.CheckCircle, Palette.Ok, "Friend code is verified and ready.")
             }
         }
         SecondaryButton(
@@ -426,22 +394,16 @@ fun FilterStep(onEnabled: () -> Unit) {
     )
 
     if (BuildConfig.PREVIEW) {
-        AppCard {
-            Text("Preview build", fontWeight = FontWeight.SemiBold)
+        AppCard(accent = Palette.Info) {
+            CardTitle(Icons.Filled.Info, Palette.Info, "Preview build")
             Text("In this preview build the accessibility service is simulated. Tap Next to continue.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
         }
         return
     }
 
     if (isEnabled) {
-        AppCard {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(Icons.Filled.CheckCircle, null, tint = Palette.Ok, modifier = Modifier.size(24.dp))
-                Column {
-                    Text("Screen filter is on", fontWeight = FontWeight.SemiBold)
-                    Text("The accessibility service is active and ready.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                }
-            }
+        AppCard(accent = Palette.Ok) {
+            CardTitle(Icons.Filled.CheckCircle, Palette.Ok, "Screen filter is on", "The accessibility service is active and ready.")
         }
         return
     }
@@ -499,7 +461,7 @@ fun ReviewStep(draft: LockConfig, apps: SetupApps?, friendVerified: Boolean, fil
     fun label(pkg: String) = apps?.launchable?.firstOrNull { it.packageName == pkg }?.label ?: pkg
     StepHeader(Icons.Filled.CheckCircle, "Ready to start", "Review your rules. Nothing is enforced until you tap Start protection.")
     AppCard {
-        Text("Summary", style = MaterialTheme.typography.titleMedium)
+        CardTitle(Icons.Filled.Checklist, MaterialTheme.colorScheme.primary, "Summary")
         Text("Private DNS: ${draft.dnsHost}", style = MaterialTheme.typography.bodyMedium)
         Text("Browser: ${draft.allowedBrowser?.let(::label) ?: "No browser stays open"}", style = MaterialTheme.typography.bodyMedium)
         Text("Night apps: ${draft.nightClosed.size} apps selected", style = MaterialTheme.typography.bodyMedium)

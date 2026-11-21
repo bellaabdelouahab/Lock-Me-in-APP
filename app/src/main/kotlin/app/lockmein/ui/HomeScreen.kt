@@ -177,15 +177,8 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
     // Combined top alert card: setup not finished OR update available
     val setupIncomplete = !store.setupComplete
     if (!bannerDismissed && (setupIncomplete || hasUpdate)) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = CardShape,
-            colors = CardDefaults.cardColors(
-                containerColor = if (setupIncomplete) Palette.AttentionContainer else MaterialTheme.colorScheme.primaryContainer,
-            ),
-            border = BorderStroke(1.dp, if (setupIncomplete) Palette.Attention else MaterialTheme.colorScheme.primary),
-        ) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        TintedCard(Modifier, if (setupIncomplete) Palette.Attention else MaterialTheme.colorScheme.primary) {
+            run {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         if (setupIncomplete) Icons.Filled.WarningAmber else Icons.Filled.SystemUpdate,
@@ -426,35 +419,6 @@ private fun short(d: Duration): String {
 }
 
 @Composable
-private fun Ring(progress: Float, size: Dp, stroke: Dp, color: Color, content: @Composable ColumnScope.() -> Unit) {
-    val track = color.copy(alpha = if (Palette.isDark) 0.16f else 0.18f)
-    val glow = color.copy(alpha = if (Palette.isDark) 0.30f else 0.14f)
-    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) {
-            val s = stroke.toPx()
-            val arc = androidx.compose.ui.geometry.Size(this.size.width - s, this.size.height - s)
-            val topLeft = androidx.compose.ui.geometry.Offset(s / 2, s / 2)
-            // A soft halo around the ring: the colour of the phase, fading out.
-            drawCircle(
-                androidx.compose.ui.graphics.Brush.radialGradient(
-                    0.55f to Color.Transparent, 0.80f to glow, 1f to Color.Transparent,
-                    center = center, radius = this.size.minDimension / 2 + s,
-                ),
-                radius = this.size.minDimension / 2 + s,
-            )
-            drawArc(track, -90f, 360f, false, topLeft, arc, style = Stroke(s))
-            // The arc brightens toward its moving end.
-            val sweep = androidx.compose.ui.graphics.Brush.sweepGradient(
-                0f to color.copy(alpha = 0.55f), (progress.coerceAtLeast(0.01f)) to color, 1f to color.copy(alpha = 0.55f),
-                center = center,
-            )
-            rotate(-90f) { drawArc(sweep, 0f, 360f * progress, false, topLeft, arc, style = Stroke(s, cap = StrokeCap.Round)) }
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally, content = content)
-    }
-}
-
-@Composable
 private fun QuickAction(modifier: Modifier, icon: ImageVector, label: String, badge: Int = 0, onClick: () -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
     Column(
@@ -477,42 +441,6 @@ private fun QuickAction(modifier: Modifier, icon: ImageVector, label: String, ba
         }
         Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false, modifier = Modifier.padding(horizontal = 4.dp))
     }
-}
-
-/** An icon in a disc lit from the middle, with a faint halo: the quick actions and the tiles. */
-@Composable
-private fun GlowCircle(icon: ImageVector, color: Color, size: Dp = 48.dp) {
-    val dark = Palette.isDark
-    Box(
-        Modifier.size(size).drawBehind {
-            drawCircle(
-                androidx.compose.ui.graphics.Brush.radialGradient(
-                    0f to color.copy(alpha = if (dark) 0.45f else 0.30f),
-                    1f to color.copy(alpha = if (dark) 0.14f else 0.12f),
-                    center = center, radius = this.size.minDimension / 2,
-                ),
-            )
-            drawCircle(color.copy(alpha = 0.35f), style = Stroke(1.dp.toPx()))
-        },
-        contentAlignment = Alignment.Center,
-    ) { Icon(icon, contentDescription = null, tint = if (dark) Color.White.copy(alpha = 0.92f) else color, modifier = Modifier.size(size * 0.48f)) }
-}
-
-/** A card edged and faintly lit in the colour of what it reports. */
-@Composable
-private fun TintedCard(modifier: Modifier, color: Color, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
-    val base = MaterialTheme.colorScheme.surfaceVariant
-    Column(
-        modifier
-            .fillMaxWidth()
-            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(color.copy(alpha = if (Palette.isDark) 0.10f else 0.06f), base).map { it.compositeOver(base) }), shape)
-            .border(1.dp, color.copy(alpha = if (Palette.isDark) 0.45f else 0.35f), shape)
-            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        content = content,
-    )
 }
 
 @Composable

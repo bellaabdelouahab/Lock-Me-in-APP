@@ -1,5 +1,15 @@
 package app.lockmein.ui
 
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.EventAvailable
+import androidx.compose.material.icons.filled.LockOpen
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -65,7 +75,7 @@ fun CodeField(code: String, onChange: (String) -> Unit) = OutlinedTextField(
     onValueChange = { onChange(it.filter(Char::isDigit).take(6)) },
     label = { Text("6-digit friend's code") },
     singleLine = true,
-    shape = CardShape,
+    shape = FieldShape,
     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
     modifier = Modifier.fillMaxWidth(),
 )
@@ -122,9 +132,9 @@ fun EmergencyScreen(onBack: () -> Unit) {
     Page("Friend's code", onBack) {
         if (isLockedOut) {
             val remMinutes = Duration.between(now, state.lockoutUntil!!).toMinutes().coerceAtLeast(1)
-            AppCard {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Icon(Icons.Filled.Lock, contentDescription = null, tint = Palette.Closed, modifier = Modifier.size(24.dp))
+            AppCard(accent = Palette.Closed) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    GlowCircle(Icons.Filled.Lock, Palette.Closed, size = 40.dp)
                     Column(Modifier.weight(1f)) {
                         Text("Locked out after 5 wrong codes", style = MaterialTheme.typography.titleMedium, color = Palette.Closed)
                         Text(
@@ -137,10 +147,7 @@ fun EmergencyScreen(onBack: () -> Unit) {
             }
         } else {
             AppCard {
-                Text(
-                    "Ask Mom or your brother for today's code.",
-                    style = MaterialTheme.typography.titleMedium,
-                )
+                CardTitle(Icons.Filled.Key, MaterialTheme.colorScheme.primary, "Ask Mom or your brother for today's code.")
                 Text(
                     "Entering today's code validates it and lets you pick one action to apply immediately without asking again.",
                     style = MaterialTheme.typography.bodySmall,
@@ -234,6 +241,7 @@ fun EmergencyScreen(onBack: () -> Unit) {
 
                         // Action 1: Open one app for an hour
                         ActionRow(
+                            icon = Icons.Filled.LockOpen,
                             title = "Open one app for an hour",
                             subtitle = "Temporarily unblock an app for 60 minutes",
                             onClick = { currentPicker = ActionPicker.OPEN_APP },
@@ -241,6 +249,7 @@ fun EmergencyScreen(onBack: () -> Unit) {
 
                         // Action 2: Approve one waiting request now
                         ActionRow(
+                            icon = Icons.Filled.EventAvailable,
                             title = "Approve one waiting request now",
                             subtitle = if (waiting.isEmpty()) "No requests waiting" else "${waiting.size} request(s) waiting",
                             enabled = waiting.isNotEmpty(),
@@ -249,6 +258,7 @@ fun EmergencyScreen(onBack: () -> Unit) {
 
                         // Action 3: Stop blocking one app now
                         ActionRow(
+                            icon = Icons.Filled.Block,
                             title = "Stop blocking one app now",
                             subtitle = "Remove from Always blocked, Window apps, or Night closed without waiting",
                             onClick = { currentPicker = ActionPicker.STOP_BLOCKING },
@@ -256,6 +266,7 @@ fun EmergencyScreen(onBack: () -> Unit) {
 
                         // Action 4: Let one new app through now
                         ActionRow(
+                            icon = Icons.Filled.Apps,
                             title = "Let one new app through now",
                             subtitle = if (held.isEmpty()) "No new apps held back" else "${held.size} app(s) quarantined",
                             enabled = held.isNotEmpty(),
@@ -264,6 +275,7 @@ fun EmergencyScreen(onBack: () -> Unit) {
 
                         // Action 5: Open one closed browser now
                         ActionRow(
+                            icon = Icons.Filled.Language,
                             title = "Open one closed browser now",
                             subtitle = if (closedBrowsers.isEmpty()) "No closed browsers" else "${closedBrowsers.size} browser(s) closed",
                             enabled = closedBrowsers.isNotEmpty(),
@@ -272,6 +284,7 @@ fun EmergencyScreen(onBack: () -> Unit) {
 
                         // Action 6: Redo the setup now
                         ActionRow(
+                            icon = Icons.Filled.Refresh,
                             title = "Redo the setup now",
                             subtitle = "Reopen the setup to change apps, settings, or DNS",
                             onClick = {
@@ -478,6 +491,7 @@ fun EmergencyScreen(onBack: () -> Unit) {
 
 @Composable
 private fun ActionRow(
+    icon: ImageVector,
     title: String,
     subtitle: String,
     enabled: Boolean = true,
@@ -489,8 +503,9 @@ private fun ActionRow(
             .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        Box(Modifier.alpha(if (enabled) 1f else 0.38f)) { GlowCircle(icon, MaterialTheme.colorScheme.primary, size = 40.dp) }
         Column(Modifier.weight(1f)) {
             Text(
                 title,
@@ -562,8 +577,8 @@ fun RemoveScreen(onBack: () -> Unit, onRemoved: () -> Unit) {
     val inUninstallWindow = config?.let { Rules.schedule(it).inUninstallWindow(now) } ?: false
 
     Page("Remove Lock Me In", onBack) {
-        AppCard {
-            Text("Danger zone", style = MaterialTheme.typography.titleMedium, color = Palette.Closed)
+        AppCard(accent = Palette.Closed) {
+            CardTitle(Icons.Filled.Warning, Palette.Closed, "Danger zone", titleColor = Palette.Closed)
             if (!inUninstallWindow) {
                 Text(
                     "Lock Me In can only be removed during the monthly uninstall window: on the 1st of each month between 20:00 and 21:00.",
@@ -593,7 +608,7 @@ fun RemoveScreen(onBack: () -> Unit, onRemoved: () -> Unit) {
                 onValueChange = { confirmText = it },
                 label = { Text("Type REMOVE to confirm") },
                 singleLine = true,
-                shape = CardShape,
+                shape = FieldShape,
                 modifier = Modifier.fillMaxWidth(),
             )
 

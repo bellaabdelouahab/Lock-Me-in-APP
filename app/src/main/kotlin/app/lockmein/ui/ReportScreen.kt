@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,8 +35,10 @@ fun ReportScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val text = remember { Reports.week(EventLog(context).read(), Instant.now()).toText(ZoneId.systemDefault()) }
     Page("Weekly report", onBack) {
-        AppCard {
-            Text(text, style = MaterialTheme.typography.bodyMedium)
+        AppCard(accent = Palette.Info) {
+            // The report's first line (its dates) as the card's title, the numbers under it; the shared text is unchanged.
+            CardTitle(Icons.Filled.Insights, Palette.Info, text.lineSequence().first())
+            Text(text.lines().drop(1).joinToString("\n").trimEnd(), style = MaterialTheme.typography.bodyMedium)
         }
         SecondaryButton("Share this report", {
             val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
@@ -51,7 +54,7 @@ fun ReportScreen(onBack: () -> Unit) {
         }
         if (detections.isNotEmpty()) {
             Heading("Filter detections")
-            AppCard {
+            AppCard(accent = Palette.Attention) {
                 detections.forEachIndexed { index, event ->
                     val timeStr = DateTimeFormatter.ofPattern("EEE d MMM HH:mm").withZone(ZoneId.systemDefault()).format(event.at)
                     val label = if (event.kind == EventKind.FILTER_BLOCKED) "Closed (30 min)" else "Warning"
@@ -82,7 +85,7 @@ fun AboutScreen(onBack: () -> Unit) {
     Page("About", onBack) {
         AppCard {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Icons.Filled.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                GlowCircle(Icons.Filled.Info, MaterialTheme.colorScheme.primary, size = 44.dp)
                 Text("Lock Me In", style = MaterialTheme.typography.titleLarge)
             }
             Text("Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", style = MaterialTheme.typography.bodyMedium)

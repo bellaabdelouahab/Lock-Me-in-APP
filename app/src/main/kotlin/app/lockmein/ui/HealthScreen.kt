@@ -2,6 +2,7 @@ package app.lockmein.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -74,34 +75,24 @@ fun HealthScreen(onBack: () -> Unit) {
         },
         bottomBar = {
             if (hasFailing && !BuildConfig.PREVIEW && ConfigStore(context).protectionActive) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                ) {
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                    ) {
-                        PrimaryButton(
-                            label = if (repairing) "Repairing..." else "Repair now",
-                            enabled = !repairing,
-                            onClick = {
-                                repairing = true
-                                repairNote = null
-                                scope.background({
-                                    runCatching {
-                                        ConfigStore(context).load()?.let { PolicyRunner(context).run(it) }
-                                    }.exceptionOrNull()?.message
-                                }) { error ->
-                                    repairing = false
-                                    if (error != null) repairNote = "Repair failed: $error"
-                                    recheck()
-                                }
-                            },
-                        )
-                    }
+                BottomBar {
+                    PrimaryButton(
+                        label = if (repairing) "Repairing..." else "Repair now",
+                        enabled = !repairing,
+                        onClick = {
+                            repairing = true
+                            repairNote = null
+                            scope.background({
+                                runCatching {
+                                    ConfigStore(context).load()?.let { PolicyRunner(context).run(it) }
+                                }.exceptionOrNull()?.message
+                            }) { error ->
+                                repairing = false
+                                if (error != null) repairNote = "Repair failed: $error"
+                                recheck()
+                            }
+                        },
+                    )
                 }
             }
         },
@@ -111,19 +102,21 @@ fun HealthScreen(onBack: () -> Unit) {
         val passed = list?.count { it.ok } ?: 0
 
         // Status Card
-        AppCard {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AppCard(accent = if (list == null) MaterialTheme.colorScheme.primary else if (hasFailing) Palette.Attention else Palette.Ok) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (list == null) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                    }
                     Text("Asking Android...", style = MaterialTheme.typography.titleMedium)
                 } else if (hasFailing) {
-                    Icon(Icons.Filled.WarningAmber, contentDescription = null, tint = Palette.Attention, modifier = Modifier.size(22.dp))
+                    GlowCircle(Icons.Filled.WarningAmber, Palette.Attention, size = 40.dp)
                     Text(
                         if (failing.size == 1) "1 item needs attention" else "${failing.size} items need attention",
                         style = MaterialTheme.typography.titleMedium,
                     )
                 } else {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Palette.Ok, modifier = Modifier.size(22.dp))
+                    GlowCircle(Icons.Filled.CheckCircle, Palette.Ok, size = 40.dp)
                     Text("All rules verified ($passed/$total)", style = MaterialTheme.typography.titleMedium)
                 }
             }

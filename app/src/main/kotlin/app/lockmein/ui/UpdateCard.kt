@@ -55,8 +55,8 @@ fun UpdateCard(onlyIfNewer: Boolean = false) {
     val newer = Updater.isNewer(latest)
     if (onlyIfNewer && !newer) return
 
-    InfoCard {
-        if (onlyIfNewer) IconCircle(Icons.Filled.SystemUpdate, Palette.Bar, 40.dp)
+    InfoCard(accent = if (newer) MaterialTheme.colorScheme.primary else null) {
+        if (onlyIfNewer) GlowCircle(Icons.Filled.SystemUpdate, MaterialTheme.colorScheme.primary, 40.dp)
         Text(if (newer) "Version ${latest!!.name} is ready" else "Version ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleMedium)
         Note(
             when {

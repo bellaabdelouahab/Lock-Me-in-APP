@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.sp
  * Follows the system dark theme setting (not schedule).
  * Accent: calm Deep Teal.
  * Status uses three meanings only: OK (green), Needs attention (amber), Broken/closed (red).
- * Shape: one modest corner radius (12dp) used everywhere.
+ * Shape: 16dp corners for cards, 12dp for buttons and fields; cards edged and faintly lit in the colour of what they report.
  */
 object Palette {
     val isDark: Boolean
@@ -116,17 +116,19 @@ private val DarkScheme = darkColorScheme(
     onErrorContainer = Color(0xFFFFDAD6),
 )
 
-// One modest corner radius (12dp) used everywhere
-val Radius = 12.dp
+// Cards and sheets: 16dp corners. Buttons, fields and chips: 12dp. Badges: a full pill.
+val Radius = 16.dp
 val CardShape = RoundedCornerShape(Radius)
-val ButtonShape = RoundedCornerShape(Radius)
+val ButtonShape = RoundedCornerShape(12.dp)
+val FieldShape = RoundedCornerShape(12.dp)
+val PillShape = RoundedCornerShape(50)
 val Dot = CircleShape
 
 private val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(6.dp),
     small = RoundedCornerShape(8.dp),
     medium = RoundedCornerShape(12.dp),
-    large = RoundedCornerShape(12.dp),
+    large = RoundedCornerShape(16.dp),
     extraLarge = RoundedCornerShape(16.dp),
 )
 

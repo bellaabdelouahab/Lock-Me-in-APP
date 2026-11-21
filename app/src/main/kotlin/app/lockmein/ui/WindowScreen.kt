@@ -91,38 +91,21 @@ fun WindowScreen(onBack: () -> Unit) {
         title = "Requests",
         onBack = onBack,
         bottomBar = {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            ) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                ) {
-                    SecondaryButton(
-                        label = "Friend's code",
-                        onClick = { navigate(Screen.EMERGENCY) },
-                    )
-                }
+            BottomBar {
+                SecondaryButton(
+                    label = "Friend's code",
+                    onClick = { navigate(Screen.EMERGENCY) },
+                )
             }
         },
     ) {
         // Status of the Sunday review window
-        AppCard {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(
-                    if (inSettingsWindow) Icons.Filled.CheckCircle else Icons.Filled.Schedule,
-                    contentDescription = null,
-                    tint = if (inSettingsWindow) Palette.Ok else MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
-                Text(
-                    if (inSettingsWindow) "Sunday review window is active" else "Sunday review window is closed",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
+        AppCard(accent = if (inSettingsWindow) Palette.Ok else Palette.Info) {
+            CardTitle(
+                icon = if (inSettingsWindow) Icons.Filled.CheckCircle else Icons.Filled.Schedule,
+                color = if (inSettingsWindow) Palette.Ok else Palette.Info,
+                title = if (inSettingsWindow) "Sunday review window is active" else "Sunday review window is closed",
+            )
             Text(
                 if (inSettingsWindow) "The weekly review window is open until ${config.windowEnd}."
                 else "Next review window: Sunday 20:00 to 21:00 (" + TIME.format(schedule.nextWindowStart(now).atZone(zone)) + ").",
@@ -154,7 +137,7 @@ fun WindowScreen(onBack: () -> Unit) {
                 val (title, targetLabel) = describeKind(request.kind, request.target)
                 val timesAsked = if (request.count == 1) "Asked 1 time this week" else "Asked ${request.count} times this week"
 
-                AppCard {
+                AppCard(accent = if (canApprove) Palette.Ok else Palette.Attention) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(title, style = MaterialTheme.typography.titleMedium)
@@ -265,7 +248,7 @@ fun WindowScreen(onBack: () -> Unit) {
                 )
             }
         } else {
-            AppCard {
+            AppCard(accent = Palette.Attention) {
                 held.forEachIndexed { index, pkg ->
                     val label = inventory.label(pkg)
                     AppRow(

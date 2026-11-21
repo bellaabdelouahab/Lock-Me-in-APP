@@ -1,5 +1,6 @@
 package app.lockmein.ui
 
+import androidx.compose.ui.draw.clip
 import android.app.admin.DevicePolicyManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -121,50 +122,39 @@ fun SetupScreen(onExit: () -> Unit) {
         title = "Setup: ${STEP_TITLES[step]}",
         onBack = { if (step == 0 || (redo && step == 1)) onExit() else step = previous(step, redo) },
         bottomBar = {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            ) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (!canContinue && hint != null) {
-                        Text(
-                            hint,
-                            color = Palette.Attention,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
-                    if (step < LAST_STEP) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            BottomBar {
+                if (!canContinue && hint != null) {
+                    Text(
+                        hint,
+                        color = Palette.Attention,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+                if (step < LAST_STEP) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (step > 0 && !(redo && step == 1)) {
+                            SecondaryButton("Back", { step = previous(step, redo) }, modifier = Modifier.weight(1f).height(48.dp))
+                        }
+                        Button(
+                            onClick = {
+                                if (DnsHost.problem(draft.dnsHost) == null) store.save(draft)
+                                step = if (redo && step == 4) LAST_STEP else step + 1
+                            },
+                            enabled = canContinue,
+                            shape = ButtonShape,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
                         ) {
-                            if (step > 0 && !(redo && step == 1)) {
-                                SecondaryButtonSmall("Back") { step = previous(step, redo) }
-                            }
-                            Button(
-                                onClick = {
-                                    if (DnsHost.problem(draft.dnsHost) == null) store.save(draft)
-                                    step = if (redo && step == 4) LAST_STEP else step + 1
-                                },
-                                enabled = canContinue,
-                                shape = ButtonShape,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                                ),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp),
-                            ) {
-                                Text("Next", style = MaterialTheme.typography.labelLarge)
-                            }
+                            Text("Next", style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }
@@ -182,9 +172,12 @@ fun SetupScreen(onExit: () -> Unit) {
                 progress = { (step + 1f) / (LAST_STEP + 1f) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(4.dp),
+                    .height(6.dp)
+                    .clip(PillShape),
                 color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = if (Palette.isDark) 0.16f else 0.18f),
+                gapSize = 0.dp,
+                drawStopIndicator = {},
             )
         }
 
