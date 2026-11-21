@@ -19,14 +19,14 @@ object ClosedReasons {
         val state = LockState(context)
         val held = state.quarantined
         val filterBlocked = state.filterBlocked(now)
-        val filterOff = !FilterService.isEnabled(context)
+        val filterOff = !FilterService.isWorking(context)
         val dpm = context.getSystemService(DevicePolicyManager::class.java)
         val admin = ComponentName(context, AdminReceiver::class.java)
         val owner = dpm.isDeviceOwnerApp(context.packageName)
         return PolicyRunner(context).planFor(config, now).suspended.map { pkg ->
             val why = when {
                 filterBlocked[pkg] != null -> "Closed by the screen filter until ${clock.format(filterBlocked[pkg])}."
-                filterOff && pkg in config.watchedApps -> "Watched app: closed while the screen filter is off. Turn it on in Accessibility."
+                filterOff && pkg in config.watchedApps -> "Watched app: closed while the screen filter is off or not answering. Turn it on in Accessibility; it opens a few seconds after."
                 pkg in held -> "New app: closed until you let it through (friend's code, or approve it on Sunday 20:00 to 21:00)."
                 pkg in config.alwaysBlocked -> "Always blocked."
                 pkg in config.windowApps -> "Window app: open only from 20:00 to 21:30."

@@ -63,6 +63,14 @@ class LockState(context: Context) {
         get() = prefs.getLong(LAST_FILTER_CHECK, 0L)
         set(value) = prefs.edit().putLong(LAST_FILTER_CHECK, value).apply()
 
+    /**
+     * The screen filter was last seen off or silent (FilterWatcher), so watched apps stay closed. Kept across restarts: a phone that
+     * boots with the filter off stays closed until the filter is back and answering.
+     */
+    var filterDown: Boolean
+        get() = prefs.getBoolean(FILTER_DOWN, false)
+        set(value) = prefs.edit().putBoolean(FILTER_DOWN, value).apply()
+
     /** Last time the screen filter detected a violation. */
     var lastFilterHitMillis: Long
         get() = prefs.getLong(LAST_FILTER_HIT, 0L)
@@ -157,5 +165,6 @@ class LockState(context: Context) {
         const val FILTER_BLOCKED = "filter_blocked_apps"
         const val LAST_FILTER_CHECK = "last_filter_check"
         const val LAST_FILTER_HIT = "last_filter_hit"
+        const val FILTER_DOWN = "filter_down"
     }
 }

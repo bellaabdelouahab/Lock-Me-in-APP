@@ -250,6 +250,32 @@ class FilterServiceTest {
     }
 
     @Test
+    fun test06_switchingTheFilterOffClosesWatchedAppsWithinSecondsAndBackOnReopensThem() {
+        val serviceName = ComponentName(context, FilterService::class.java).flattenToString()
+        val serviceNameFull = "${context.packageName}/${FilterService::class.java.name}"
+        FilterWatcher.start(context)
+        // Let the watcher settle with the filter on and answering.
+        Thread.sleep(3000)
+        assertFalse("watched app is open while the filter works", dpm.isPackageSuspended(admin, testPkg))
+
+        runShell("settings put secure enabled_accessibility_services ''")
+        val off = System.currentTimeMillis()
+        while (!dpm.isPackageSuspended(admin, testPkg) && System.currentTimeMillis() - off < 2000) Thread.sleep(50)
+        val tookMs = System.currentTimeMillis() - off
+        Log.i("FilterServiceTest", "watched app closed $tookMs ms after the filter was switched off")
+        assertTrue("watched app must be closed within 2 s of the filter being switched off (took $tookMs ms)", dpm.isPackageSuspended(admin, testPkg))
+        assertTrue(state.filterDown)
+        assertFalse(FilterService.isWorking(context))
+
+        runShell("settings put secure enabled_accessibility_services $serviceName:$serviceNameFull")
+        runShell("settings put secure accessibility_enabled 1")
+        val on = System.currentTimeMillis()
+        while (dpm.isPackageSuspended(admin, testPkg) && System.currentTimeMillis() - on < 25_000) Thread.sleep(200)
+        assertFalse("watched app must reopen once the filter is back and answering", dpm.isPackageSuspended(admin, testPkg))
+        assertFalse(state.filterDown)
+    }
+
+    @Test
     fun test05_performanceInferenceLatencyMeasurement() {
         val serviceClassifier = FilterService.instance?.classifier
         val classifier = serviceClassifier ?: FilterModelClassifier(context)

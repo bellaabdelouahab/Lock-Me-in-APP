@@ -58,6 +58,14 @@ class FilterService : AccessibilityService() {
         instance = this
         classifier = FilterModelClassifier(this)
         overlay = FilterOverlay(this)
+        // The heartbeat FilterWatcher listens for: a filter that is listed but stops answering closes the watched apps.
+        serviceScope.launch {
+            while (isActive) {
+                FilterWatcher.beat()
+                delay(app.lockmein.core.FilterWatch.BEAT_EVERY_MS)
+            }
+        }
+        FilterWatcher.start(this)
         val config = ConfigStore(this).load()
         if (config != null) {
             decisionMachine = FilterDecisionMachine(
@@ -339,15 +347,21 @@ class FilterService : AccessibilityService() {
         @VisibleForTesting
         var testScoreInjector: ((packageName: String) -> FilterScores?)? = null
 
-        fun isEnabled(context: Context): Boolean {
-            if (instance != null) return true
-            val expectedComponent = ComponentName(context, FilterService::class.java).flattenToString()
-            val expectedComponentShort = ComponentName(context, FilterService::class.java).flattenToShortString()
-            val enabledServices = Settings.Secure.getString(
-                context.contentResolver,
-                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-            ).orEmpty()
-            return enabledServices.contains(expectedComponent) || enabledServices.contains(expectedComponentShort)
-        }
+        /** Switched on in Accessibility (for the setup screens: shows the moment it is turned on). */
+        fun isEnabled(context: Context): Boolean = instance != null || isListed(context)
+
+        /** Accessibility on and this service in Android's list of enabled services: what Android itself says, nothing cached. */
+        fun isListed(context: Context): Boolean = app.lockmein.core.FilterWatch.isListed(
+            Settings.Secure.getInt(context.contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0) == 1,
+            Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES),
+            context.packageName,
+            FilterService::class.java.name,
+        )
+
+        /**
+         * What the rules go by: switched on AND answering (FilterWatcher checks its heartbeat). When it is not, the watched apps
+         * are closed.
+         */
+        fun isWorking(context: Context): Boolean = isListed(context) && !LockState(context).filterDown
     }
 }

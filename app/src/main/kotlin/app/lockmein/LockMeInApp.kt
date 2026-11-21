@@ -20,6 +20,7 @@ class LockMeInApp : Application() {
             registerReceiver(receiver, filter)
         }
         recordCrashes()
+        FilterWatcher.start(this)
     }
 
     /** Puts the app's own crashes in the event log, so a crash on the phone can be traced without a cable. */

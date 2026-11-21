@@ -9,6 +9,9 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- Updates from GitHub: silent as device owner, Android's own prompt otherwise. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- FilterWatcher: closes the watched apps within seconds when the screen filter is switched off. Device owners may run it. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
 
     <application
         android:name=".LockMeInApp"
@@ -72,6 +75,11 @@
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
             </intent-filter>
         </receiver>
+
+        <service
+            android:name=".FilterWatcher"
+            android:exported="false"
+            android:foregroundServiceType="systemExempted" />
 
         <service
             android:name=".FilterService"

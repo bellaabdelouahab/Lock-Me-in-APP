@@ -35,6 +35,8 @@ class PolicyRunner(private val context: Context) {
         // The preview build only shows the screens: it is never the device owner and applies nothing.
         if (BuildConfig.PREVIEW) return RunResult(ApplyReport(emptyList()), now.plus(CHECK_EVERY))
 
+        // Every pass makes sure the filter watcher runs (it may have been stopped by Android).
+        FilterWatcher.start(context)
         val state = LockState(context)
         val schedule = Rules.schedule(config)
         state.noteInstalled(DeviceInventory(context).read().installed).forEach { events.add(EventKind.APP_QUARANTINED, it, now) }
@@ -85,7 +87,7 @@ class PolicyRunner(private val context: Context) {
     fun planFor(
         config: LockConfig,
         now: Instant = TrustedClock(context).now(),
-        filterServiceEnabled: Boolean = FilterService.isEnabled(context),
+        filterServiceEnabled: Boolean = FilterService.isWorking(context),
     ): PolicyPlan {
         val snapshot = DeviceInventory(context).read()
         val state = LockState(context)

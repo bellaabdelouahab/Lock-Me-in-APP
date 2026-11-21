@@ -116,7 +116,7 @@ class Health(private val context: Context) {
             items += HealthItem("Chrome settings", chrome, if (chrome) "Private windows off, safe search on, YouTube strict." else "Chrome is not configured: private windows and its own DNS work.")
         }
 
-        val filterEnabled = FilterService.isEnabled(context)
+        val filterEnabled = FilterService.isWorking(context)
         val modelReady = FilterModelClassifier.isModelAvailable(context)
         val lastCheckMillis = LockState(context).lastFilterCheckMillis
         val lastCheckDetail = if (lastCheckMillis > 0) {
@@ -130,7 +130,7 @@ class Health(private val context: Context) {
             "Screen filter",
             filterOk,
             when {
-                !filterEnabled -> "Accessibility service is off: all ${config.watchedApps.size} watched apps are suspended until it is turned on."
+                !filterEnabled -> "Accessibility service is off or not answering: all ${config.watchedApps.size} watched apps are suspended until it is turned on."
                 !modelReady -> "Accessibility service is on, but filter model is missing or failed to load."
                 else -> "Accessibility service is on, model loaded ($lastCheckDetail)."
             },
