@@ -51,6 +51,8 @@ class FilterServiceTest {
 
     @Before
     fun setup() {
+        FakeFilterBeat.start()
+        FakeFilterBeat.awaitWorking()
         events.clear()
         state.clear()
         FilterService.testScoreInjector = null
@@ -92,6 +94,7 @@ class FilterServiceTest {
 
     @After
     fun tearDown() {
+        FakeFilterBeat.stop()
         FilterService.testScoreInjector = null
         if (dpm.isPackageSuspended(admin, testPkg)) {
             dpm.setPackagesSuspended(admin, arrayOf(testPkg), false)
@@ -256,6 +259,8 @@ class FilterServiceTest {
         FilterWatcher.start(context)
         // Let the watcher settle with the filter on and answering.
         Thread.sleep(3000)
+        FakeFilterBeat.awaitWorking()
+        if (dpm.isPackageSuspended(admin, testPkg)) dpm.setPackagesSuspended(admin, arrayOf(testPkg), false)
         assertFalse("watched app is open while the filter works", dpm.isPackageSuspended(admin, testPkg))
 
         runShell("settings put secure enabled_accessibility_services ''")
@@ -273,6 +278,17 @@ class FilterServiceTest {
         while (dpm.isPackageSuspended(admin, testPkg) && System.currentTimeMillis() - on < 25_000) Thread.sleep(200)
         assertFalse("watched app must reopen once the filter is back and answering", dpm.isPackageSuspended(admin, testPkg))
         assertFalse(state.filterDown)
+
+        // A filter that is switched on but stops answering (no heartbeat for 15 s) closes them too.
+        FakeFilterBeat.stop()
+        val silent = System.currentTimeMillis()
+        while (!dpm.isPackageSuspended(admin, testPkg) && System.currentTimeMillis() - silent < 25_000) Thread.sleep(200)
+        Log.i("FilterServiceTest", "watched app closed ${System.currentTimeMillis() - silent} ms after the heartbeat stopped")
+        assertTrue("watched app must close once the filter stops answering", dpm.isPackageSuspended(admin, testPkg))
+        FakeFilterBeat.start()
+        val back = System.currentTimeMillis()
+        while (dpm.isPackageSuspended(admin, testPkg) && System.currentTimeMillis() - back < 15_000) Thread.sleep(200)
+        assertFalse("watched app reopens once the filter answers again", dpm.isPackageSuspended(admin, testPkg))
     }
 
     @Test

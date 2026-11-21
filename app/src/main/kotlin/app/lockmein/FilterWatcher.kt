@@ -138,6 +138,10 @@ class FilterWatcher : Service() {
         @Volatile
         private var current: FilterWatch? = null
 
+        /** For the emulator tests: whether the running watcher counts the filter as off (null when it is not running). */
+        @androidx.annotation.VisibleForTesting
+        val filterDownNow: Boolean? get() = current?.down
+
         /** The filter service is alive (called every 5 seconds by it). */
         fun beat() {
             val at = SystemClock.uptimeMillis()

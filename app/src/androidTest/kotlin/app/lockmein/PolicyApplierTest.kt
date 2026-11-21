@@ -83,6 +83,8 @@ class PolicyApplierTest {
 
     @Before
     fun reset() {
+        FakeFilterBeat.start()
+        FakeFilterBeat.awaitWorking()
         PackageReceiver.awaitIdle()
         events.clear()
         state.clear()
@@ -103,6 +105,7 @@ class PolicyApplierTest {
 
     @After
     fun tidy() {
+        FakeFilterBeat.stop()
         runCatching { context.unregisterReceiver(packageReceiver) }
         PackageReceiver.awaitIdle()
         store.protectionActive = false
