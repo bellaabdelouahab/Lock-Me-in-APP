@@ -61,7 +61,7 @@ class FilterService : AccessibilityService() {
         // The heartbeat FilterWatcher listens for: a filter that is listed but stops answering closes the watched apps.
         serviceScope.launch {
             while (isActive) {
-                FilterWatcher.beat()
+                if (!heartbeatPausedForTesting) FilterWatcher.beat()
                 delay(app.lockmein.core.FilterWatch.BEAT_EVERY_MS)
             }
         }
@@ -342,6 +342,11 @@ class FilterService : AccessibilityService() {
 
         @Volatile
         var instance: FilterService? = null
+
+        /** Emulator tests: a filter that is switched on but has stopped answering. */
+        @VisibleForTesting
+        @Volatile
+        var heartbeatPausedForTesting = false
 
         /** Test hook for emulator tests to inject scores without explicit images. */
         @VisibleForTesting

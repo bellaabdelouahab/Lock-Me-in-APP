@@ -95,6 +95,7 @@ class FilterServiceTest {
     @After
     fun tearDown() {
         FakeFilterBeat.stop()
+        FilterService.heartbeatPausedForTesting = false
         FilterService.testScoreInjector = null
         if (dpm.isPackageSuspended(admin, testPkg)) {
             dpm.setPackagesSuspended(admin, arrayOf(testPkg), false)
@@ -281,10 +282,12 @@ class FilterServiceTest {
 
         // A filter that is switched on but stops answering (no heartbeat for 15 s) closes them too.
         FakeFilterBeat.stop()
+        FilterService.heartbeatPausedForTesting = true
         val silent = System.currentTimeMillis()
         while (!dpm.isPackageSuspended(admin, testPkg) && System.currentTimeMillis() - silent < 25_000) Thread.sleep(200)
         Log.i("FilterServiceTest", "watched app closed ${System.currentTimeMillis() - silent} ms after the heartbeat stopped")
         assertTrue("watched app must close once the filter stops answering", dpm.isPackageSuspended(admin, testPkg))
+        FilterService.heartbeatPausedForTesting = false
         FakeFilterBeat.start()
         val back = System.currentTimeMillis()
         while (dpm.isPackageSuspended(admin, testPkg) && System.currentTimeMillis() - back < 15_000) Thread.sleep(200)
