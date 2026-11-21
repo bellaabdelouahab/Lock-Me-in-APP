@@ -10,7 +10,7 @@ looking at changes early, without waiting for the release.
 | Logic tests + everything compiles | `scripts/check.sh` | ~1 min cold, seconds warm |
 | Every screen as a picture (preview build, sample data) | `scripts/shots.sh` | ~40 s warm |
 
-`scripts/shots.sh` draws the 21 screens (setup steps, home, apps, requests, settings, drawer...) to `build/shots/*.png`
+`scripts/shots.sh` draws the 23 screens (two in dark mode) (setup steps, home, apps, requests, settings, drawer...) to `build/shots/*.png`
 with Robolectric on the computer: no emulator, no phone. The pictures are sent to the owner in the chat for feedback.
 It checks nothing; it is only for looking.
 

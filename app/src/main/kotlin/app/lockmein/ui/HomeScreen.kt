@@ -1,5 +1,10 @@
 package app.lockmein.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.foundation.border
 import android.app.admin.DevicePolicyManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -242,20 +247,21 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
     }
     val failingHealth = healthItems?.count { !it.ok } ?: 0
 
-    AppCard {
+    val phaseColor = if (phase == Phase.NIGHT) MaterialTheme.colorScheme.primary else Palette.Attention
+    TintedCard(Modifier, phaseColor.copy(alpha = 0.6f)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Ring(
                 progress = fraction(spanStart, spanEnd, now),
-                size = 128.dp,
+                size = 132.dp,
                 stroke = 10.dp,
-                color = if (phase == Phase.NIGHT) MaterialTheme.colorScheme.primary else Palette.Attention,
+                color = phaseColor,
             ) {
                 Text(short(Duration.between(now, spanEnd)), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
                 Text("until $nextPhaseName", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(phaseIcon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                    Icon(phaseIcon, contentDescription = null, tint = phaseColor, modifier = Modifier.size(24.dp))
                     Text(phaseName, style = MaterialTheme.typography.titleLarge)
                 }
                 // The badge never claims more than Android confirms: open setup or a failing check is not "Protected".
@@ -301,11 +307,11 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
     }
 
     // Quick actions
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        QuickAction(Icons.Filled.Apps, "Apps") { navigate(Screen.LISTS) }
-        QuickAction(Icons.Filled.EventAvailable, "Requests", badge = waiting.size) { navigate(Screen.WINDOW) }
-        QuickAction(Icons.Filled.Key, "Friend's code") { navigate(Screen.EMERGENCY) }
-        QuickAction(Icons.Filled.Insights, "Report") { navigate(Screen.REPORT) }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        QuickAction(Modifier.weight(1f), Icons.Filled.Apps, "Apps") { navigate(Screen.LISTS) }
+        QuickAction(Modifier.weight(1f), Icons.Filled.EventAvailable, "Requests", badge = waiting.size) { navigate(Screen.WINDOW) }
+        QuickAction(Modifier.weight(1f), Icons.Filled.Key, "Friend's code") { navigate(Screen.EMERGENCY) }
+        QuickAction(Modifier.weight(1f), Icons.Filled.Insights, "Report") { navigate(Screen.REPORT) }
     }
 
     // Insights
@@ -343,7 +349,7 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
             value = short(Duration.between(now, nextSettings)),
             caption = DAY_TIME.format(nextSettings.atZone(zone)) + if (waiting.isNotEmpty()) ", ${waiting.size} waiting" else "",
             progress = fraction(nextSettings.minus(Duration.ofDays(7)), nextSettings, now),
-            color = MaterialTheme.colorScheme.secondary,
+            color = Palette.Neutral,
         ) { navigate(Screen.WINDOW) }
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -364,9 +370,9 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
             color = Palette.Attention,
         ) { navigate(Screen.REPORT) }
     }
-    AppCard {
+    TintedCard(Modifier, Palette.Info) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            IconCircle(Icons.Filled.Schedule, MaterialTheme.colorScheme.secondaryContainer, size = 40.dp, tint = MaterialTheme.colorScheme.secondary)
+            GlowCircle(Icons.Filled.Schedule, Palette.Info, size = 42.dp)
             Column(Modifier.weight(1f)) {
                 Text(countdown.uninstallWindowLine, style = MaterialTheme.typography.bodyMedium)
                 Text(countdown.appsCountLine, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -421,28 +427,47 @@ private fun short(d: Duration): String {
 
 @Composable
 private fun Ring(progress: Float, size: Dp, stroke: Dp, color: Color, content: @Composable ColumnScope.() -> Unit) {
-    val track = color.copy(alpha = 0.18f)
+    val track = color.copy(alpha = if (Palette.isDark) 0.16f else 0.18f)
+    val glow = color.copy(alpha = if (Palette.isDark) 0.30f else 0.14f)
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val s = stroke.toPx()
             val arc = androidx.compose.ui.geometry.Size(this.size.width - s, this.size.height - s)
             val topLeft = androidx.compose.ui.geometry.Offset(s / 2, s / 2)
+            // A soft halo around the ring: the colour of the phase, fading out.
+            drawCircle(
+                androidx.compose.ui.graphics.Brush.radialGradient(
+                    0.55f to Color.Transparent, 0.80f to glow, 1f to Color.Transparent,
+                    center = center, radius = this.size.minDimension / 2 + s,
+                ),
+                radius = this.size.minDimension / 2 + s,
+            )
             drawArc(track, -90f, 360f, false, topLeft, arc, style = Stroke(s))
-            drawArc(color, -90f, 360f * progress, false, topLeft, arc, style = Stroke(s, cap = StrokeCap.Round))
+            // The arc brightens toward its moving end.
+            val sweep = androidx.compose.ui.graphics.Brush.sweepGradient(
+                0f to color.copy(alpha = 0.55f), (progress.coerceAtLeast(0.01f)) to color, 1f to color.copy(alpha = 0.55f),
+                center = center,
+            )
+            rotate(-90f) { drawArc(sweep, 0f, 360f * progress, false, topLeft, arc, style = Stroke(s, cap = StrokeCap.Round)) }
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally, content = content)
     }
 }
 
 @Composable
-private fun QuickAction(icon: ImageVector, label: String, badge: Int = 0, onClick: () -> Unit) {
+private fun QuickAction(modifier: Modifier, icon: ImageVector, label: String, badge: Int = 0, onClick: () -> Unit) {
+    val accent = MaterialTheme.colorScheme.primary
     Column(
-        Modifier.width(78.dp).clickable(onClick = onClick).padding(vertical = 6.dp),
+        modifier
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
+            .border(1.dp, accent.copy(alpha = 0.22f), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box {
-            IconCircle(icon, MaterialTheme.colorScheme.primaryContainer, size = 52.dp, tint = MaterialTheme.colorScheme.primary)
+            GlowCircle(icon, accent)
             if (badge > 0) {
                 Box(
                     Modifier.align(Alignment.TopEnd).size(20.dp).background(Palette.Attention, androidx.compose.foundation.shape.CircleShape),
@@ -450,8 +475,44 @@ private fun QuickAction(icon: ImageVector, label: String, badge: Int = 0, onClic
                 ) { Text("$badge", style = MaterialTheme.typography.labelSmall, color = Color.White, fontWeight = FontWeight.Bold) }
             }
         }
-        Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false, modifier = Modifier.padding(horizontal = 4.dp))
     }
+}
+
+/** An icon in a disc lit from the middle, with a faint halo: the quick actions and the tiles. */
+@Composable
+private fun GlowCircle(icon: ImageVector, color: Color, size: Dp = 48.dp) {
+    val dark = Palette.isDark
+    Box(
+        Modifier.size(size).drawBehind {
+            drawCircle(
+                androidx.compose.ui.graphics.Brush.radialGradient(
+                    0f to color.copy(alpha = if (dark) 0.45f else 0.30f),
+                    1f to color.copy(alpha = if (dark) 0.14f else 0.12f),
+                    center = center, radius = this.size.minDimension / 2,
+                ),
+            )
+            drawCircle(color.copy(alpha = 0.35f), style = Stroke(1.dp.toPx()))
+        },
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, contentDescription = null, tint = if (dark) Color.White.copy(alpha = 0.92f) else color, modifier = Modifier.size(size * 0.48f)) }
+}
+
+/** A card edged and faintly lit in the colour of what it reports. */
+@Composable
+private fun TintedCard(modifier: Modifier, color: Color, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    val base = MaterialTheme.colorScheme.surfaceVariant
+    Column(
+        modifier
+            .fillMaxWidth()
+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(color.copy(alpha = if (Palette.isDark) 0.10f else 0.06f), base).map { it.compositeOver(base) }), shape)
+            .border(1.dp, color.copy(alpha = if (Palette.isDark) 0.45f else 0.35f), shape)
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        content = content,
+    )
 }
 
 @Composable
@@ -465,12 +526,12 @@ private fun InsightTile(
     color: Color = MaterialTheme.colorScheme.primary,
     onClick: () -> Unit,
 ) {
-    AppCard(modifier = modifier, onClick = onClick) {
+    TintedCard(modifier = modifier, color = color, onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (progress != null) {
-                Ring(progress, 40.dp, 5.dp, color) {}
+                Ring(progress, 42.dp, 5.dp, color) {}
             } else if (icon != null) {
-                IconCircle(icon, color.copy(alpha = 0.18f), size = 40.dp, tint = color)
+                GlowCircle(icon, color, size = 42.dp)
             }
             Column {
                 Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)

@@ -31,7 +31,9 @@ class ScreenShots(private val name: String, private val extras: Map<String, Any>
     fun shot() {
         assumeTrue("screens are drawn from the preview build only (-Ppreview=true)", BuildConfig.PREVIEW)
         val intent = Intent(Intent.ACTION_MAIN).setClassName("app.lockmein.preview", "app.lockmein.MainActivity")
-        extras.forEach { (k, v) ->
+        // The phone follows the system theme: some screens are drawn in dark mode too.
+        if (extras["dark"] == true) org.robolectric.RuntimeEnvironment.setQualifiers("+night")
+        extras.filterKeys { it != "dark" }.forEach { (k, v) ->
             when (v) {
                 is Int -> intent.putExtra(k, v)
                 is Boolean -> intent.putExtra(k, v)
@@ -41,7 +43,7 @@ class ScreenShots(private val name: String, private val extras: Map<String, Any>
         val activity = Robolectric.buildActivity(MainActivity::class.java, intent).setup().get()
         // Let the screen settle: background checks (they run off the main thread, so real time has to pass), effects such as
         // opening the drawer, and their animations.
-        repeat(40) {
+        repeat(60) {
             Thread.sleep(25)
             ShadowLooper.idleMainLooper(50, java.util.concurrent.TimeUnit.MILLISECONDS)
         }
@@ -63,6 +65,8 @@ class ScreenShots(private val name: String, private val extras: Map<String, Any>
             add(arrayOf("lists-window-apps", mapOf("screen" to "LISTS", "tab" to 2, "demo" to true)))
             add(arrayOf("lists-watched", mapOf("screen" to "LISTS", "tab" to 3, "demo" to true)))
             add(arrayOf("drawer", mapOf("screen" to "HOME", "demo" to true, "openDrawer" to true)))
+            add(arrayOf("home-dark", mapOf("screen" to "HOME", "demo" to true, "dark" to true)))
+            add(arrayOf("lists-dark", mapOf("screen" to "LISTS", "demo" to true, "dark" to true)))
         }
     }
 }

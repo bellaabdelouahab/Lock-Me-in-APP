@@ -40,6 +40,10 @@ object Palette {
     val Closed: Color @Composable @ReadOnlyComposable get() = if (isDark) Color(0xFFFFB4AB) else Color(0xFFBA1A1A)
     val ClosedContainer: Color @Composable @ReadOnlyComposable get() = if (isDark) Color(0xFF410002) else Color(0xFFFFDAD6)
 
+    // Accents for the home tiles: a calm blue for dates, a silver for the weekly review.
+    val Info: Color @Composable @ReadOnlyComposable get() = if (isDark) Color(0xFF7CB8FF) else Color(0xFF2F6DB5)
+    val Neutral: Color @Composable @ReadOnlyComposable get() = if (isDark) Color(0xFFB8C2BF) else Color(0xFF5E6B67)
+
     // Neutral text & lines
     val TextPrimary: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurface
     val TextSecondary: Color @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
@@ -95,11 +99,11 @@ private val DarkScheme = darkColorScheme(
     onSecondary = Color(0xFF1B3531),
     secondaryContainer = Color(0xFF324B47),
     onSecondaryContainer = Color(0xFFCCE8E2),
-    background = Color(0xFF121413),
-    onBackground = Color(0xFFE1E3DF),
-    surface = Color(0xFF121413),
-    onSurface = Color(0xFFE1E3DF),
-    surfaceVariant = Color(0xFF1E211F),
+    background = Color(0xFF0D100F),
+    onBackground = Color(0xFFE6E9E6),
+    surface = Color(0xFF0D100F),
+    onSurface = Color(0xFFE6E9E6),
+    surfaceVariant = Color(0xFF181C1B),
     onSurfaceVariant = Color(0xFFA4AAA4),
     surfaceContainer = Color(0xFF1A1D1B),
     surfaceContainerHigh = Color(0xFF242725),
