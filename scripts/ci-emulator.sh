@@ -69,13 +69,14 @@ if adb shell dpm list-owners | grep -q app.lockmein; then
 fi
 
 # Photograph every screen of the preview build (sample data, nothing applied) so the design can be looked at.
+# The preview has its own app id (app.lockmein.preview); its classes keep the app.lockmein package.
 adb uninstall app.lockmein >/dev/null 2>&1
 ./gradlew :app:installRelease -Ppreview=true --console=plain || exit 1
 mkdir -p app/build/reports/androidTests/shots
 shot() { # name, extras...
   name=$1; shift
-  adb shell am force-stop app.lockmein
-  adb shell am start -W -n app.lockmein/.MainActivity "$@" >/dev/null
+  adb shell am force-stop app.lockmein.preview
+  adb shell am start -W -n app.lockmein.preview/app.lockmein.MainActivity "$@" >/dev/null
   sleep 3
   adb exec-out screencap -p > "app/build/reports/androidTests/shots/$name.png"
 }

@@ -23,7 +23,9 @@ android {
     if (providers.gradleProperty("testRelease").orNull == "true") testBuildType = "release"
 
     defaultConfig {
-        applicationId = "app.lockmein"
+        // The preview has its own id, so it can never install over the real app (same key) and silently stop protection,
+        // and the two can sit side by side. The test and sealed builds share the real id: one replaces the other on purpose.
+        applicationId = if (preview) "app.lockmein.preview" else "app.lockmein"
         minSdk = 30
         targetSdk = 35
         // Every CI build is a new version (the run number), so the in-app updater can tell newer from older.
@@ -80,6 +82,15 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    // scripts/shots.sh draws the screens on the computer (Robolectric); it needs the app's resources.
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all { test ->
+            test.systemProperty("shots.dir", System.getProperty("shots.dir") ?: layout.buildDirectory.dir("shots").get().asFile.path)
+            test.maxHeapSize = "2g"
+        }
+    }
 }
 
 dependencies {
@@ -97,6 +108,10 @@ dependencies {
     implementation("org.tensorflow:tensorflow-lite-gpu-api:2.16.1")
     // Second filter model (deepghs anime_rating, MIT) ships as ONNX.
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
+
+    // Test-only, never in the APK: draws the screens to PNG files on the computer (scripts/shots.sh).
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.18.1")
 
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

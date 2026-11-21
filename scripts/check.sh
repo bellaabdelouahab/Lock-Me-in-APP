@@ -6,5 +6,5 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -f local.properties ] || echo "sdk.dir=$HOME/android-sdk" > local.properties
 ./gradlew -q --console=plain -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -PcompileSdkOverride=34 \
-  :core:test :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin "$@"
+  :core:test :app:compileDebugKotlin :app:compileDebugUnitTestKotlin :app:compileDebugAndroidTestKotlin "$@"
 echo "check: ok"
