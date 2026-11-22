@@ -1,28 +1,10 @@
 package app.lockmein.ui
 
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.foundation.border
 import android.app.admin.DevicePolicyManager
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.filled.Insights
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,27 +12,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.NightsStay
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,37 +37,32 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.lockmein.BuildConfig
-import app.lockmein.ChangeManager
 import app.lockmein.ConfigStore
 import app.lockmein.DeviceInventory
 import app.lockmein.Health
 import app.lockmein.HealthItem
 import app.lockmein.LockState
-import app.lockmein.Outcome
 import app.lockmein.Release
 import app.lockmein.Rules
 import app.lockmein.Updater
-import app.lockmein.core.AstronomicalFajr
-import app.lockmein.core.CountdownFormatter
 import app.lockmein.core.LockConfig
 import app.lockmein.core.Phase
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
-import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle
-import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private val CLOCK = DateTimeFormatter.ofPattern("HH:mm")
-private val DAY_TIME = DateTimeFormatter.ofPattern("EEE HH:mm")
 
 @Composable
 fun HomeScreen() {
@@ -116,27 +87,22 @@ fun HomeScreen() {
 
 @Composable
 private fun WelcomeView(owner: Boolean, onSetup: () -> Unit) {
-    AppCard {
-        Text("No fight at night", style = MaterialTheme.typography.titleLarge)
+    Column(Modifier.padding(horizontal = 4.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("No fight at night", style = MaterialTheme.typography.headlineMedium)
         Text(
             "You choose the rules while you are calm. At night the phone keeps them, and opening anything up waits a week.",
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 
     Heading("How it works")
     AppCard {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("1. Set it up once", fontWeight = FontWeight.SemiBold)
-            Text("Seven steps. Each one is verified on the phone before you go on.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Text("2. The night closes the phone", fontWeight = FontWeight.SemiBold)
-            Text("From your night start until fajr only your chosen apps run.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Text("3. Opening up waits a week", fontWeight = FontWeight.SemiBold)
-            Text("Closing more is instant. Opening is a request carried out in the weekly window.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        WelcomeStep(1, "Set it up once", "Seven steps. Each one is verified on the phone before you go on.")
+        RowDivider(inset = 44.dp)
+        WelcomeStep(2, "The night closes the phone", "From your night start until fajr only your chosen apps run.")
+        RowDivider(inset = 44.dp)
+        WelcomeStep(3, "Opening up waits a week", "Closing more is instant. Opening is a request carried out in the weekly window.")
     }
 
     CheckRow(
@@ -150,6 +116,25 @@ private fun WelcomeView(owner: Boolean, onSetup: () -> Unit) {
 }
 
 @Composable
+private fun WelcomeStep(number: Int, title: String, text: String) {
+    Row(Modifier.padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
+        NumberDisc(number)
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/**
+ * Home holds only what must be seen in one second, in this order:
+ * 1. Anything that needs a decision (setup not finished, an update ready), and only when there is one.
+ * 2. Am I protected, which phase is it, and when it changes (the ring).
+ * 3. Which apps are closed now, and why.
+ * 4. The three things done most: Apps, Requests (with what waits), Friend's code.
+ * Everything else lives on its own page: the windows' times on Requests and Apps, the filter's week on Report, the build on About.
+ */
+@Composable
 private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) {
     val context = LocalContext.current
     val navigate = LocalNavigate.current
@@ -158,13 +143,9 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
     val zone = ZoneId.systemDefault()
     val now = app.lockmein.TrustedClock(context).now()
     val schedule = remember(config) { Rules.schedule(config, zone) }
-    val fajr = remember(config) { AstronomicalFajr(config.fajrConfig(), zone) }
     val phase = schedule.phaseAt(now)
-    val next = schedule.nextTransition(now)
-    val local = ZonedDateTime.ofInstant(now, zone)
     val inventory = remember { DeviceInventory(context) }
     val waiting = state.requests
-    val unblocks = state.unblocks(now)
 
     // Check for updates
     var latestRelease by remember { mutableStateOf<Release?>(null) }
@@ -174,59 +155,39 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
     val hasUpdate = Updater.isNewer(latestRelease)
     var bannerDismissed by remember { mutableStateOf(false) }
 
-    // Combined top alert card: setup not finished OR update available
+    // 1. A decision to make: setup not finished, or an update ready.
     val setupIncomplete = !store.setupComplete
     if (!bannerDismissed && (setupIncomplete || hasUpdate)) {
-        TintedCard(Modifier, if (setupIncomplete) Palette.Attention else MaterialTheme.colorScheme.primary) {
-            run {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (setupIncomplete) Icons.Filled.WarningAmber else Icons.Filled.SystemUpdate,
-                        contentDescription = null,
-                        tint = if (setupIncomplete) Palette.Attention else MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Text(
-                        if (setupIncomplete) (if (store.redoing) "Setup reopened" else "Setup not complete")
-                        else "Update ready: version ${latestRelease?.name}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (setupIncomplete) Palette.Attention else MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(start = 8.dp),
-                    )
-                    IconButton(onClick = { bannerDismissed = true }, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Filled.Close, contentDescription = "Dismiss", modifier = Modifier.size(16.dp))
-                    }
-                }
-                Text(
-                    if (setupIncomplete) "Every change works at once until the setup passes every check and completes."
-                    else latestRelease?.notes?.ifBlank { "A newer version is ready to install." } ?: "A newer version is ready to install.",
-                    style = MaterialTheme.typography.bodySmall,
+        Callout(
+            kind = if (setupIncomplete) StatusKind.ATTENTION else null,
+            icon = if (setupIncomplete) Icons.Filled.WarningAmber else Icons.Filled.SystemUpdate,
+            title = if (setupIncomplete) (if (store.redoing) "Setup reopened" else "Setup not complete")
+            else "Update ready: version ${latestRelease?.name}",
+            text = if (setupIncomplete) "Every change works at once until the setup passes every check and completes."
+            else latestRelease?.notes?.ifBlank { "A newer version is ready to install." } ?: "A newer version is ready to install.",
+            onDismiss = { bannerDismissed = true },
+        ) {
+            if (setupIncomplete) {
+                PrimaryButton(
+                    label = if (store.redoing) "Go through steps" else "Finish setup",
+                    onClick = { navigate(Screen.SETUP) },
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
                 )
-                if (setupIncomplete) {
-                    PrimaryButton(
-                        label = if (store.redoing) "Go through steps" else "Finish setup",
-                        onClick = { navigate(Screen.SETUP) },
-                        modifier = Modifier.fillMaxWidth().height(44.dp),
-                    )
-                } else if (hasUpdate) {
-                    PrimaryButton(
-                        label = "Update now",
-                        onClick = {
-                            scope.launch {
-                                withContext(Dispatchers.IO) { Updater.install(context) {} }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().height(44.dp),
-                    )
-                }
+            } else if (hasUpdate) {
+                PrimaryButton(
+                    label = "Update now",
+                    onClick = {
+                        scope.launch {
+                            withContext(Dispatchers.IO) { Updater.install(context) {} }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                )
             }
         }
     }
 
-    // Hero: the current phase as a ring that fills up as it runs out, with the time left in the middle.
-    val countdown = remember(config, now) { CountdownFormatter.compute(schedule, config, now, zone) }
+    // 2. The phase as a ring that fills as it runs out, the time left in the middle, and whether Android confirms the rules.
     val (phaseName, phaseIcon) = when (phase) {
         Phase.NIGHT -> "Night" to Icons.Filled.NightsStay
         Phase.OPEN_WINDOW -> "Settings window" to Icons.Filled.EventAvailable
@@ -240,23 +201,28 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
     }
     val failingHealth = healthItems?.count { !it.ok } ?: 0
 
-    val phaseColor = if (phase == Phase.NIGHT) MaterialTheme.colorScheme.primary else Palette.Attention
-    TintedCard(Modifier, phaseColor.copy(alpha = 0.6f)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    TintedCard(Modifier, Color.Unspecified, quiet = true, padding = 20.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             Ring(
                 progress = fraction(spanStart, spanEnd, now),
-                size = 132.dp,
-                stroke = 10.dp,
-                color = phaseColor,
+                size = 124.dp,
+                stroke = 8.dp,
+                color = MaterialTheme.colorScheme.primary,
             ) {
-                Text(short(Duration.between(now, spanEnd)), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(short(Duration.between(now, spanEnd)), style = MaterialTheme.typography.headlineSmall, maxLines = 1)
                 Text("until $nextPhaseName", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(phaseIcon, contentDescription = null, tint = phaseColor, modifier = Modifier.size(24.dp))
-                    Text(phaseName, style = MaterialTheme.typography.titleLarge)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(phaseIcon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
+                    Text(phaseName, style = MaterialTheme.typography.headlineSmall, maxLines = 1)
                 }
+                Text(
+                    "${nextPhaseName.replaceFirstChar { it.uppercase() }} at ${CLOCK.format(spanEnd.atZone(zone))}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(2.dp))
                 // The badge never claims more than Android confirms: open setup or a failing check is not "Protected".
                 when {
                     healthItems == null -> StatusBadge(kind = StatusKind.ATTENTION, label = "Checking")
@@ -264,30 +230,26 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
                     !store.setupComplete -> StatusBadge(kind = StatusKind.ATTENTION, label = "Setup open")
                     else -> StatusBadge(kind = StatusKind.OK, label = if (phase == Phase.OPEN_WINDOW) "Window open" else "Protected")
                 }
-                Text(
-                    "${nextPhaseName.replaceFirstChar { it.uppercase() }} at ${CLOCK.format(spanEnd.atZone(zone))}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(Modifier.height(4.dp))
+        RowDivider()
         Row(
-            modifier = Modifier.fillMaxWidth().clickable { navigate(Screen.HEALTH) }.padding(vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().clip(TileShape).clickable { navigate(Screen.HEALTH) }.padding(top = 8.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             when {
                 healthItems == null -> {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                    Text("Checking protection...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text("Checking protection...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 failingHealth == 0 -> {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Palette.Ok, modifier = Modifier.size(18.dp))
-                    Text("Protection verified", style = MaterialTheme.typography.bodyMedium, color = Palette.Ok, fontWeight = FontWeight.Medium)
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Palette.Ok, modifier = Modifier.size(20.dp))
+                    Text("Protection verified", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                 }
                 else -> {
-                    Icon(Icons.Filled.WarningAmber, contentDescription = null, tint = Palette.Attention, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Filled.WarningAmber, contentDescription = null, tint = Palette.Attention, modifier = Modifier.size(20.dp))
                     Text(
                         if (failingHealth == 1) "1 item needs attention" else "$failingHealth items need attention",
                         style = MaterialTheme.typography.bodyMedium, color = Palette.Attention, fontWeight = FontWeight.Medium,
@@ -295,95 +257,72 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
                 }
             }
             Spacer(Modifier.weight(1f))
-            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
         }
     }
 
-    // Quick actions
+    // 3. The three things done most.
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         QuickAction(Modifier.weight(1f), Icons.Filled.Apps, "Apps") { navigate(Screen.LISTS) }
         QuickAction(Modifier.weight(1f), Icons.Filled.EventAvailable, "Requests", badge = waiting.size) { navigate(Screen.WINDOW) }
         QuickAction(Modifier.weight(1f), Icons.Filled.Key, "Friend's code") { navigate(Screen.EMERGENCY) }
-        QuickAction(Modifier.weight(1f), Icons.Filled.Insights, "Report") { navigate(Screen.REPORT) }
     }
 
-    // Insights
-    Heading("Insights")
-    val closedNow by produceState<Int?>(null, config) {
-        value = withContext(Dispatchers.IO) { runCatching { app.lockmein.ClosedReasons.all(context, config, now).count { it.closedNow } }.getOrNull() }
+    // 4. Which apps are closed right now, and why (read back from Android, as on Apps, Now).
+    val closed by produceState<List<app.lockmein.ClosedReasons.Reason>?>(null, config) {
+        value = withContext(Dispatchers.IO) { runCatching { app.lockmein.ClosedReasons.all(context, config, now) }.getOrNull() }
     }
-    val filterWeek by produceState<Pair<Int, Int>?>(null) {
-        value = withContext(Dispatchers.IO) {
-            val since = now.minus(Duration.ofDays(7))
-            val events = app.lockmein.EventLog(context).read().filter { it.at.isAfter(since) }
-            events.count { it.kind == app.lockmein.core.EventKind.FILTER_HIT } to events.count { it.kind == app.lockmein.core.EventKind.FILTER_BLOCKED }
-        }
-    }
-    val windowOpen = app.lockmein.core.Schedule.DAILY_WINDOW_START
-    val windowClose = app.lockmein.core.Schedule.DAILY_WINDOW_END
-    val todayOpen = local.with(windowOpen).toInstant()
-    val todayClose = local.with(windowClose).toInstant()
-    val appsOpenNow = now >= todayOpen && now < todayClose
-    val nextOpen = if (now < todayOpen) todayOpen else todayOpen.plus(Duration.ofDays(1))
-    val nextSettings = schedule.nextWindowStart(now)
-
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        InsightTile(
-            Modifier.weight(1f),
-            title = "Window apps",
-            value = if (appsOpenNow) short(Duration.between(now, todayClose)) else short(Duration.between(now, nextOpen)),
-            caption = if (appsOpenNow) "Open until ${CLOCK.format(windowClose)}" else "Open at ${CLOCK.format(windowOpen)}",
-            progress = if (appsOpenNow) fraction(todayOpen, todayClose, now) else fraction(nextOpen.minus(Duration.ofDays(1)).plus(Duration.between(todayOpen, todayClose)), nextOpen, now),
-            color = if (appsOpenNow) Palette.Ok else MaterialTheme.colorScheme.primary,
-        ) { navigate(Screen.LISTS) }
-        InsightTile(
-            Modifier.weight(1f),
-            title = "Sunday review",
-            value = short(Duration.between(now, nextSettings)),
-            caption = DAY_TIME.format(nextSettings.atZone(zone)) + if (waiting.isNotEmpty()) ", ${waiting.size} waiting" else "",
-            progress = fraction(nextSettings.minus(Duration.ofDays(7)), nextSettings, now),
-            color = Palette.Neutral,
-        ) { navigate(Screen.WINDOW) }
-    }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        InsightTile(
-            Modifier.weight(1f),
-            title = "Closed now",
-            value = closedNow?.toString() ?: "...",
-            caption = "Apps closed right now",
-            icon = Icons.Filled.Block,
-            color = Palette.Closed,
-        ) { navigate(Screen.LISTS) }
-        InsightTile(
-            Modifier.weight(1f),
-            title = "Screen filter",
-            value = filterWeek?.first?.toString() ?: "...",
-            caption = filterWeek?.let { "Warnings this week, ${it.second} closed" } ?: "Warnings this week",
-            icon = Icons.Filled.Shield,
-            color = Palette.Attention,
-        ) { navigate(Screen.REPORT) }
-    }
-    TintedCard(Modifier, Palette.Info) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            GlowCircle(Icons.Filled.Schedule, Palette.Info, size = 42.dp)
-            Column(Modifier.weight(1f)) {
-                Text(countdown.uninstallWindowLine, style = MaterialTheme.typography.bodyMedium)
-                Text(countdown.appsCountLine, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val closedNow = closed?.count { it.closedNow }
+    Heading(if (closedNow == null) "Closed now" else "Closed now ($closedNow)")
+    TintedCard(Modifier, Color.Unspecified, quiet = true, padding = 16.dp) {
+        val list = closed
+        when {
+            list == null -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Text("Reading from Android...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            list.isEmpty() -> Text("Nothing is closed at this hour.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            else -> {
+                val shown = list.sortedBy { it.closedNow }.take(4)
+                shown.forEachIndexed { index, app ->
+                    AppRow(
+                        packageName = app.packageName,
+                        title = inventory.label(app.packageName),
+                        subtitle = if (!app.closedNow) "Should be closed but is open. Next pass closes it." else app.why,
+                        statusColor = if (!app.closedNow) Palette.Closed else null,
+                    ) {}
+                    if (index < shown.lastIndex) RowDivider(inset = 52.dp)
+                }
             }
         }
+        RowDivider()
+        Row(
+            Modifier.fillMaxWidth().clip(TileShape).clickable { navigate(Screen.LISTS) }.padding(top = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                if ((closed?.size ?: 0) > 4) "See all ${closed!!.size} in Apps" else "Open Apps",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+        }
     }
 
-    Spacer(Modifier.height(8.dp))
-
-    Text(
-        when {
-            BuildConfig.PREVIEW -> "Preview build: nothing is applied to this phone."
-            BuildConfig.TEST_BUILD -> "Test build: can be removed over USB."
-            else -> "Sealed build."
-        } + if (owner) " Device owner: yes." else " Device owner: no.",
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        style = MaterialTheme.typography.bodySmall,
-    )
+    // Only a build that is not the sealed one says so here (the full line is on About).
+    if (BuildConfig.PREVIEW || BuildConfig.TEST_BUILD || !owner) {
+        Text(
+            when {
+                BuildConfig.PREVIEW -> "Preview build: nothing is applied to this phone."
+                BuildConfig.TEST_BUILD -> "Test build: can be removed over USB."
+                else -> "Sealed build."
+            } + if (owner) " Device owner: yes." else " Device owner: no.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+        )
+    }
 }
 
 /** Start and end of the current [phase]: walks the schedule's transitions from a day and a half back. */
@@ -418,54 +357,29 @@ private fun short(d: Duration): String {
     }
 }
 
+/** A tile for a most-used action: the icon in the accent (it can be tapped), the name under it, a count when something waits. */
 @Composable
 private fun QuickAction(modifier: Modifier, icon: ImageVector, label: String, badge: Int = 0, onClick: () -> Unit) {
-    val accent = MaterialTheme.colorScheme.primary
     Column(
         modifier
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
-            .border(1.dp, accent.copy(alpha = 0.22f), RoundedCornerShape(16.dp))
+            .clip(CardShape)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
+            .padding(top = 16.dp, bottom = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Box {
-            GlowCircle(icon, accent)
+        Box(Modifier.size(width = 56.dp, height = 32.dp), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
             if (badge > 0) {
                 Box(
-                    Modifier.align(Alignment.TopEnd).size(20.dp).background(Palette.Attention, androidx.compose.foundation.shape.CircleShape),
+                    Modifier.align(Alignment.TopEnd).size(20.dp).clip(CircleShape).background(Palette.Attention),
                     contentAlignment = Alignment.Center,
-                ) { Text("$badge", style = MaterialTheme.typography.labelSmall, color = Color.White, fontWeight = FontWeight.Bold) }
+                ) {
+                    Text("$badge", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.surface, fontWeight = FontWeight.Bold)
+                }
             }
         }
-        Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false, modifier = Modifier.padding(horizontal = 4.dp))
-    }
-}
-
-@Composable
-private fun InsightTile(
-    modifier: Modifier,
-    title: String,
-    value: String,
-    caption: String,
-    progress: Float? = null,
-    icon: ImageVector? = null,
-    color: Color = MaterialTheme.colorScheme.primary,
-    onClick: () -> Unit,
-) {
-    TintedCard(modifier = modifier, color = color, onClick = onClick) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (progress != null) {
-                Ring(progress, 42.dp, 5.dp, color) {}
-            } else if (icon != null) {
-                GlowCircle(icon, color, size = 42.dp)
-            }
-            Column {
-                Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1)
-                Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-            }
-        }
-        Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, softWrap = false, modifier = Modifier.padding(horizontal = 4.dp))
     }
 }

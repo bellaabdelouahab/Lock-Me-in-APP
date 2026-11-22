@@ -137,14 +137,14 @@ fun WindowScreen(onBack: () -> Unit) {
                 val (title, targetLabel) = describeKind(request.kind, request.target)
                 val timesAsked = if (request.count == 1) "Asked 1 time this week" else "Asked ${request.count} times this week"
 
-                AppCard(accent = if (canApprove) Palette.Ok else Palette.Attention) {
+                AppCard {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(title, style = MaterialTheme.typography.titleMedium)
                             if (targetLabel != null) {
                                 Text(targetLabel, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                             }
-                            Text(timesAsked, style = MaterialTheme.typography.bodySmall, color = Palette.Attention, fontWeight = FontWeight.Medium)
+                            Text(timesAsked, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         StatusBadge(
                             kind = if (canApprove) StatusKind.OK else StatusKind.ATTENTION,
@@ -230,7 +230,7 @@ fun WindowScreen(onBack: () -> Unit) {
                         )
                     }
                     if (index < history.lastIndex) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        RowDivider()
                     }
                 }
             }
@@ -248,7 +248,7 @@ fun WindowScreen(onBack: () -> Unit) {
                 )
             }
         } else {
-            AppCard(accent = Palette.Attention) {
+            AppCard {
                 held.forEachIndexed { index, pkg ->
                     val label = inventory.label(pkg)
                     AppRow(
@@ -280,7 +280,7 @@ fun WindowScreen(onBack: () -> Unit) {
                         }
                     }
                     if (index < held.lastIndex) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        RowDivider(inset = 52.dp)
                     }
                 }
             }
