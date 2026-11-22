@@ -53,19 +53,19 @@ data class FilterScores(
  * [level] is 1 or more on a hit: the strongest of the paths, each the weakest of its parts (score / threshold).
  */
 data class FilterRule(
-    val photoPornHentai: Float = 0.70f,
-    val photoSexy: Float = 0.60f,
-    val photoSeductive: Float = 0.80f,
+    val photoPornHentai: Float = 0.85f,
+    val photoSexy: Float = 0.85f,
+    val photoSeductive: Float = 0.75f,
     val photoBackedPornHentai: Float = 0.70f,
-    val photoBackedSexy: Float = 0.60f,
-    /** The seductive score that backs a lower porn + hentai or sexy score on a photo; above 1, that path is off. */
-    val photoBacking: Float = 1.1f,
-    val drawnPornHentai: Float = 0.70f,
-    val drawnExplicit: Float = 0.85f,
-    val drawnSuggestive: Float = 0.85f,
+    val photoBackedSexy: Float = 0.70f,
+    /** The seductive score that backs a lower porn + hentai or sexy score on a photo; above 1, that path is off (tuning left it off). */
+    val photoBacking: Float = 2f,
+    val drawnPornHentai: Float = 0.50f,
+    val drawnExplicit: Float = 0.55f,
+    val drawnSuggestive: Float = 0.60f,
     /** The seductive score that backs the anime model's suggestive score on a drawing. */
-    val drawnBacking: Float = 0f,
-    val drawnSeductive: Float = 0.80f,
+    val drawnBacking: Float = 0.45f,
+    val drawnSeductive: Float = 0.75f,
 ) {
     fun level(s: FilterScores): Float {
         val ph = s.porn + s.hentai
@@ -88,7 +88,10 @@ data class FilterRule(
     private fun backing(seductive: Float, needed: Float): Float = if (needed <= 0f) Float.MAX_VALUE else seductive / needed
 
     companion object {
-        /** Tuned values (see LockConfig); the config's four thresholds replace the matching ones. */
+        /** The values measured best (docs/FILTER-EVAL.md); the config's four thresholds default to these. */
+        val TUNED = FilterRule()
+
+        /** Tuned values for the rest; the config's four thresholds replace the matching ones. */
         fun from(pornHentai: Float, sexy: Float, anime: Float, seductive: Float?): FilterRule = FilterRule().let {
             it.copy(
                 photoPornHentai = pornHentai,

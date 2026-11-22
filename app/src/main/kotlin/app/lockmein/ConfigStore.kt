@@ -22,6 +22,7 @@ class ConfigStore(context: Context) {
         if (version < 1) migrated = migrate(migrated)
         if (version < 2) migrated = tunedThresholds(migrated)
         if (version < 3) migrated = migrated.copy(filterSeductiveLive = true) // v0.4.80: out of test mode
+        if (version < 4) migrated = agreementThresholds(migrated)
         save(migrated)
         prefs.edit().putInt(VERSION, CURRENT_VERSION).apply()
         return migrated
@@ -59,13 +60,30 @@ class ConfigStore(context: Context) {
 
         /** Migrates config: ensures defaults for alwaysBlocked, windowApps, and watchedApps are present without dropping existing. */
         private const val VERSION = "config_version"
-        private const val CURRENT_VERSION = 3
+        private const val CURRENT_VERSION = 4
 
         /** v0.4.67: the filter scans the screen in tiles; thresholds tuned on 600 test images. Only untouched defaults move. */
         fun tunedThresholds(config: LockConfig): LockConfig =
             if (config.filterPornHentaiThreshold == 0.50f && config.filterSexyThreshold == 0.50f) {
                 config.copy(filterPornHentaiThreshold = 0.70f, filterSexyThreshold = 0.60f, filterAnimeThreshold = 0.85f)
             } else config
+
+        /**
+         * v3.1 F2: frames must agree before anything shows, and the rule was retuned with it on simulated phone screens (see
+         * docs/FILTER-EVAL.md). Only thresholds still at the old defaults move; any the owner set stay as they are.
+         */
+        fun agreementThresholds(config: LockConfig): LockConfig {
+            val untouched = config.filterPornHentaiThreshold == 0.70f && config.filterSexyThreshold == 0.60f &&
+                config.filterAnimeThreshold == 0.85f && config.filterSeductiveThreshold == 0.80f
+            if (!untouched) return config
+            val tuned = app.lockmein.core.FilterRule.TUNED
+            return config.copy(
+                filterPornHentaiThreshold = tuned.photoPornHentai,
+                filterSexyThreshold = tuned.photoSexy,
+                filterAnimeThreshold = tuned.drawnSuggestive,
+                filterSeductiveThreshold = tuned.photoSeductive,
+            )
+        }
 
         fun migrate(config: LockConfig): LockConfig {
             val newBlocked = config.alwaysBlocked + ALWAYS_BLOCKED_DEFAULT

@@ -42,20 +42,17 @@ data class LockConfig(
     val windowApps: Set<String> = WINDOW_APPS_DEFAULT,
     /** Apps monitored by the on-device AI screen filter. */
     val watchedApps: Set<String> = WATCHED_APPS_DEFAULT,
-    /** Filter threshold for porn + hentai combined score. */
-    val filterPornHentaiThreshold: Float = 0.70f,
-    /** Filter threshold for sexy score. */
-    val filterSexyThreshold: Float = 0.60f,
     /**
-     * Anime model threshold (r15 + r18). Thresholds tuned on simulated phone screens scanned in tiles: 5% false hits on normal
-     * photos of women and on plainly safe anime (fights, magic, swords), 62% of revealing photos caught per frame.
+     * Thresholds for one frame of the screen (spec v3.1 F2), tuned together with the 3-of-4 frame agreement on simulated phone
+     * screens (docs/FILTER-EVAL.md): porn + hentai on a photo.
      */
-    val filterAnimeThreshold: Float = 0.85f,
-    /**
-     * Seductive-looks model threshold (best of the screen tiles). On simulated phone screens: 98% of seductive photos caught,
-     * 1% of everyday photos of women flagged; 67% of seductive anime caught, 10% of ordinary anime flagged.
-     */
-    val filterSeductiveThreshold: Float = 0.80f,
+    val filterPornHentaiThreshold: Float = FilterRule.TUNED.photoPornHentai,
+    /** The first model's "sexy" on a photo. */
+    val filterSexyThreshold: Float = FilterRule.TUNED.photoSexy,
+    /** The anime model's suggestive score (r15 + r18) on a drawing, counted only when the seductive model backs it. */
+    val filterAnimeThreshold: Float = FilterRule.TUNED.drawnSuggestive,
+    /** The seductive-looks model alone, photos and drawings. */
+    val filterSeductiveThreshold: Float = FilterRule.TUNED.photoSeductive,
     /** The seductive model acts like the others (warning, 5-second countdown, 30-second close). */
     val filterSeductiveLive: Boolean = true,
     /** Start of the night and end of social-app time, "HH:mm". */
