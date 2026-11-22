@@ -53,7 +53,7 @@ class DeviceInventory(private val context: Context) {
     /**
      * A system app with no icon is a background service (telephony, providers, Play services): suspending it breaks the phone,
      * so it is protected. System apps with an icon (Gallery, Play Store, video) are apps like any other and can be suspended.
-     * The launcher, dialer, messages, keyboard, Settings and SystemUI are protected by name.
+     * The launcher, dialer, messages, keyboard, Settings, SystemUI and the themes and wallpaper apps are protected by name.
      */
     private fun protectedPackages(installed: Set<String>): Set<String> {
         val withIcon = pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), PackageManager.MATCH_ALL)
@@ -70,7 +70,7 @@ class DeviceInventory(private val context: Context) {
         val home = pm.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), PackageManager.MATCH_DEFAULT_ONLY)
         val keyboard = Settings.Secure.getString(context.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)?.substringBefore('/')
         val dialer = context.getSystemService(TelecomManager::class.java)?.defaultDialerPackage
-        return setOfNotNull(
+        return app.lockmein.core.Personalization.ALL + setOfNotNull(
             home?.activityInfo?.packageName,
             keyboard,
             dialer,

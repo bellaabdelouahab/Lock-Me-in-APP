@@ -22,6 +22,22 @@ object KnownBrowsers {
     )
 }
 
+/**
+ * Themes, wallpapers, fonts and the always-on display: personalising the phone is the owner's to do at any hour (he asked,
+ * 2026-11-22: HyperOS's Settings > Personalization opens the Themes app, which was being closed). Never suspended.
+ */
+object Personalization {
+    val ALL: Set<String> = setOf(
+        "com.android.thememanager", // Xiaomi / HyperOS Themes: Settings > Personalization, wallpapers, fonts, icons
+        "com.miui.miwallpaper",
+        "com.miui.aod",
+        "com.android.wallpaper.livepicker",
+        "com.android.wallpaperpicker",
+        "com.android.wallpaper",
+        "com.google.android.apps.wallpaper",
+    )
+}
+
 /** What Chrome is told through managed configuration, so its own settings cannot go around the DNS filter or the safe-search rules. */
 object ChromePolicy {
     const val PACKAGE = KnownBrowsers.CHROME
