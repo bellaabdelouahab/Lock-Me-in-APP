@@ -70,6 +70,8 @@ class ScreenShots(private val name: String, private val extras: Map<String, Any>
             for (s in listOf("HEALTH", "WINDOW", "EMERGENCY", "REPORT", "SETTINGS", "BROWSERS")) {
                 add(arrayOf("${s.lowercase()}-dark", mapOf("screen" to s, "demo" to true, "dark" to true)))
             }
+            add(arrayOf("phone-use", mapOf("screen" to "PHONE_USE", "demo" to true)))
+            add(arrayOf("phone-use-dark", mapOf("screen" to "PHONE_USE", "demo" to true, "dark" to true)))
             add(arrayOf("setup-0-dark", mapOf("step" to 0, "dark" to true)))
             add(arrayOf("setup-3-dark", mapOf("step" to 3, "dark" to true)))
             add(arrayOf("drawer-dark", mapOf("screen" to "HOME", "demo" to true, "openDrawer" to true, "dark" to true)))

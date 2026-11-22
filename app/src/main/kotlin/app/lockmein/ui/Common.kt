@@ -110,6 +110,7 @@ enum class Screen {
     REMOVE,
     HEALTH,    // Is it working?
     ABOUT,
+    PHONE_USE,
 }
 
 val LocalNavigate = compositionLocalOf<(Screen) -> Unit> { {} }

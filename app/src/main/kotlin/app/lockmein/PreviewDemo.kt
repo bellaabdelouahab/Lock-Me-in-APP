@@ -33,6 +33,20 @@ object PreviewDemo {
             apps.getOrNull(7)?.let { ChangeRequest(RequestKind.NIGHT_REMOVE, it, now.minus(Duration.ofDays(2)).toEpochMilli(), count = 2) },
             ChangeRequest(RequestKind.BROWSER, "com.brave.browser", now.minus(Duration.ofDays(1)).toEpochMilli(), count = 1),
         )
+        // A morning of phone use for the Phone use page.
+        val use = PhoneUseLog(context)
+        val day = java.time.LocalDate.now().atTime(7, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().let { minOf(it, now.minus(Duration.ofHours(3))) }
+        val names = (apps + listOf("com.whatsapp", "com.google.android.youtube", "com.instagram.android")).distinct()
+        var at = day
+        for ((i, minutes) in listOf(12, 4, 25, 7, 18, 3).withIndex()) {
+            use.add(app.lockmein.core.UseKind.SCREEN_ON, at = at)
+            use.add(app.lockmein.core.UseKind.UNLOCK, at = at)
+            use.add(app.lockmein.core.UseKind.APP, names[i % minOf(3, names.size)], at)
+            use.add(app.lockmein.core.UseKind.NOTIFICATION, names[(i + 1) % minOf(3, names.size)], at.plusSeconds(30))
+            at = at.plus(Duration.ofMinutes(minutes.toLong()))
+            use.add(app.lockmein.core.UseKind.SCREEN_OFF, at = at)
+            at = at.plus(Duration.ofMinutes(20))
+        }
         state.requestHistory = listOfNotNull(
             apps.getOrNull(5)?.let { ResolvedRequest(RequestKind.BLOCKED_REMOVE, it, 5, now.minus(Duration.ofDays(10)).toEpochMilli(), now.minus(Duration.ofDays(3)).toEpochMilli(), RequestResolution.DISMISSED) },
             apps.getOrNull(6)?.let { ResolvedRequest(RequestKind.RELEASE_APP, it, 1, now.minus(Duration.ofDays(12)).toEpochMilli(), now.minus(Duration.ofDays(5)).toEpochMilli(), RequestResolution.APPROVED) },

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DrawerValue
@@ -127,6 +128,7 @@ private fun LockApp(requested: String?) {
                 "REMOVE" -> Screen.REMOVE
                 "SETUP" -> Screen.SETUP
                 "ABOUT" -> Screen.ABOUT
+                "PHONE_USE", "USE" -> Screen.PHONE_USE
                 else -> Screen.entries.firstOrNull { it.name.equals(name, ignoreCase = true) }
             }
         } ?: if (ConfigStore(context).protectionActive) Screen.HOME else Screen.SETUP
@@ -150,6 +152,7 @@ private fun LockApp(requested: String?) {
         DrawerItem("Holder code", Screen.EMERGENCY, Icons.Filled.Key),
         DrawerItem("Is it working?", Screen.HEALTH, Icons.Filled.CheckCircle),
         DrawerItem("Weekly report", Screen.REPORT, Icons.Filled.Insights),
+        DrawerItem("Phone use", Screen.PHONE_USE, Icons.Filled.BarChart),
         DrawerItem("Settings", Screen.SETTINGS, Icons.Filled.Settings),
     )
 
@@ -241,6 +244,7 @@ private fun LockApp(requested: String?) {
                     Screen.REMOVE -> RemoveScreen(onBack = home, onRemoved = home)
                     Screen.HEALTH -> HealthScreen(onBack = home)
                     Screen.ABOUT -> AboutScreen(onBack = home)
+                    Screen.PHONE_USE -> app.lockmein.ui.PhoneUseScreen(onBack = home)
                 }
             }
         }
