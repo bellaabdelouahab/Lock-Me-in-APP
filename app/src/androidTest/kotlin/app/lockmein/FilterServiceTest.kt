@@ -157,9 +157,11 @@ class FilterServiceTest {
         val t0 = Instant.now()
         val flaggedScores = FilterScores(porn = 0.85f, neutral = 0.15f)
 
-        // Process first hit
+        // One hit frame is not enough (a misread frame must not show the warning); three agreeing frames are.
+        assertEquals(app.lockmein.core.FilterAction.None, machine.processFrame(testPkg, flaggedScores, t0.minusMillis(1000)))
+        assertEquals(app.lockmein.core.FilterAction.None, machine.processFrame(testPkg, flaggedScores, t0.minusMillis(500)))
         val action1 = machine.processFrame(testPkg, flaggedScores, t0)
-        assertTrue("First hit must produce ShowWarning action", action1 is app.lockmein.core.FilterAction.ShowWarning)
+        assertTrue("Three agreeing frames must produce ShowWarning action", action1 is app.lockmein.core.FilterAction.ShowWarning)
 
         // Execute action on service / overlay
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
@@ -206,8 +208,10 @@ class FilterServiceTest {
         // Step 1: First hit at t0
         val t0 = Instant.now()
         val hitScores = FilterScores(sexy = 0.88f, neutral = 0.12f)
+        machine.processFrame(testPkg, hitScores, t0.minusMillis(1000))
+        machine.processFrame(testPkg, hitScores, t0.minusMillis(500))
         val action1 = machine.processFrame(testPkg, hitScores, t0)
-        assertTrue("First hit must produce ShowWarning", action1 is app.lockmein.core.FilterAction.ShowWarning)
+        assertTrue("Three agreeing frames must produce ShowWarning", action1 is app.lockmein.core.FilterAction.ShowWarning)
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             overlay.show()

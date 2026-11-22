@@ -70,7 +70,7 @@ class FilterModelClassifier(private val context: Context) : AutoCloseable {
      * The caller is responsible for recycling or dropping the bitmap immediately.
      */
     @Synchronized
-    fun predict(bitmap: Bitmap, rank: (FilterScores) -> Float = { maxOf(it.porn + it.hentai, it.sexy, it.animeSuggestive) }): FilterScores {
+    fun predict(bitmap: Bitmap, rank: (FilterScores) -> Float = { app.lockmein.core.FilterRule().level(it) }): FilterScores {
         val interp = interpreter ?: return FilterScores()
 
         // A whole tall screen squeezed into one small square makes a picture in a feed tiny: measured, that caught 0% of
@@ -78,12 +78,15 @@ class FilterModelClassifier(private val context: Context) : AutoCloseable {
         return tiles(bitmap).map { tile ->
             val first = predictFirst(interp, tile)
             // Drawings get the second model: it rates suggestive anime / manga / manhwa that has clothes on.
-            val withAnime = if (first.isDrawing && anime.isReady) first.copy(animeSuggestive = anime.score(tile)) else first
+            // r15 is suggestive OR violent (fight scenes rate r15 too); r18 alone is explicit.
+            val withAnime = if (first.isDrawing && anime.isReady) {
+                anime.outputs(tile)?.let { o -> first.copy(animeSuggestive = o[1] + o[2], animeExplicit = o[2]) } ?: first
+            } else first
             // Every tile, photo or drawing: seductive looks, poses and framing.
             val scores = if (seductive.isReady) withAnime.copy(seductive = seductive.score(tile)) else withAnime
             if (tile !== bitmap) tile.recycle()
             scores
-        }.let { all -> all.maxBy(rank).copy(seductive = all.maxOf { it.seductive }) }
+        }.maxBy(rank) // the tile closest to a hit speaks for the screen, all its scores together (a rule can need two to agree)
     }
 
     /** Square tiles along the long side, overlapping by 40%: four on a 1080 x 2400 phone screen. */

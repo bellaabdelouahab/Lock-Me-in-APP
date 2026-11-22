@@ -30,9 +30,12 @@ class OnnxImageScorer(
     val isReady get() = session != null
 
     /** The score, or 0 when the model is missing. */
+    fun score(bitmap: Bitmap): Float = outputs(bitmap)?.let(score) ?: 0f
+
+    /** The model's whole first output, or null when the model is missing. */
     @Synchronized
-    fun score(bitmap: Bitmap): Float {
-        val s = session ?: return 0f
+    fun outputs(bitmap: Bitmap): FloatArray? {
+        val s = session ?: return null
         val scaled = Bitmap.createScaledBitmap(bitmap, size, size, true)
         scaled.getPixels(pixels, 0, size, 0, 0, size, size)
         if (scaled !== bitmap) scaled.recycle()
@@ -47,7 +50,7 @@ class OnnxImageScorer(
         OnnxTensor.createTensor(env, input, longArrayOf(1, 3, size.toLong(), size.toLong())).use { tensor ->
             s.run(mapOf(inputName to tensor)).use { out ->
                 @Suppress("UNCHECKED_CAST")
-                return score((out[0].value as Array<FloatArray>)[0])
+                return (out[0].value as Array<FloatArray>)[0]
             }
         }
     }

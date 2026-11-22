@@ -48,6 +48,7 @@ class FilterService : AccessibilityService() {
 
     private var currentForegroundPackage: String? = null
     private var lastThumbnail: ByteArray? = null
+    @Volatile private var lastScores: FilterScores? = null
     private var isTakingScreenshot = false
     private var screenshotAt = 0L
     // One check at a time: during a video every frame is new and a check can outlast the 1-second tick. Without this the
@@ -198,6 +199,7 @@ class FilterService : AccessibilityService() {
         samplingJob?.cancel()
         samplingJob = null
         lastThumbnail = null
+        lastScores = null
         isTakingScreenshot = false
     }
 
@@ -265,9 +267,13 @@ class FilterService : AccessibilityService() {
             val currentGray = FrameDiff.rgbToGrayscale(thumbPixels)
             val changed = FrameDiff.hasChanged(lastThumbnail, currentGray)
 
-            // A still screen is skipped to save battery, but never during a warning: the second check must run.
-            if (!changed && decisionMachine.state is app.lockmein.core.FilterState.Idle) {
+            // A still screen is not read again (battery): it counts as the same frame once more, so a still picture is judged
+            // like a video, by frames that agree. Never during a warning: the second check reads the screen afresh.
+            val still = lastScores
+            if (!changed && still != null && decisionMachine.state is app.lockmein.core.FilterState.Idle) {
                 bitmap.recycle()
+                val action = decisionMachine.processFrame(pkg, still, now)
+                withContext(Dispatchers.Main) { executeAction(pkg, action, still, now) }
                 return
             }
             lastThumbnail = currentGray
@@ -284,7 +290,7 @@ class FilterService : AccessibilityService() {
                 if (cls != null && cls.isReady) {
                     val m = decisionMachine
                     // The tile that comes closest to a threshold speaks for the screen.
-                    val result = cls.predict(bitmap) { it.level(m.pornHentaiThreshold, m.sexyThreshold, m.animeThreshold, m.seductiveThreshold) }
+                    val result = cls.predict(bitmap) { m.rule.level(it) }
                     bitmap.recycle() // Dropped immediately; never written to disk or logs
                     result
                 } else {
@@ -294,6 +300,7 @@ class FilterService : AccessibilityService() {
             }
 
             val scores = imageScores.copy(textMatch = textMatch)
+            lastScores = scores
 
             // 3. Process with Decision State Machine
             val action = decisionMachine.processFrame(pkg, scores, now)
@@ -342,7 +349,8 @@ class FilterService : AccessibilityService() {
     }
 
     companion object {
-        const val SAMPLE_INTERVAL_MS = 1000L
+        /** A frame every half second (spec v3.1 F2); a phone that needs longer for a check skips frames instead of queueing them. */
+        const val SAMPLE_INTERVAL_MS = 500L
         private const val MAX_TEXT_NODES = 400
         private val SUPPORT_MESSAGE_START = SUPPORT_MESSAGE.take(24)
         private const val MAX_TEXT_CHARS = 8_000
