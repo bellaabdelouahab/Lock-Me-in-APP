@@ -23,6 +23,8 @@ import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -129,6 +131,8 @@ private fun LockApp(requested: String?) {
                 "SETUP" -> Screen.SETUP
                 "ABOUT" -> Screen.ABOUT
                 "PHONE_USE", "USE" -> Screen.PHONE_USE
+                "FILTER", "REVIEW" -> Screen.FILTER
+                "THEMES", "WALLPAPER" -> Screen.THEMES
                 else -> Screen.entries.firstOrNull { it.name.equals(name, ignoreCase = true) }
             }
         } ?: if (ConfigStore(context).protectionActive) Screen.HOME else Screen.SETUP
@@ -153,6 +157,8 @@ private fun LockApp(requested: String?) {
         DrawerItem("Is it working?", Screen.HEALTH, Icons.Filled.CheckCircle),
         DrawerItem("Weekly report", Screen.REPORT, Icons.Filled.Insights),
         DrawerItem("Phone use", Screen.PHONE_USE, Icons.Filled.BarChart),
+        DrawerItem("Screen filter", Screen.FILTER, Icons.Filled.Shield),
+        DrawerItem("Themes & wallpaper", Screen.THEMES, Icons.Filled.Palette),
         DrawerItem("Settings", Screen.SETTINGS, Icons.Filled.Settings),
     )
 
@@ -245,6 +251,8 @@ private fun LockApp(requested: String?) {
                     Screen.HEALTH -> HealthScreen(onBack = home)
                     Screen.ABOUT -> AboutScreen(onBack = home)
                     Screen.PHONE_USE -> app.lockmein.ui.PhoneUseScreen(onBack = home)
+                    Screen.FILTER -> app.lockmein.ui.FilterScreen(onBack = home)
+                    Screen.THEMES -> app.lockmein.ui.ThemesScreen(onBack = home)
                 }
             }
         }

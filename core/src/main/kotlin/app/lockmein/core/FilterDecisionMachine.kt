@@ -85,6 +85,19 @@ data class FilterRule(
 
     fun isHit(s: FilterScores): Boolean = level(s) >= 1f // words on screen never act; they are only logged
 
+    /**
+     * Every threshold moved by [delta] (per-app setting, spec v3.1 F2): below 0 is stricter, above 0 looser. Kept between 0.05
+     * and 1.0; thresholds that are switched off (above 1) stay off.
+     */
+    fun shifted(delta: Float): FilterRule {
+        if (delta == 0f) return this
+        fun m(v: Float) = if (v > 1f || v <= 0f) v else (v + delta).coerceIn(0.05f, 1f)
+        return FilterRule(
+            m(photoPornHentai), m(photoSexy), m(photoSeductive), m(photoBackedPornHentai), m(photoBackedSexy), m(photoBacking),
+            m(drawnPornHentai), m(drawnExplicit), m(drawnSuggestive), m(drawnBacking), m(drawnSeductive),
+        )
+    }
+
     private fun backing(seductive: Float, needed: Float): Float = if (needed <= 0f) Float.MAX_VALUE else seductive / needed
 
     companion object {
@@ -155,21 +168,44 @@ class FilterDecisionMachine(
     val seductiveThreshold: Float? = null,
     val warningGraceDuration: Duration = Duration.ofSeconds(5),
     val suspensionDuration: Duration = Duration.ofSeconds(30),
+    /** Per-app move of every threshold (package -> delta, below 0 stricter). */
+    val appOffsets: Map<String, Float> = emptyMap(),
+    /** The personal second check trained on his labelled blocks (spec F5); null until one is installed. */
+    val judge: FilterJudge? = null,
 ) {
     /** The hit rule, from the four thresholds above and the tuned values for the rest. */
     val rule: FilterRule = FilterRule.from(pornHentaiThreshold, sexyThreshold, animeThreshold, seductiveThreshold)
+
+    private val appRules = HashMap<String, FilterRule>()
+
+    /** The rule for one app: [rule] moved by the app's offset. */
+    fun ruleFor(packageName: String): FilterRule = appRules.getOrPut(packageName) { rule.shifted(appOffsets[packageName] ?: 0f) }
+
+    /** The frames that made the last warning sure: (time, hit), oldest first. Kept for the block's record (spec F3). */
+    var agreedFrames: List<Pair<Instant, Boolean>> = emptyList()
+        private set
 
     var state: FilterState = FilterState.Idle
         private set
 
     private val recent = ArrayDeque<Triple<String, Instant, Boolean>>()
 
-    /** Whether this one frame is a hit by the thresholds. */
-    fun frameHit(scores: FilterScores): Boolean = rule.isHit(scores)
+    /** Whether this one frame is a hit by the thresholds (the base rule, no app offset). */
+    fun frameHit(scores: FilterScores): Boolean = frameHit("", scores)
+
+    /**
+     * Whether this one frame is a hit in [packageName]: over the app's thresholds, and not a false alarm by the personal judge.
+     * The judge never overrules a very strong frame.
+     */
+    fun frameHit(packageName: String, scores: FilterScores): Boolean {
+        if (!ruleFor(packageName).isHit(scores)) return false
+        if (scores.porn + scores.hentai >= STRONG_LEVEL) return true
+        return judge?.isFalseAlarm(scores) != true
+    }
 
     /** Records the frame and answers whether the recent frames agree it is a hit (or this one is very strong). */
     fun isHit(packageName: String, scores: FilterScores, now: Instant): Boolean {
-        val hit = frameHit(scores)
+        val hit = frameHit(packageName, scores)
         while (recent.isNotEmpty() && (recent.first().first != packageName || Duration.between(recent.first().second, now) > AGREE_WINDOW)) recent.removeFirst()
         recent.addLast(Triple(packageName, now, hit))
         while (recent.size > AGREE_OF) recent.removeFirst()
@@ -189,8 +225,11 @@ class FilterDecisionMachine(
         val sure = isHit(packageName, scores, now)
         // The second check, 5 seconds after the warning, needs this frame to be a hit: the warning was already sure.
         val warned = (state as? FilterState.WarningActive)?.packageName == packageName
-        val hit = if (warned) frameHit(scores) || sure else sure
-        if (sure && !warned) recent.clear() // the 5-second second check goes by the frames after the warning
+        val hit = if (warned) frameHit(packageName, scores) || sure else sure
+        if (sure && !warned) {
+            agreedFrames = recent.map { it.second to it.third }
+            recent.clear()
+        } // the 5-second second check goes by the frames after the warning
 
         return when (val current = state) {
             is FilterState.Idle -> {

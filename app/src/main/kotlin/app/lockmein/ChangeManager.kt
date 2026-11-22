@@ -262,7 +262,7 @@ class ChangeManager(private val context: Context) {
             RequestKind.REMOVE_PROTECTION -> return Outcome.Refused("Use Remove Lock Me In during the monthly uninstall window.")
         }
         ConfigRules.problems(updated).firstOrNull()?.let { return Outcome.Refused(it) }
-        if (updated != config) store.save(updated)
+        if (updated != config) { store.save(updated); FilterService.instance?.reloadConfig() }
         state.requests = Requests.cancel(state.requests, request.id)
         events.add(EventKind.LOOSENED, "${request.kind} ${request.target}$how", now)
         if (request.kind == RequestKind.BROWSER) events.add(EventKind.BROWSER_APPROVED, request.target, now)
@@ -330,12 +330,20 @@ class ChangeManager(private val context: Context) {
         ConfigRules.problems(updated).firstOrNull()?.let { return Outcome.Refused(it) }
         if (locked) {
             if (config() == updated) return Outcome.Done("Nothing changed.")
+            // A stricter screen filter is tightening, which is instant (spec v3.1 rule 2).
+            if (app.lockmein.core.FilterTighten.onlyTightens(config(), updated)) {
+                store.save(updated)
+                events.add(EventKind.TIGHTENED, "Screen filter made stricter", now)
+                FilterService.instance?.reloadConfig()
+                return Outcome.Done("Saved. Stricter takes effect at once.")
+            }
             val req = ChangeRequest(RequestKind.SETTINGS, "", now.toEpochMilli(), settings = updated)
             val count = state.addRequest(req, now)
             events.add(EventKind.LOOSEN_REQUESTED, "Requested settings change (asked $count times)", now)
             return Outcome.Done("Settings change requested. Review on Sunday 20:00 to 21:00.")
         }
         store.save(updated)
+        FilterService.instance?.reloadConfig()
         PolicyRunner(context).runIfActive(now)
         return Outcome.Done("Saved.")
     }

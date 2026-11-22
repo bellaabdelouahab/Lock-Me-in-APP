@@ -93,6 +93,27 @@ fun PhoneUseScreen(onBack: () -> Unit) {
                 }
             }
 
+            Heading("Tries on closed apps")
+            InfoCard {
+                val named = u.apps.filter { it.tries > 0 }.sortedByDescending { it.tries }
+                Text(
+                    when (u.blockedTries) {
+                        0 -> "No tries to open a closed app."
+                        1 -> "1 try to open a closed app."
+                        else -> "${u.blockedTries} tries to open a closed app."
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                named.forEachIndexed { i, a ->
+                    AppRow(packageName = a.pkg, title = inventory.label(a.pkg), subtitle = "last ${u.tries.last { it.second == a.pkg }.first.atZone(zone).toLocalTime().withNano(0).withSecond(0)}") {
+                        Text("${a.tries}", style = MaterialTheme.typography.titleSmall)
+                    }
+                    if (i < named.size - 1) RowDivider()
+                }
+                val unnamed = u.tries.count { it.second.isEmpty() }
+                if (unnamed > 0) Note("$unnamed not named (the dialog did not say which app).")
+            }
+
             Heading("Apps")
             val apps = u.apps.filter { it.millis >= 60_000 || it.opens > 0 }
             if (apps.isEmpty()) {
@@ -106,6 +127,7 @@ fun PhoneUseScreen(onBack: () -> Unit) {
                             subtitle = listOfNotNull(
                                 "${a.opens} ${if (a.opens == 1) "open" else "opens"}",
                                 a.notifications.takeIf { it > 0 }?.let { "$it ${if (it == 1) "notification" else "notifications"}" },
+                                a.tries.takeIf { it > 0 }?.let { "$it ${if (it == 1) "try while closed" else "tries while closed"}" },
                             ).joinToString(", "),
                         ) {
                             Text(duration(a.millis), style = MaterialTheme.typography.titleSmall)
@@ -133,7 +155,7 @@ fun PhoneUseScreen(onBack: () -> Unit) {
             }) { r -> outcome = r.fold({ Outcome.Done(it) }, { Outcome.Refused("Could not export: ${it.message}") }) }
         })
         OutcomeText(outcome)
-        Note("Recorded on this phone only: which app was in front and for how long, unlocks, screen on and off, and how many notifications each app sent. Never what was on the screen, what you typed or what you tapped. Kept ${PhoneUseLog.KEEP_DAYS} days.")
+        Note("Recorded on this phone only: which app was in front and for how long, unlocks, screen on and off, how many notifications each app sent, and each try to open a closed app. Never what was on the screen or what you typed; the name of an icon tapped is held for 3 seconds only, to name the app behind a \"blocked\" dialog. Kept ${PhoneUseLog.KEEP_DAYS} days.")
     }
 }
 

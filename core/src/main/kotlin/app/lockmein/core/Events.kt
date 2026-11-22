@@ -46,6 +46,12 @@ enum class EventKind {
 
     /** Warning cleared after a clean check. */
     FILTER_CLEARED,
+
+    /** A block saved for review with "Wrong block?" (spec v3.1 F3); the detail holds the day's count. */
+    FILTER_SAVED,
+
+    /** A try to open a closed app (Android's "blocked" dialog came up). */
+    BLOCKED_TRY,
 }
 
 data class LockEvent(val at: Instant, val kind: EventKind, val detail: String = "")
@@ -74,6 +80,8 @@ data class WeeklyReport(
             if (count(EventKind.FILTER_BLOCKED) > 0 || count(EventKind.FILTER_HIT) > 0) {
                 appendLine("Screen filter detections: ${count(EventKind.FILTER_HIT)} hits, ${count(EventKind.FILTER_BLOCKED)} blocks")
             }
+            if (count(EventKind.FILTER_SAVED) > 0) appendLine("Blocks saved as wrong for review: ${count(EventKind.FILTER_SAVED)}")
+            if (count(EventKind.BLOCKED_TRY) > 0) appendLine("Tries to open a closed app: ${count(EventKind.BLOCKED_TRY)}")
             if (newApps.isNotEmpty()) appendLine("New apps held back: ${newApps.joinToString()}")
             refusals.forEach { appendLine("Refused ${day.format(it.at)}: ${it.detail}") }
             problems.forEach { appendLine("Problem ${day.format(it.at)}: ${it.detail}") }

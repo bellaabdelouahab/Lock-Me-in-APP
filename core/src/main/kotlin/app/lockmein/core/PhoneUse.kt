@@ -7,7 +7,12 @@ import java.time.ZoneId
 /** One thing that happened on the phone: an app came to the front, the screen went on or off, the phone was unlocked, a notification came. */
 data class UseEvent(val at: Instant, val kind: UseKind, val pkg: String = "")
 
-enum class UseKind { APP, SCREEN_ON, SCREEN_OFF, UNLOCK, NOTIFICATION }
+enum class UseKind {
+    APP, SCREEN_ON, SCREEN_OFF, UNLOCK, NOTIFICATION,
+
+    /** A try to open a closed app: Android's "blocked" dialog came up (package empty when the app could not be named). */
+    BLOCKED,
+}
 
 /** Stored one event per line: epoch millis, kind, package. */
 object UseLines {
@@ -22,7 +27,7 @@ object UseLines {
     }
 }
 
-data class AppUse(val pkg: String, val millis: Long, val opens: Int, val notifications: Int)
+data class AppUse(val pkg: String, val millis: Long, val opens: Int, val notifications: Int, val tries: Int = 0)
 
 data class DayUse(
     val day: LocalDate,
@@ -36,6 +41,10 @@ data class DayUse(
     val apps: List<AppUse>,
     /** Every time an app came to the front: (time, app). */
     val opens: List<Pair<Instant, String>>,
+    /** Tries to open a closed app (Android's "blocked" dialog), named or not. */
+    val blockedTries: Int = 0,
+    /** Every try: (time, app or empty). */
+    val tries: List<Pair<Instant, String>> = emptyList(),
 )
 
 /**
@@ -59,6 +68,8 @@ object PhoneUse {
         var firstUnlock: Instant? = null
         var lastOff: Instant? = null
         var notifications = 0
+        val tryCount = HashMap<String, Int>()
+        val tryList = ArrayList<Pair<Instant, String>>()
 
         var screenOn = false
         var screenSince: Instant? = null
@@ -113,15 +124,19 @@ object PhoneUse {
                     notifications++
                     notes[e.pkg] = (notes[e.pkg] ?: 0) + 1
                 }
+                UseKind.BLOCKED -> if (inDay) {
+                    tryList += e.at to e.pkg
+                    if (e.pkg.isNotEmpty()) tryCount[e.pkg] = (tryCount[e.pkg] ?: 0) + 1
+                }
             }
         }
         // Still on screen now (or at the day's end).
         if (since != null) closeApp(end)
         screenSince?.let { if (screenOn) screenMillis += clip(it, end) }
 
-        val apps = (time.keys + opens.keys + notes.keys).map { AppUse(it, time[it] ?: 0L, opens[it] ?: 0, notes[it] ?: 0) }
+        val apps = (time.keys + opens.keys + notes.keys + tryCount.keys).map { AppUse(it, time[it] ?: 0L, opens[it] ?: 0, notes[it] ?: 0, tryCount[it] ?: 0) }
             .sortedWith(compareByDescending<AppUse> { it.millis }.thenByDescending { it.opens }.thenByDescending { it.notifications })
-        return DayUse(day, screenMillis, unlocks, firstUnlock, lastOff, notifications, apps, openList)
+        return DayUse(day, screenMillis, unlocks, firstUnlock, lastOff, notifications, apps, openList, tryList.size, tryList)
     }
 
     /** CSV for analysis on a laptop: one row per event, in local time. */

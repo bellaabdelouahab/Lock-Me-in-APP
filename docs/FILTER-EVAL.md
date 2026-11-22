@@ -49,5 +49,6 @@ fanservice 93.3 -> 93.3. On the half never used for tuning: no risky screen miss
 - The "porn" score of the first model still misreads some faces and bare skin on photos the same way frame after frame; agreement
   cannot remove a mistake that repeats. Raising that threshold further loses real porn, so it stays.
 - Bald anime characters and ordinary anime outfits still show the warning on about 1 screen in 5.
-- The next step is the spec's F3 to F5: the "Wrong block?" button, the evening review and a small judge trained on his own
-  labelled screens.
+- F3 to F5 are built (docs/FEATURES.md 3.13). A judge trained on the public frames alone does not pass its own ship test (cutoff
+  0.999, no false close removed): the public scores cannot tell these false alarms from real hits, as the learned head showed
+  above. It needs his labelled false alarms, about 150 of them.

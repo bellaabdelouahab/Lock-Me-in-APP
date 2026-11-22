@@ -111,6 +111,8 @@ enum class Screen {
     HEALTH,    // Is it working?
     ABOUT,
     PHONE_USE,
+    FILTER,    // Screen filter: review, per app, eval, judge
+    THEMES,    // Themes & wallpaper
 }
 
 val LocalNavigate = compositionLocalOf<(Screen) -> Unit> { {} }

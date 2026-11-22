@@ -110,6 +110,31 @@ An outside reviewer compared version 0.2.0 with the owner's rules (rule 14, D-20
 ### 3.12 Share a setup
 - Export gives plain settings text. It never contains the friend secret. Import fills the form for review. After protection is on, saving needs the window.
 
+### 3.13 Screen filter feedback loop (spec v3.1 F2 to F5)
+- **Per-app strictness** (Screen filter page): Stricter / Default / Looser moves every threshold of one watched app by 0.10. Stricter
+  is instant; Looser is a settings request through the change gate.
+- **Wrong block?** (F3): after the filter closes an app, a card on the home screen offers "Wrong block?" then "Save for review".
+  Neither reopens anything. Saving keeps the hit frame (held in memory only until then) AES-GCM encrypted with a key-store key in
+  no-backup storage, with the scores, the frames that agreed, the thresholds and the model version. Every block keeps its metadata
+  without an image. 500 records at most, 10 saves a day, each save logged for the weekly report.
+- **Review window** (F4): daily 19:30 to 20:00. Each saved block shows heavily blurred; hold to see it. Wrong block keeps the image
+  for training, Correct block deletes it and keeps the metadata, Skip leaves it. The export (inside the window) is one file in
+  Downloads encrypted with a passphrase shown once; `scripts/judge/decrypt.py` opens it on the laptop.
+- **Eval mode** (F2, inside the window): runs the shipped models and settings over a folder with `normal` and `risky` folders and
+  reports false closes, misses, per app (from the screenshot's file name) and per class. Nothing is changed or kept.
+- **Personal judge** (F5): `scripts/judge/train.py` trains a logistic judge on the frozen models' scores from his labels plus the
+  public frames of docs/FILTER-EVAL.md, holds out 20% of his labels and the public half used for testing, and writes a file only if
+  no held-out risky screen loses its close and false closes fall. Installed from the Screen filter page (a loosening, so through
+  the change gate); taking it off is instant. It can only drop a hit, never one with porn + hentai at 0.95 or more.
+- **Tries on closed apps**: each time Android's "blocked" dialog comes up it counts as a try, named from the dialog or the icon
+  tapped just before (held 3 s in memory). Shown on Phone use and in the weekly report.
+
+### 3.14 Themes and wallpaper
+HyperOS hides the Themes app (and the Mi Account page) on a phone that has a device owner; OwnDroid and Dhizuku users report the
+same. Lock Me In never closes Themes, wallpapers or the always-on display (protected packages); each pass shows and enables them
+again where a device owner may. A "company policy" refusal inside HyperOS's own Settings is HyperOS's and cannot be lifted from an
+app, so the Themes & wallpaper page also sets a wallpaper from a photo and opens Themes directly.
+
 ## 4. Scenarios
 
 | Scenario | What happens |

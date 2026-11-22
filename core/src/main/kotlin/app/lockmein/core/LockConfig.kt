@@ -55,6 +55,13 @@ data class LockConfig(
     val filterSeductiveThreshold: Float = FilterRule.TUNED.photoSeductive,
     /** The seductive model acts like the others (warning, 5-second countdown, 30-second close). */
     val filterSeductiveLive: Boolean = true,
+    /**
+     * Per-app move of every filter threshold (spec v3.1 F2): package -> delta, -0.3 to 0.3. Below 0 is stricter (instant), above 0
+     * looser (through the change gate).
+     */
+    val filterAppOffsets: Map<String, Float> = emptyMap(),
+    /** The personal second check (spec v3.1 F5), null until one is trained and installed through the change gate. */
+    val filterJudge: FilterJudge? = null,
     /** Start of the night and end of social-app time, "HH:mm". */
     val nightStart: String = "22:00",
     /** The weekly settings window, when settings can be changed and removals scheduled: ISO day (7 = Sunday) and its hours. */
@@ -105,6 +112,8 @@ object ConfigCodec {
 
 /** What makes a configuration safe to apply. */
 object ConfigRules {
+    const val MAX_APP_OFFSET = 0.3f
+
     private fun time(value: String): LocalTime? = runCatching { LocalTime.parse(value) }.getOrNull()
 
     fun problems(config: LockConfig): List<String> = buildList {
@@ -122,7 +131,35 @@ object ConfigRules {
         if (config.sunAngleDegrees !in 10.0..25.0) add("The sun angle for fajr must be between 10 and 25 degrees.")
         if (config.fajrOffsetMinutes !in -60..60) add("The fajr offset must be within an hour.")
         if (config.filterPornHentaiThreshold !in 0.05f..1.0f || config.filterSexyThreshold !in 0.05f..1.0f || config.filterAnimeThreshold !in 0.05f..1.0f || config.filterSeductiveThreshold !in 0.05f..1.0f) add("The filter thresholds must be between 0.05 and 1.0.")
+        if (config.filterAppOffsets.values.any { it.isNaN() || it !in -MAX_APP_OFFSET..MAX_APP_OFFSET }) add("A per-app filter setting must be between -0.3 and 0.3.")
+        config.filterJudge?.problem()?.let(::add)
         if (config.allowedBrowser != null && config.allowedBrowser in config.alwaysBlocked) add("The allowed browser cannot also be blocked.")
         if (config.allowedBrowser != null && config.allowedBrowser in config.windowApps) add("The allowed browser cannot also be a window app.")
+    }
+}
+
+/** Whether a settings change only makes the screen filter stricter, which needs no request (tightening is instant). */
+object FilterTighten {
+    fun onlyTightens(old: LockConfig, new: LockConfig): Boolean {
+        if (old == new) return false
+        val sameElsewhere = new.copy(
+            filterPornHentaiThreshold = old.filterPornHentaiThreshold,
+            filterSexyThreshold = old.filterSexyThreshold,
+            filterAnimeThreshold = old.filterAnimeThreshold,
+            filterSeductiveThreshold = old.filterSeductiveThreshold,
+            filterSeductiveLive = old.filterSeductiveLive,
+            filterAppOffsets = old.filterAppOffsets,
+            filterJudge = old.filterJudge,
+        ) == old
+        if (!sameElsewhere) return false
+        if (new.filterPornHentaiThreshold > old.filterPornHentaiThreshold || new.filterSexyThreshold > old.filterSexyThreshold ||
+            new.filterAnimeThreshold > old.filterAnimeThreshold || new.filterSeductiveThreshold > old.filterSeductiveThreshold
+        ) return false
+        if (old.filterSeductiveLive && !new.filterSeductiveLive) return false
+        val apps = old.filterAppOffsets.keys + new.filterAppOffsets.keys
+        if (apps.any { (new.filterAppOffsets[it] ?: 0f) > (old.filterAppOffsets[it] ?: 0f) }) return false
+        // A judge only ever removes hits: adding or changing one loosens, taking it off tightens.
+        if (new.filterJudge != null && new.filterJudge != old.filterJudge) return false
+        return true
     }
 }

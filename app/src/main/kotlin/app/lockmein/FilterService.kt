@@ -9,7 +9,10 @@ import android.provider.Settings
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import androidx.annotation.VisibleForTesting
+import app.lockmein.core.AgreedFrame
+import app.lockmein.core.BlockRecord
 import app.lockmein.core.EventKind
+import app.lockmein.core.StoredScores
 import app.lockmein.core.FilterAction
 import app.lockmein.core.FilterDecisionMachine
 import app.lockmein.core.FilterScores
@@ -41,6 +44,7 @@ class FilterService : AccessibilityService() {
         private set
     var overlay: FilterOverlay? = null
         private set
+    private var blockCard: BlockCard? = null
     var decisionMachine = FilterDecisionMachine()
         internal set
 
@@ -49,6 +53,11 @@ class FilterService : AccessibilityService() {
     private var currentForegroundPackage: String? = null
     private var lastThumbnail: ByteArray? = null
     @Volatile private var lastScores: FilterScores? = null
+    /** The last frame that was a hit, as JPEG, kept only in memory for "Save for review" (spec F3), with its time. */
+    @Volatile private var lastHitJpeg: Pair<Long, ByteArray>? = null
+    /** The label of the last thing tapped (an app icon), kept in memory for 3 s to name the app behind a "blocked" dialog. */
+    private var lastClick: Pair<String, Long>? = null
+    private var lastTryAt = 0L
     private var isTakingScreenshot = false
     private var screenshotAt = 0L
     // One check at a time: during a video every frame is new and a check can outlast the 1-second tick. Without this the
@@ -60,6 +69,7 @@ class FilterService : AccessibilityService() {
         instance = this
         classifier = FilterModelClassifier(this)
         overlay = FilterOverlay(this)
+        blockCard = BlockCard(this)
         // The heartbeat FilterWatcher listens for: a filter that is listed but stops answering closes the watched apps.
         serviceScope.launch {
             while (isActive) {
@@ -68,6 +78,11 @@ class FilterService : AccessibilityService() {
             }
         }
         FilterWatcher.start(this)
+        reloadConfig()
+    }
+
+    /** Reads the thresholds, per-app settings and judge again (after a change). */
+    fun reloadConfig() {
         val config = ConfigStore(this).load()
         if (config != null) {
             decisionMachine = FilterDecisionMachine(
@@ -75,6 +90,8 @@ class FilterService : AccessibilityService() {
                 sexyThreshold = config.filterSexyThreshold,
                 animeThreshold = config.filterAnimeThreshold,
                 seductiveThreshold = config.filterSeductiveThreshold.takeIf { config.filterSeductiveLive },
+                appOffsets = config.filterAppOffsets,
+                judge = config.filterJudge,
             )
         }
     }
@@ -87,8 +104,22 @@ class FilterService : AccessibilityService() {
             if (event.parcelableData is android.app.Notification && pkg != packageName) PhoneUseLog(this).add(UseKind.NOTIFICATION, pkg)
             return
         }
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+            // Only the words of what was tapped (an app icon's name), only in memory, only to name the app behind a "blocked" dialog.
+            lastClick = (event.text.joinToString(" ") + " " + (event.contentDescription ?: "")).trim() to System.currentTimeMillis()
+            return
+        }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         if (pkg == packageName) return // Ignore Lock Me In's own windows
+
+        // Android's dialog for a closed app: for a device owner, Settings' "blocked by admin" dialog with our support message; for
+        // other suspensions SuspendedAppActivity. Counted as a try to open a closed app (Phone use page, weekly report).
+        val cls = event.className?.toString().orEmpty()
+        val dialogText = event.text.joinToString(" ")
+        if (dialogText.contains(SUPPORT_MESSAGE_START) || cls.contains("SuspendedAppActivity") || cls.contains("ActionDisabledByAdmin") || cls.contains("AdminSupportDetails")) {
+            countTry(dialogText)
+            return
+        }
 
         // A notification banner, the pulled-down shade or the keyboard also send this event. Only the app window that has focus
         // counts, otherwise the filter thought you had left the browser and stayed off when the banner went away.
@@ -99,6 +130,24 @@ class FilterService : AccessibilityService() {
             currentForegroundPackage = app
             PhoneUseLog(this).add(UseKind.APP, app)
             onForegroundAppChanged(app)
+        }
+    }
+
+    /** Records a try to open a closed app, named by the dialog's text or the icon tapped just before, when it can be. */
+    private fun countTry(dialogText: String) {
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lastTryAt < 1_500) return // one dialog sends several events
+        lastTryAt = nowMs
+        val shown = dialogText + " " + (lastClick?.takeIf { nowMs - it.second < 3_000 }?.first ?: "")
+        val config = ConfigStore(this).load()
+        serviceScope.launch(Dispatchers.Default) {
+            val pkg = runCatching {
+                val inventory = DeviceInventory(this@FilterService)
+                val closed = if (config == null) emptyList() else ClosedReasons.all(this@FilterService, config).filter { it.closedNow }.map { it.packageName }
+                closed.filter { inventory.label(it).let { l -> l.isNotBlank() && shown.contains(l, ignoreCase = true) } }.maxByOrNull { inventory.label(it).length }
+            }.getOrNull().orEmpty()
+            PhoneUseLog(this@FilterService).add(UseKind.BLOCKED, pkg)
+            EventLog(this@FilterService).add(EventKind.BLOCKED_TRY, pkg.ifEmpty { "an app (not named)" })
         }
     }
 
@@ -120,6 +169,8 @@ class FilterService : AccessibilityService() {
         stopSampling()
         overlay?.dismiss()
         overlay = null
+        blockCard?.dismiss()
+        blockCard = null
         classifier?.close()
         classifier = null
         serviceScope.cancel()
@@ -291,7 +342,14 @@ class FilterService : AccessibilityService() {
                     val m = decisionMachine
                     // The tile that comes closest to a threshold speaks for the screen.
                     val result = cls.predict(bitmap) { m.rule.level(it) }
-                    bitmap.recycle() // Dropped immediately; never written to disk or logs
+                    // A hit frame is kept as JPEG in memory only, for "Save for review" after a block; written (encrypted) only on
+                    // that second tap. Any other frame is dropped at once, never written to disk or logs.
+                    if (m.ruleFor(pkg).isHit(result)) {
+                        lastHitJpeg = runCatching {
+                            java.io.ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it) }.toByteArray()
+                        }.getOrNull()?.let { System.currentTimeMillis() to it }
+                    }
+                    bitmap.recycle()
                     result
                 } else {
                     bitmap.recycle()
@@ -341,6 +399,7 @@ class FilterService : AccessibilityService() {
                 val until = now.plus(action.duration)
                 state.blockWithFilter(pkg, until)
                 EventLog(this).add(EventKind.FILTER_BLOCKED, "$pkg until $until scores: $scores", now)
+                recordBlock(pkg, scores, now)
 
                 // Reapply policy to suspend the package via device owner
                 PolicyRunner(this).runIfActive(now)
@@ -348,7 +407,41 @@ class FilterService : AccessibilityService() {
         }
     }
 
+    /** Keeps the block's record (scores, frames, thresholds; no image) and offers "Wrong block?" (spec v3.1 F3). */
+    private fun recordBlock(pkg: String, scores: FilterScores, now: Instant) {
+        val m = decisionMachine
+        val record = BlockRecord(
+            id = java.util.UUID.randomUUID().toString(),
+            atMillis = now.toEpochMilli(),
+            pkg = pkg,
+            scores = StoredScores.of(scores),
+            agreed = m.agreedFrames.map { AgreedFrame(java.time.Duration.between(it.first, now).toMillis(), it.second) },
+            rule = m.ruleFor(pkg).toString(),
+            appOffset = m.appOffsets[pkg] ?: 0f,
+            modelVersion = MODEL_VERSION,
+            judgeVersion = m.judge?.version,
+        )
+        val jpeg = lastHitJpeg?.takeIf { System.currentTimeMillis() - it.first < FeedbackStore.PENDING_MS }?.second
+        lastHitJpeg = null
+        val store = FeedbackStore(this)
+        serviceScope.launch(Dispatchers.IO) { runCatching { store.add(record) } }
+        val label = runCatching { DeviceInventory(this).label(pkg) }.getOrDefault(pkg).ifBlank { pkg }
+        blockCard?.show(label) {
+            val saved = runCatching { store.add(record); store.saveForReview(record.id, jpeg) }.getOrDefault(false)
+            if (saved) {
+                val today = store.savesToday()
+                EventLog(this).add(EventKind.FILTER_SAVED, "$pkg ($today today)")
+                "Saved for the review at 19:30. The app stays closed for 30 s."
+            } else {
+                "Not saved: ${app.lockmein.core.Feedback.MAX_SAVES_PER_DAY} saves a day at most. The app stays closed for 30 s."
+            }
+        }
+    }
+
     companion object {
+        /** The three models shipped in this build, recorded with each block. */
+        val MODEL_VERSION = "nsfw-mnv2 + anime_rating + seductive-clip, app ${BuildConfig.VERSION_NAME}"
+
         /** A frame every half second (spec v3.1 F2); a phone that needs longer for a check skips frames instead of queueing them. */
         const val SAMPLE_INTERVAL_MS = 500L
         private const val MAX_TEXT_NODES = 400

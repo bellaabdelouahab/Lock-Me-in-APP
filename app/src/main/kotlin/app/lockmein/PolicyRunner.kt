@@ -51,6 +51,8 @@ class PolicyRunner(private val context: Context) {
 
         val report = PolicyApplier(context).apply(plan)
         state.noteUnsuspendable(report.unsuspendable)
+        // HyperOS hides the Themes app on a phone with a device owner: shown and enabled again where Android lets us.
+        runCatching { Personalize(context).restore() }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { events.add(EventKind.PASS_OK, "Personalization: ${it.joinToString()}", now) }
         events.add(if (report.ok) EventKind.PASS_OK else EventKind.PASS_FAILED, report.failed.joinToString("; "), now)
 
         val candidates = buildList {
