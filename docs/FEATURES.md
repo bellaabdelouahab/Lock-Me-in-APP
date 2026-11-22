@@ -135,6 +135,19 @@ same. Lock Me In never closes Themes, wallpapers or the always-on display (prote
 again where a device owner may. A "company policy" refusal inside HyperOS's own Settings is HyperOS's and cannot be lifted from an
 app, so the Themes & wallpaper page also sets a wallpaper from a photo and opens Themes directly.
 
+### 3.15 MCP link (server/relay.py)
+Claude reaches the phone through an MCP server on the VPS. The phone cannot be reached from the internet, so it keeps one
+WebSocket open to the relay from the filter watcher (always running) and answers each MCP call itself, through the same code as
+its screens (`RemoteCommands` over `ChangeManager`): adding apps to lists and a stricter filter apply at once; removing apps, a
+looser filter, other settings, releasing apps and browsers become requests for the Sunday review; approving works only in the
+weekly window; review labels and saved screenshots only in the 19:30 review window. No friend's code or holder code, no removal,
+no setup reset. Every change is logged as REMOTE_CHANGE and counted in the weekly report.
+- Reads: status (phase, what is closed and why, the health checks), phone use by day and raw events, weekly report, event log,
+  apps and their lists, requests, settings, filter blocks; saved screenshots inside the review window only (relayed, never stored).
+- The relay keeps only the hash of the phone's token; the MCP endpoint is `/<MCP_SECRET>/mcp`; its access log is off so the secret
+  never reaches the logs. Pairing: Settings side bar, MCP link, server address and the PAIR_CODE (once). Disconnect any time.
+- Deploy: `server/docker-compose.yml` in Coolify, with MCP_SECRET, PAIR_CODE and a domain.
+
 ## 4. Scenarios
 
 | Scenario | What happens |

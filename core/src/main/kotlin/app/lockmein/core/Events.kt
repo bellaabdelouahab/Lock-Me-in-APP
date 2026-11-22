@@ -52,6 +52,9 @@ enum class EventKind {
 
     /** A try to open a closed app (Android's "blocked" dialog came up). */
     BLOCKED_TRY,
+
+    /** A change asked through the MCP (Lock Me In relay), with the app's answer. */
+    REMOTE_CHANGE,
 }
 
 data class LockEvent(val at: Instant, val kind: EventKind, val detail: String = "")
@@ -81,6 +84,7 @@ data class WeeklyReport(
                 appendLine("Screen filter detections: ${count(EventKind.FILTER_HIT)} hits, ${count(EventKind.FILTER_BLOCKED)} blocks")
             }
             if (count(EventKind.FILTER_SAVED) > 0) appendLine("Blocks saved as wrong for review: ${count(EventKind.FILTER_SAVED)}")
+            if (count(EventKind.REMOTE_CHANGE) > 0) appendLine("Changes asked through the MCP: ${count(EventKind.REMOTE_CHANGE)}")
             if (count(EventKind.BLOCKED_TRY) > 0) appendLine("Tries to open a closed app: ${count(EventKind.BLOCKED_TRY)}")
             if (newApps.isNotEmpty()) appendLine("New apps held back: ${newApps.joinToString()}")
             refusals.forEach { appendLine("Refused ${day.format(it.at)}: ${it.detail}") }

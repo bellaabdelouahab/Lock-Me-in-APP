@@ -76,6 +76,7 @@ class ScreenShots(private val name: String, private val extras: Map<String, Any>
             add(arrayOf("filter-dark", mapOf("screen" to "FILTER", "demo" to true, "dark" to true)))
             add(arrayOf("filter-review-open", mapOf("screen" to "FILTER", "demo" to true, "reviewOpen" to true)))
             add(arrayOf("themes", mapOf("screen" to "THEMES", "demo" to true)))
+            add(arrayOf("mcp-link", mapOf("screen" to "REMOTE", "demo" to true)))
             add(arrayOf("setup-0-dark", mapOf("step" to 0, "dark" to true)))
             add(arrayOf("setup-3-dark", mapOf("step" to 3, "dark" to true)))
             add(arrayOf("drawer-dark", mapOf("screen" to "HOME", "demo" to true, "openDrawer" to true, "dark" to true)))

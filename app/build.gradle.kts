@@ -102,6 +102,8 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("com.google.zxing:core:3.5.3")
+    // The link to the MCP relay (one WebSocket the phone keeps open).
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     implementation("org.tensorflow:tensorflow-lite:2.16.1")
     implementation("org.tensorflow:tensorflow-lite-gpu:2.16.1")

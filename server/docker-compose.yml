@@ -1,0 +1,16 @@
+# Lock Me In relay for Coolify (same pattern as the Vikunja MCP). Set MCP_SECRET (32+ chars) and PAIR_CODE (8+ chars) in Coolify,
+# and the domain (e.g. https://lockmein.abdelouahab.xyz) on the relay service. WebSockets pass through Coolify's proxy as is.
+services:
+  relay:
+    image: python:3.12-slim
+    environment:
+      - SERVICE_URL_RELAY_8000
+      - MCP_SECRET=${MCP_SECRET}
+      - PAIR_CODE=${PAIR_CODE}
+      - DATA_DIR=/data
+    command: ["sh", "-c", "pip install -q --root-user-action=ignore mcp==1.30.0 uvicorn==0.38.0 websockets==15.0.1 && python /app/relay.py"]
+    volumes:
+      - /home/ubuntu/lock-me-in/server/relay.py:/app/relay.py:ro
+      - relay-data:/data
+volumes:
+  relay-data:

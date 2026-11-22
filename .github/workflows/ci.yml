@@ -116,7 +116,7 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :app:testDebugUnitTest --tests 'app.lockmein.ScreenShots' -Ppreview=true -Dshots.dir="$PWD/shots" --console=plain
+      - run: ./gradlew :app:testDebugUnitTest --tests 'app.lockmein.ScreenShots' --tests 'app.lockmein.RemoteCommandsTest' -Ppreview=true -Dshots.dir="$PWD/shots" --console=plain
       - uses: actions/upload-artifact@v4
         with:
           name: screens

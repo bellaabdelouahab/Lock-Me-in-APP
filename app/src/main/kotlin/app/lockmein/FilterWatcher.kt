@@ -54,6 +54,8 @@ class FilterWatcher : Service() {
             contentResolver.registerContentObserver(Settings.Secure.getUriFor(key), false, observer)
         }
         main.post(tick)
+        // The MCP relay link, when the phone is paired: kept open by this always-running service.
+        RemoteLink.start(this)
         // The phone-use log: screen on and off, unlocks (only a running receiver can hear these, not one in the manifest).
         registerReceiver(screen, android.content.IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)

@@ -113,6 +113,7 @@ enum class Screen {
     PHONE_USE,
     FILTER,    // Screen filter: review, per app, eval, judge
     THEMES,    // Themes & wallpaper
+    REMOTE,    // MCP link
 }
 
 val LocalNavigate = compositionLocalOf<(Screen) -> Unit> { {} }
