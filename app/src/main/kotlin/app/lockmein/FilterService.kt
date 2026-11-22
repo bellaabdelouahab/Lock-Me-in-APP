@@ -14,6 +14,7 @@ import app.lockmein.core.FilterAction
 import app.lockmein.core.FilterDecisionMachine
 import app.lockmein.core.FilterScores
 import app.lockmein.core.FrameDiff
+import app.lockmein.core.UseKind
 import app.lockmein.core.WatchedApps
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -80,6 +81,11 @@ class FilterService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val pkg = event.packageName?.toString() ?: return
+        if (event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
+            // A notification (not a toast) for the phone-use log: which app, when. Its text is never read.
+            if (event.parcelableData is android.app.Notification && pkg != packageName) PhoneUseLog(this).add(UseKind.NOTIFICATION, pkg)
+            return
+        }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         if (pkg == packageName) return // Ignore Lock Me In's own windows
 
@@ -90,6 +96,7 @@ class FilterService : AccessibilityService() {
 
         if (app != currentForegroundPackage) {
             currentForegroundPackage = app
+            PhoneUseLog(this).add(UseKind.APP, app)
             onForegroundAppChanged(app)
         }
     }

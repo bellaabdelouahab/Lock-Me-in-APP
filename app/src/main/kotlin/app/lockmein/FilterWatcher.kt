@@ -54,6 +54,24 @@ class FilterWatcher : Service() {
             contentResolver.registerContentObserver(Settings.Secure.getUriFor(key), false, observer)
         }
         main.post(tick)
+        // The phone-use log: screen on and off, unlocks (only a running receiver can hear these, not one in the manifest).
+        registerReceiver(screen, android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_USER_PRESENT)
+        })
+    }
+
+    private val screen = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val kind = when (intent.action) {
+                Intent.ACTION_SCREEN_ON -> app.lockmein.core.UseKind.SCREEN_ON
+                Intent.ACTION_SCREEN_OFF -> app.lockmein.core.UseKind.SCREEN_OFF
+                Intent.ACTION_USER_PRESENT -> app.lockmein.core.UseKind.UNLOCK
+                else -> return
+            }
+            PhoneUseLog(context).add(kind)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
@@ -61,6 +79,7 @@ class FilterWatcher : Service() {
     override fun onDestroy() {
         main.removeCallbacksAndMessages(null)
         contentResolver.unregisterContentObserver(observer)
+        runCatching { unregisterReceiver(screen) }
         if (current === watch) current = null
         super.onDestroy()
     }
