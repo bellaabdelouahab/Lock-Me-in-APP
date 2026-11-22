@@ -30,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import app.lockmein.BuildConfig
@@ -143,12 +144,18 @@ fun HealthScreen(onBack: () -> Unit) {
         } else {
             // Failing ones first, verified after
             val sortedList = list.sortedBy { if (it.ok) 1 else 0 }
-            sortedList.forEach { item ->
-                CheckRow(
-                    title = item.title,
-                    state = if (item.ok) CheckState.PASS else CheckState.FAIL,
-                    detail = item.detail,
-                )
+            // One grouped list: rows divided by hairlines, the failing ones first and each marked in red.
+            TintedCard(Modifier, Color.Unspecified, quiet = true, padding = 16.dp) {
+                Column {
+                    sortedList.forEachIndexed { index, item ->
+                        CheckItem(
+                            title = item.title,
+                            state = if (item.ok) CheckState.PASS else CheckState.FAIL,
+                            detail = item.detail,
+                        )
+                        if (index < sortedList.lastIndex) RowDivider(inset = 36.dp)
+                    }
+                }
             }
         }
     }

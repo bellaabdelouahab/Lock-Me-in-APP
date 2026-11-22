@@ -132,12 +132,14 @@ fun ListsScreen(onBack: () -> Unit) {
             selectedTabIndex = selectedTab,
             edgePadding = 0.dp,
             containerColor = MaterialTheme.colorScheme.background,
-            divider = { HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = if (Palette.isDark) 0.22f else 0.16f)) },
+            divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) },
         ) {
             tabs.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index; searchQuery = "" },
+                    selectedContentColor = MaterialTheme.colorScheme.primary,
+                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     text = {
                         Text(
                             title,
@@ -257,7 +259,7 @@ fun ListsScreen(onBack: () -> Unit) {
                                 Text("No closed apps match your filter.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         } else {
-                            AppCard(accent = Palette.Closed) {
+                            AppCard {
                                 filtered.forEachIndexed { index, app ->
                                     val label = inventory.label(app.packageName)
                                     AppRow(
@@ -278,7 +280,7 @@ fun ListsScreen(onBack: () -> Unit) {
                                         }
                                     }
                                     if (index < filtered.lastIndex) {
-                                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                        RowDivider(inset = 52.dp)
                                     }
                                 }
                             }
@@ -361,15 +363,8 @@ private fun renderAppList(
             )
         }
     } else {
-        // Each list edged in what it does: teal at night, red blocked, blue on a schedule, amber watched.
-        AppCard(
-            accent = when (listType) {
-                AppList.NIGHT_CLOSED -> MaterialTheme.colorScheme.primary
-                AppList.ALWAYS_BLOCKED -> Palette.Closed
-                AppList.WINDOW_APPS -> Palette.Info
-                AppList.WATCHED -> Palette.Attention
-            },
-        ) {
+        // One quiet card per list: the tab and each row's line say what the list does.
+        AppCard {
             filtered.forEachIndexed { index, pkg ->
                 val label = inventory.label(pkg)
                 val subtitle = when (listType) {
@@ -389,7 +384,7 @@ private fun renderAppList(
                     }
                 }
                 if (index < filtered.lastIndex) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    RowDivider(inset = 52.dp)
                 }
             }
         }

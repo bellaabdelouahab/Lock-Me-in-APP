@@ -54,7 +54,7 @@ fun ReportScreen(onBack: () -> Unit) {
         }
         if (detections.isNotEmpty()) {
             Heading("Filter detections")
-            AppCard(accent = Palette.Attention) {
+            AppCard {
                 detections.forEachIndexed { index, event ->
                     val timeStr = DateTimeFormatter.ofPattern("EEE d MMM HH:mm").withZone(ZoneId.systemDefault()).format(event.at)
                     val label = if (event.kind == EventKind.FILTER_BLOCKED) "Closed (30 min)" else "Warning"
@@ -66,7 +66,7 @@ fun ReportScreen(onBack: () -> Unit) {
                         Text(event.detail, style = MaterialTheme.typography.bodySmall)
                     }
                     if (index < detections.lastIndex) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        RowDivider()
                     }
                 }
             }

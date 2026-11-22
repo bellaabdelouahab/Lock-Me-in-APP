@@ -60,7 +60,7 @@ fun BrowsersScreen(onBack: () -> Unit) {
             }
         }
         closed.forEach { pkg ->
-            AppCard(accent = Palette.Closed) {
+            AppCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     AppIcon(pkg, size = 40.dp)
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {

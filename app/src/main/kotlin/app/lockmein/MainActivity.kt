@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DrawerValue
@@ -53,7 +54,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import app.lockmein.ui.AboutScreen
 import app.lockmein.ui.BrowsersScreen
-import app.lockmein.ui.CardShape
+import app.lockmein.ui.PillShape
+import app.lockmein.ui.StatusBadge
+import app.lockmein.ui.StatusKind
 import app.lockmein.ui.EmergencyScreen
 import app.lockmein.ui.HealthScreen
 import app.lockmein.ui.HomeScreen
@@ -130,13 +133,9 @@ private fun LockApp(requested: String?) {
     }
 
     var screen by rememberSaveable { mutableStateOf(first) }
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    // Asked to start with the side bar open (the screenshots do): it starts open, without the slide.
     val shouldOpenDrawer = remember { intent(context)?.getBooleanExtra("openDrawer", false) == true }
-    LaunchedEffect(shouldOpenDrawer) {
-        if (shouldOpenDrawer) {
-            drawerState.open()
-        }
-    }
+    val drawerState = rememberDrawerState(initialValue = if (shouldOpenDrawer) DrawerValue.Open else DrawerValue.Closed)
 
     val home = { screen = Screen.HOME }
     val selectScreen: (Screen) -> Unit = { dest ->
@@ -150,6 +149,7 @@ private fun LockApp(requested: String?) {
         DrawerItem("Requests", Screen.WINDOW, Icons.Filled.EventAvailable),
         DrawerItem("Holder code", Screen.EMERGENCY, Icons.Filled.Key),
         DrawerItem("Is it working?", Screen.HEALTH, Icons.Filled.CheckCircle),
+        DrawerItem("Weekly report", Screen.REPORT, Icons.Filled.Insights),
         DrawerItem("Settings", Screen.SETTINGS, Icons.Filled.Settings),
     )
 
@@ -157,33 +157,20 @@ private fun LockApp(requested: String?) {
     fun DrawerHeader() {
         val store = remember { ConfigStore(context) }
         val isProtected = store.protectionActive && store.setupComplete
-        val dotColor = if (isProtected) Palette.Ok else if (store.protectionActive) Palette.Attention else MaterialTheme.colorScheme.onSurfaceVariant
-
         Column(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 20.dp),
+                .padding(start = 28.dp, end = 24.dp, top = 28.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text(
-                    "Lock Me In",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Box(
-                    Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(dotColor),
-                )
-            }
             Text(
-                if (isProtected) "Protection active" else if (store.protectionActive) "Setup in progress" else "Protection inactive",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                "Lock Me In",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            StatusBadge(
+                kind = if (isProtected) StatusKind.OK else StatusKind.ATTENTION,
+                label = if (isProtected) "Protection active" else if (store.protectionActive) "Setup in progress" else "Protection inactive",
             )
         }
     }
@@ -197,12 +184,12 @@ private fun LockApp(requested: String?) {
                 icon = { Icon(item.icon, contentDescription = null) },
                 selected = isSelected,
                 onClick = { selectScreen(item.screen) },
-                shape = CardShape,
+                shape = PillShape,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
                 colors = NavigationDrawerItemDefaults.colors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                     selectedIconColor = MaterialTheme.colorScheme.primary,
-                    selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
                     unselectedContainerColor = Color.Transparent,
                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     unselectedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -210,7 +197,7 @@ private fun LockApp(requested: String?) {
             )
         }
 
-        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
         val isAboutSelected = screen == Screen.ABOUT
         NavigationDrawerItem(
@@ -223,12 +210,12 @@ private fun LockApp(requested: String?) {
             icon = { Icon(Icons.Filled.Info, contentDescription = null) },
             selected = isAboutSelected,
             onClick = { selectScreen(Screen.ABOUT) },
-            shape = CardShape,
+            shape = PillShape,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
             colors = NavigationDrawerItemDefaults.colors(
-                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                 selectedIconColor = MaterialTheme.colorScheme.primary,
-                selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                selectedTextColor = MaterialTheme.colorScheme.onSurface,
                 unselectedContainerColor = Color.Transparent,
                 unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 unselectedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -263,11 +250,10 @@ private fun LockApp(requested: String?) {
         PermanentNavigationDrawer(
             drawerContent = {
                 PermanentDrawerSheet(
-                    drawerContainerColor = MaterialTheme.colorScheme.surface,
+                    drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                     drawerContentColor = MaterialTheme.colorScheme.onSurface,
                 ) {
                     DrawerHeader()
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     DrawerItems()
                 }
             },
@@ -279,11 +265,10 @@ private fun LockApp(requested: String?) {
             drawerState = drawerState,
             drawerContent = {
                 ModalDrawerSheet(
-                    drawerContainerColor = MaterialTheme.colorScheme.surface,
+                    drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                     drawerContentColor = MaterialTheme.colorScheme.onSurface,
                 ) {
                     DrawerHeader()
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     DrawerItems()
                 }
             },

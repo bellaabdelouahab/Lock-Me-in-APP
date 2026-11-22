@@ -10,7 +10,7 @@ looking at changes early, without waiting for the release.
 | Logic tests + everything compiles | `scripts/check.sh` | ~1 min cold, seconds warm |
 | Every screen as a picture (preview build, sample data) | `scripts/shots.sh` | ~40 s warm |
 
-`scripts/shots.sh` draws the 23 screens (two in dark mode) (setup steps, home, apps, requests, settings, drawer...) to `build/shots/*.png`
+`scripts/shots.sh` draws 32 screens, light and dark (setup steps, home, apps, requests, settings, the open side bar...) to `build/shots/*.png`
 with Robolectric on the computer: no emulator, no phone. The pictures are sent to the owner in the chat for feedback.
 It checks nothing; it is only for looking.
 
@@ -38,3 +38,12 @@ A push that only touches notes (`docs/`, `*.md`, `.agent-runs/`, `emulator-repor
 - No spare phone: nothing untested is installed on the owner's phone. Pictures and the CI emulator come first; the phone only
   gets a release that passed every check.
 - The USB way out (`adb shell am broadcast -n app.lockmein/.UsbEscapeReceiver`, test build) is checked by CI on every release.
+
+## Design ("quiet tonal", in `ui/Theme.kt` and `ui/Common.kt`)
+
+- Home shows only: a call-out when a decision waits (setup, update), the phase ring with the time left and whether Android
+  confirms protection, the three most-used actions (Apps, Requests, Friend's code), and the apps closed now with why. Everything
+  else has its own page (window times on Requests and Apps, the filter's week on Report, the build on About).
+- Flat tonal cards (no borders, gradients or glows); warm near-black page in dark mode, white cards on soft grey in light.
+- Colour only for meaning, always with an icon and a word: green OK, amber attention, red closed. Teal marks what can be tapped.
+- One large number per screen at most; section labels small and grey; grouped lists with hairline dividers.
