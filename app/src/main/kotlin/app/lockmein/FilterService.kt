@@ -58,6 +58,10 @@ class FilterService : AccessibilityService() {
     /** The label of the last thing tapped (an app icon), kept in memory for 3 s to name the app behind a "blocked" dialog. */
     private var lastClick: Pair<String, Long>? = null
     private var lastTryAt = 0L
+    /** Private tabs (FEATURES 3.16): last window check, last count, and since when the screen is black (Android 11 to 13). */
+    private var lastProbeAt = 0L
+    private var lastHiddenAt = 0L
+    private var blackSince: Long? = null
     private var isTakingScreenshot = false
     private var screenshotAt = 0L
     // One check at a time: during a video every frame is new and a check can outlast the 1-second tick. Without this the
@@ -251,6 +255,7 @@ class FilterService : AccessibilityService() {
         samplingJob = null
         lastThumbnail = null
         lastScores = null
+        blackSince = null
         isTakingScreenshot = false
     }
 
@@ -316,6 +321,10 @@ class FilterService : AccessibilityService() {
             thumb.recycle()
 
             val currentGray = FrameDiff.rgbToGrayscale(thumbPixels)
+            if (checkHidden(pkg, currentGray)) {
+                bitmap.recycle()
+                return
+            }
             val changed = FrameDiff.hasChanged(lastThumbnail, currentGray)
 
             // A still screen is not read again (battery): it counts as the same frame once more, so a still picture is judged
@@ -368,6 +377,60 @@ class FilterService : AccessibilityService() {
                 executeAction(pkg, action, scores, now)
             }
         }
+    }
+
+    /**
+     * A screen the filter cannot see (FEATURES 3.16): a dark frame in a watched app makes Android (14+) say whether the app's
+     * window is secure, as private tabs are; on Android 11 to 13 a watched browser black for 6 s counts. Such a screen is
+     * sent home. True when it was.
+     */
+    private suspend fun checkHidden(pkg: String, gray: ByteArray): Boolean {
+        val nowMs = System.currentTimeMillis()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            if (!app.lockmein.core.HiddenScreen.mayBeHidden(gray) || nowMs - lastProbeAt < app.lockmein.core.HiddenScreen.PROBE_EVERY_MS) return false
+            lastProbeAt = nowMs
+            if (!withContext(Dispatchers.Main) { isSecureWindow(pkg) }) return false
+        } else {
+            blackSince = if (app.lockmein.core.HiddenScreen.isBlack(gray)) blackSince ?: nowMs else null
+            if (!app.lockmein.core.HiddenScreen.blackTooLong(blackSince, nowMs, isBrowser = true)) return false
+            val isBrowser = pkg in app.lockmein.core.KnownBrowsers.ALL ||
+                runCatching { pkg in DeviceInventory(this).read().browsers }.getOrDefault(false)
+            if (!isBrowser) return false
+            blackSince = null
+        }
+        withContext(Dispatchers.Main) { sendHiddenHome(pkg) }
+        return true
+    }
+
+    /** Android 14+: asks for a picture of [pkg]'s focused window alone; "secure window" means the filter is shown black. */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private suspend fun isSecureWindow(pkg: String): Boolean {
+        val window = runCatching { windows }.getOrNull().orEmpty()
+            .filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION && it.root?.packageName?.toString() == pkg }
+            .let { w -> w.firstOrNull { it.isFocused } ?: w.firstOrNull { it.isActive } ?: w.firstOrNull() } ?: return false
+        return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+            takeScreenshotOfWindow(window.id, mainExecutor, object : TakeScreenshotCallback {
+                override fun onSuccess(result: ScreenshotResult) {
+                    result.hardwareBuffer.close()
+                    if (cont.isActive) cont.resumeWith(Result.success(false))
+                }
+
+                override fun onFailure(errorCode: Int) {
+                    if (cont.isActive) cont.resumeWith(Result.success(errorCode == ERROR_TAKE_SCREENSHOT_SECURE_WINDOW))
+                }
+            })
+        }
+    }
+
+    private fun sendHiddenHome(pkg: String) {
+        overlay?.dismiss()
+        decisionMachine.reset()
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lastHiddenAt < app.lockmein.core.HiddenScreen.COUNT_EVERY_MS) return
+        lastHiddenAt = nowMs
+        EventLog(this).add(EventKind.HIDDEN_SCREEN, pkg)
+        android.widget.Toast.makeText(this, "Private tabs close: the screen filter cannot see them.", android.widget.Toast.LENGTH_LONG).show()
     }
 
     private fun executeAction(

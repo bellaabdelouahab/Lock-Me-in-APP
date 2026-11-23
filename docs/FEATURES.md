@@ -237,3 +237,11 @@ Nothing about a real phone is claimed here.
 - Is the QR-in-person friend-code flow strong enough?
 - Is it worth trying on a real phone before the screen check exists?
 - Which of the weak points in section 8 would you fix first?
+
+### 3.16 Private tabs
+Private tabs (Brave, Firefox, Edge, Mi Browser, and Chrome where its policy is missing) mark their window secure, so the screen
+filter's screenshot comes back black and nothing in it can ever be a hit. A watched app showing such a screen is sent home, with a
+short note ("Private tabs close: the screen filter cannot see them."), and logged as HIDDEN_SCREEN (weekly report: "Private tabs
+sent home"). Android 14+: a mostly black frame (80% of the 16x16 thumbnail) makes the filter ask Android for a picture of the app's
+own window; "secure window" is the proof (at most every 1.5 s). Android 11 to 13 cannot tell, so there a watched browser that stays
+fully black (97%) for 6 s counts. Chrome's private windows stay switched off by its policy as before.
