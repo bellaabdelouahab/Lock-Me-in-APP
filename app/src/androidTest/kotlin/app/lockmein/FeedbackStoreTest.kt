@@ -28,7 +28,7 @@ class FeedbackStoreTest {
     private fun record(i: Int) = BlockRecord("t$i", Instant.now().toEpochMilli() + i, "com.brave.browser", StoredScores(porn = 0.9f))
 
     @Test
-    fun savedScreenIsEncryptedAndOnlyKeptForFalseAlarms() {
+    fun savedScreenIsEncryptedAndKeptUntilSentToTraining() {
         val store = FeedbackStore(context)
         val jpeg = ByteArray(5000) { (it % 251).toByte() }
         store.add(record(1)); store.add(record(2))
@@ -43,8 +43,12 @@ class FeedbackStoreTest {
         assertEquals(BlockLabel.CLAIMED_FALSE, saved.label)
         assertArrayEquals(jpeg, store.image(saved))
 
+        // Both labels keep the screen until it goes to training (FEATURES 3.20); sending it removes it from the phone.
         store.label("t1", BlockLabel.CORRECT, Instant.now())
         store.label("t2", BlockLabel.WRONG, Instant.now())
+        assertTrue(File(dir, "t1.bin").exists())
+        assertArrayEquals(jpeg, store.image(store.records().first { it.id == "t1" }))
+        store.uploaded("t1", 1_000)
         assertFalse(File(dir, "t1.bin").exists())
         assertNull(store.image(store.records().first { it.id == "t1" }))
         assertTrue(File(dir, "t2.bin").exists())
