@@ -1,0 +1,68 @@
+# Blocky for Lock Me In (FEATURES 3.17). No admin page and no API port published: these rules change only by a commit and a
+# redeploy. The phone reaches it as dns.abdelouahab.xyz over DNS-over-TLS; Coolify's proxy holds the certificate and passes the
+# plain DNS stream to port 53 here.
+upstreams:
+  groups:
+    default:
+      # Two family resolvers: adult sites are filtered a second time behind the lists below.
+      - https://family.cloudflare-dns.com/dns-query
+      - https://doh.cleanbrowsing.org/doh/adult-filter/
+  strategy: parallel_best
+  timeout: 3s
+
+bootstrapDns:
+  - upstream: https://1.1.1.1/dns-query
+  - upstream: 9.9.9.9
+
+blocking:
+  denylists:
+    lists:
+      - https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt
+    adult:
+      - https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/nsfw-onlydomains.txt
+    bypass:
+      # Other DNS-over-HTTPS resolvers, VPNs and proxies: ways around this server.
+      - https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/doh-vpn-proxy-bypass-onlydomains.txt
+  clientGroupsBlock:
+    default: [lists, adult, bypass]
+  blockType: zeroIp
+  blockTTL: 1m
+  loading:
+    refreshPeriod: 12h
+    strategy: fast
+    downloads:
+      timeout: 60s
+      attempts: 5
+
+customDNS:
+  # Safe search and YouTube's strict restricted mode, whatever the browser or app asks for.
+  zone: |
+    www.google.com. 300 CNAME forcesafesearch.google.com.
+    www.google.co.ma. 300 CNAME forcesafesearch.google.com.
+    www.google.fr. 300 CNAME forcesafesearch.google.com.
+    www.bing.com. 300 CNAME strict.bing.com.
+    duckduckgo.com. 300 CNAME safe.duckduckgo.com.
+    www.duckduckgo.com. 300 CNAME safe.duckduckgo.com.
+    www.youtube.com. 300 CNAME restrict.youtube.com.
+    m.youtube.com. 300 CNAME restrict.youtube.com.
+    youtubei.googleapis.com. 300 CNAME restrict.youtube.com.
+    youtube.googleapis.com. 300 CNAME restrict.youtube.com.
+    www.youtube-nocookie.com. 300 CNAME restrict.youtube.com.
+  filterUnmappedTypes: false
+
+caching:
+  minTime: 5m
+  prefetching: true
+
+queryLog:
+  type: sqlite
+  target: /logs/querylog.db
+  logRetentionDays: 7
+  flushInterval: 30s
+  fields: [question, responseReason, duration]
+
+ports:
+  dns: 53
+
+log:
+  level: warn

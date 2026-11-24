@@ -58,6 +58,12 @@ enum class EventKind {
 
     /** A watched app showed a screen the filter cannot see (a private tab) and was sent home (FEATURES 3.16). */
     HIDDEN_SCREEN,
+
+    /** The private DNS server stopped answering while the network worked: plain automatic DNS until it is back (FEATURES 3.17). */
+    DNS_FALLBACK,
+
+    /** The private DNS server answered again and is pinned back; the detail holds the minutes without it. */
+    DNS_RESTORED,
 }
 
 data class LockEvent(val at: Instant, val kind: EventKind, val detail: String = "")
@@ -89,6 +95,7 @@ data class WeeklyReport(
             if (count(EventKind.FILTER_SAVED) > 0) appendLine("Blocks saved as wrong for review: ${count(EventKind.FILTER_SAVED)}")
             if (count(EventKind.REMOTE_CHANGE) > 0) appendLine("Changes asked through the MCP: ${count(EventKind.REMOTE_CHANGE)}")
             if (count(EventKind.BLOCKED_TRY) > 0) appendLine("Tries to open a closed app: ${count(EventKind.BLOCKED_TRY)}")
+            if (count(EventKind.DNS_FALLBACK) > 0) appendLine("DNS server down: ${count(EventKind.DNS_FALLBACK)} times, plain DNS (unfiltered) meanwhile")
             if (count(EventKind.HIDDEN_SCREEN) > 0) appendLine("Private tabs sent home: ${count(EventKind.HIDDEN_SCREEN)}")
             if (newApps.isNotEmpty()) appendLine("New apps held back: ${newApps.joinToString()}")
             refusals.forEach { appendLine("Refused ${day.format(it.at)}: ${it.detail}") }

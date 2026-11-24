@@ -67,6 +67,21 @@ class LockState(context: Context) {
      * The screen filter was last seen off or silent (FilterWatcher), so watched apps stay closed. Kept across restarts: a phone that
      * boots with the filter off stays closed until the filter is back and answering.
      */
+    /** Whether the phone fell back from the private DNS server to automatic DNS, and the probe counts (FEATURES 3.17). */
+    var dnsFailover: app.lockmein.core.DnsFailover
+        get() = app.lockmein.core.DnsFailover(
+            fallbackSince = prefs.getLong(DNS_FALLBACK_SINCE, -1L).takeIf { it >= 0 },
+            fails = prefs.getInt(DNS_FAILS, 0),
+            firstFailAt = prefs.getLong(DNS_FIRST_FAIL, 0L),
+            oks = prefs.getInt(DNS_OKS, 0),
+            firstOkAt = prefs.getLong(DNS_FIRST_OK, 0L),
+        )
+        set(value) = prefs.edit()
+            .putLong(DNS_FALLBACK_SINCE, value.fallbackSince ?: -1L)
+            .putInt(DNS_FAILS, value.fails).putLong(DNS_FIRST_FAIL, value.firstFailAt)
+            .putInt(DNS_OKS, value.oks).putLong(DNS_FIRST_OK, value.firstOkAt)
+            .commit().let { }
+
     var filterDown: Boolean
         get() = prefs.getBoolean(FILTER_DOWN, false)
         set(value) = prefs.edit().putBoolean(FILTER_DOWN, value).apply()
@@ -166,5 +181,10 @@ class LockState(context: Context) {
         const val LAST_FILTER_CHECK = "last_filter_check"
         const val LAST_FILTER_HIT = "last_filter_hit"
         const val FILTER_DOWN = "filter_down"
+        const val DNS_FALLBACK_SINCE = "dns_fallback_since"
+        const val DNS_FAILS = "dns_fails"
+        const val DNS_FIRST_FAIL = "dns_first_fail"
+        const val DNS_OKS = "dns_oks"
+        const val DNS_FIRST_OK = "dns_first_ok"
     }
 }

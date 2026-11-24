@@ -38,6 +38,10 @@ class FilterWatcher : Service() {
     private val tick = object : Runnable {
         override fun run() {
             evaluate()
+            // The DNS fallback (FEATURES 3.17): on its own thread, since a probe can take seconds; it paces itself.
+            if (dnsBusy.compareAndSet(false, true)) dnsWorker.execute {
+                try { DnsWatch.tick(this@FilterWatcher) } catch (e: Throwable) { Log.w("DnsWatch", "tick failed", e) } finally { dnsBusy.set(false) }
+            }
             // On the uptime clock, which pauses while the phone sleeps: no wake-ups, and waking does not look like silence.
             main.postDelayed(this, FilterWatch.BEAT_EVERY_MS)
         }
@@ -155,6 +159,8 @@ class FilterWatcher : Service() {
         private const val CHANNEL = "filter_watch"
         private const val NOTIFICATION_ID = 7
         private val worker = Executors.newSingleThreadExecutor()
+        private val dnsWorker = Executors.newSingleThreadExecutor()
+        private val dnsBusy = java.util.concurrent.atomic.AtomicBoolean(false)
 
         @Volatile
         private var current: FilterWatch? = null

@@ -188,6 +188,78 @@ def _label_block(block_id: str, label: str) -> dict: ...
 def _install_judge(judge_json: str) -> dict: ...
 
 
+
+# ---- the DNS server's log (FEATURES 3.17): read here on the VPS, not on the phone ----
+
+DNS_LOG = os.environ.get("DNS_LOG", "/dns-logs/querylog.db")
+
+
+def _dns_rows(sql: str, args: tuple) -> list:
+    import sqlite3
+
+    if not os.path.exists(DNS_LOG):
+        raise ValueError("The DNS server has not logged anything yet (no log file).")
+    db = sqlite3.connect(f"file:{DNS_LOG}?mode=ro", uri=True, timeout=5)
+    try:
+        db.execute("PRAGMA busy_timeout = 5000")
+        return db.execute(sql, args).fetchall()
+    finally:
+        db.close()
+
+
+def _day_range(day: str | None) -> tuple[str, str]:
+    from datetime import date, datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    zone = ZoneInfo("Africa/Casablanca")
+    d = date.fromisoformat(day) if day else datetime.now(zone).date()
+    start = datetime(d.year, d.month, d.day, tzinfo=zone)
+    end = start + timedelta(days=1)
+    fmt = lambda t: t.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%d %H:%M:%S")
+    return fmt(start), fmt(end)
+
+
+@mcp.tool(
+    name="dns_log",
+    description="Sites the phone looked up through his own DNS server on one day (YYYY-MM-DD, his timezone; default today), newest "
+    "first. blocked_only=true lists only blocked lookups, with the list that blocked them (adult, lists, bypass). Kept 7 days.",
+)
+def dns_log(day: str | None = None, blocked_only: bool = False, limit: int = 200) -> dict:
+    start, end = _day_range(day)
+    where = "request_ts >= ? AND request_ts < ?" + (" AND response_type = 'BLOCKED'" if blocked_only else "")
+    rows = _dns_rows(
+        f"SELECT request_ts, question_name, response_type, reason FROM log_entries WHERE {where} ORDER BY request_ts DESC LIMIT ?",
+        (start, end, max(1, min(int(limit), 1000))),
+    )
+    return {"day": day, "times_utc": True, "lookups": [{"at": r[0], "name": r[1], "result": r[2], "reason": r[3]} for r in rows]}
+
+
+@mcp.tool(
+    name="dns_summary",
+    description="His DNS server over the last days (default 7): per day, lookups and blocked lookups, blocked by list (adult, "
+    "lists = ads and trackers, bypass = other DNS, VPN and proxies), and blocked adult lookups per hour of the day (UTC).",
+)
+def dns_summary(days: int = 7) -> dict:
+    days = max(1, min(int(days), 7))
+    rows = _dns_rows(
+        "SELECT substr(request_ts, 1, 10), response_type, reason, substr(request_ts, 12, 2) FROM log_entries "
+        "WHERE request_ts >= datetime('now', ?)",
+        (f"-{days} days",),
+    )
+    per_day: dict = {}
+    adult_hours: dict = {}
+    for day, kind, reason, hour in rows:
+        d = per_day.setdefault(day, {"lookups": 0, "blocked": 0, "blocked_by": {}})
+        d["lookups"] += 1
+        if kind == "BLOCKED":
+            d["blocked"] += 1
+            group = (reason or "").split("(", 1)[-1].split(":", 1)[0].strip(") ") or "other"
+            d["blocked_by"][group] = d["blocked_by"].get(group, 0) + 1
+            if group == "adult":
+                adult_hours[hour] = adult_hours.get(hour, 0) + 1
+    return {"days": dict(sorted(per_day.items())), "adult_blocked_by_hour_utc": dict(sorted(adult_hours.items()))}
+
+
 @tool("remove_judge", "Take the personal judge off (stricter, instant).")
 def _remove_judge() -> dict: ...
 

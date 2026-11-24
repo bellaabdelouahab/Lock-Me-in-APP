@@ -52,7 +52,8 @@ data class Inventory(
 
 data class PolicyPlan(
     val restrictions: Set<String>,
-    val privateDnsHost: String,
+    /** The host to pin; null while the server is down and the phone falls back to automatic DNS (FEATURES 3.17). */
+    val privateDnsHost: String?,
     val uninstallBlocked: Set<String>,
     val userControlDisabled: Set<String>,
     val suspended: Set<String>,
@@ -62,7 +63,7 @@ data class PolicyPlan(
 )
 
 /** Turns the phase, the build mode and what is installed into the exact policy to apply. Pure, so it is tested here. */
-class PolicyPlanner(private val rules: AppRules, private val privateDnsHost: String) {
+class PolicyPlanner(private val rules: AppRules, private val privateDnsHost: String?) {
     fun plan(
         phase: Phase,
         mode: BuildMode,

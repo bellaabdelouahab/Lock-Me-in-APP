@@ -32,9 +32,14 @@ class Health(private val context: Context) {
         val restrictions = context.getSystemService(UserManager::class.java).userRestrictions
         val items = mutableListOf(HealthItem("Device owner", true, "Android's management layer holds the rules, even with this app closed."))
 
+        val fallbackSince = LockState(context).dnsFailover.fallbackSince
+        if (fallbackSince != null) {
+            val since = java.time.format.DateTimeFormatter.ofPattern("EEE HH:mm").withZone(java.time.ZoneId.systemDefault()).format(Instant.ofEpochMilli(fallbackSince))
+            items += HealthItem("Private DNS", false, "${config.dnsHost} stopped answering ($since): plain automatic DNS, unfiltered, until it is back. Checked every minute.")
+        }
         val dnsMode = dpm.getGlobalPrivateDnsMode(admin)
         val dnsHost = dpm.getGlobalPrivateDnsHost(admin)
-        items += HealthItem(
+        if (fallbackSince == null) items += HealthItem(
             "Private DNS",
             dnsMode == DevicePolicyManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME && dnsHost == config.dnsHost && restrictions.getBoolean(Restrictions.CONFIG_PRIVATE_DNS),
             when {

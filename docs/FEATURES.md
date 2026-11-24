@@ -246,3 +246,17 @@ short note ("Private tabs close: the screen filter cannot see them."), and logge
 sent home"). Android 14+: a mostly black frame (80% of the 16x16 thumbnail) makes the filter ask Android for a picture of the app's
 own window; "secure window" is the proof (at most every 1.5 s). Android 11 to 13 cannot tell, so there a watched browser that stays
 fully black (97%) for 6 s counts. Chrome's private windows stay switched off by its policy as before.
+
+### 3.17 Own DNS server and the fallback
+`server/docker-compose.yml` also runs Blocky (no admin page: its rules live in `server/dns/config.yml`), reached by the phone
+as `dns.abdelouahab.xyz` over DNS-over-TLS through the Coolify proxy. Lists: HaGeZi Pro, HaGeZi NSFW, HaGeZi DoH/VPN/proxy
+bypass; safe search forced (Google, Bing, DuckDuckGo) and YouTube restricted (strict) by CNAME; upstreams Cloudflare for
+Families and CleanBrowsing Adult, so adult sites are filtered twice. Queries are logged 7 days on the VPS and read by the MCP
+(`dns_log`, `dns_summary`); nothing else keeps them.
+
+Fallback (his choice, 2026-11-24): when the pinned server stops answering, Android's strict mode leaves the phone with no
+internet. The filter watcher probes once a minute while the network is not validated (or while fallen back): the network's
+own DNS must answer (else the phone is just offline and nothing changes) and the server must fail a real query over TLS 3
+times across at least a minute; then the phone uses plain automatic DNS, unfiltered, logged as DNS_FALLBACK and shown on the
+health page. Two good answers a minute apart pin the server back (DNS_RESTORED, with the minutes). The weekly report counts
+the fallbacks. The screen filter, the closed apps and Chrome's safe search keep working meanwhile.

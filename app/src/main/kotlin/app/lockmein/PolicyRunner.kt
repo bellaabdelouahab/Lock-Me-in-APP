@@ -96,7 +96,7 @@ class PolicyRunner(private val context: Context) {
         val mode = if (BuildConfig.TEST_BUILD) BuildMode.TEST else BuildMode.SEALED
         val schedule = Rules.schedule(config)
         val dailyWindowOpen = schedule.inDailyWindow(now)
-        return PolicyPlanner(Rules.forDevice(snapshot, context.packageName, config, state.unsuspendable), config.dnsHost).plan(
+        return PolicyPlanner(Rules.forDevice(snapshot, context.packageName, config, state.unsuspendable), config.dnsHost.takeUnless { state.dnsFailover.isFallback }).plan(
             schedule.phaseAt(now),
             mode,
             Inventory(
