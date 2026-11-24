@@ -260,3 +260,24 @@ own DNS must answer (else the phone is just offline and nothing changes) and the
 times across at least a minute; then the phone uses plain automatic DNS, unfiltered, logged as DNS_FALLBACK and shown on the
 health page. Two good answers a minute apart pin the server back (DNS_RESTORED, with the minutes). The weekly report counts
 the fallbacks. The screen filter, the closed apps and Chrome's safe search keep working meanwhile.
+
+### 3.18 Closed apps' websites
+While an app is closed (always blocked, window app outside 20:00 to 21:30, night list, held new app, closed by the filter), its
+website is closed too: "I'll just open it in the browser" stops working. The screen filter reads the address bar of the browser
+in front once a second (accessibility, nothing kept; known bar ids for Chrome, Brave, Edge, Firefox, Samsung Internet, Opera,
+DuckDuckGo, Mi Browser, Vivaldi, Kiwi, else any field named like an address bar), only when the bar is not being typed in.
+`core/AppSites.kt` maps each app to its sites (Instagram, Threads, Facebook, Messenger, TikTok, YouTube, YouTube Music and Kids,
+X, Snapchat, Reddit, Pinterest, Tumblr, Netflix, Prime Video, Disney+, Twitch, Discord, LinkedIn, 9GAG, Quora, Spotify web);
+the most specific site wins (music.youtube.com is YouTube Music), and a site two apps share stays open while either is
+installed and open. The lists count whether or not the app is installed. On a closed site the browser goes back, twice at most
+within 8 s, then home; a note names the app ("instagram.com is closed while Instagram is."). Logged as SITE_CLOSED and counted as
+a try on the Phone use page; the weekly report counts them. Works with any DNS (NextDNS or the own server).
+
+### 3.19 Small updates
+The published APKs carry the arm64 runtimes only (the x86_64 ones, 28 MB, are for the CI emulator, which builds its own). Each
+release also carries, per kind, a patch from each of the last 3 releases (`scripts/delta.py`: bsdiff with zlib), about 0.5 MB when
+only the code changed, instead of the whole APK (151 MB before, 123 MB now, mostly the filter models). CI checks each patch
+rebuilds the new APK byte for byte; `version.json` lists them. The updater downloads the patch for its exact version, checks the
+installed APK is the one the patch is for, rebuilds the new APK into the install session and checks its SHA-256 before handing it
+to Android (which still checks the signature). Anything wrong on the way (no patch, an older version, a different APK, a bad
+download) drops that session and downloads the whole APK as before. The update card shows the size when it is small.

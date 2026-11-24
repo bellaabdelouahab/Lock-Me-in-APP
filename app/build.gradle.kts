@@ -34,7 +34,8 @@ android {
         versionName = "0.4.$run"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // The phone is arm64; x86_64 is for the CI emulator. Leaving out 32-bit keeps the two model runtimes from doubling the APK.
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        // The published APKs (-PphoneOnly=true) carry arm64 only: the x86_64 runtimes were 28 MB of every download.
+        ndk { abiFilters += if (project.hasProperty("phoneOnly")) listOf("arm64-v8a") else listOf("arm64-v8a", "x86_64") }
         testInstrumentationRunnerArguments["uiAutomationFlags"] = "1"
         testProguardFiles("proguard-rules.pro")
     }

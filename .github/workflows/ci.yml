@@ -76,13 +76,13 @@ jobs:
         include:
           # The test build: removable over USB, for the real device-owner setup (the build on the owner's phone).
           - kind: test-build
-            flags: -PtestOnly=true
+            flags: -PtestOnly=true -PphoneOnly=true
           # The preview build: its own app id (app.lockmein.preview), to look at the screens. It cannot start protection.
           - kind: preview
-            flags: -Ppreview=true
+            flags: -Ppreview=true -PphoneOnly=true
           # The sealed build: blocks USB debugging and factory reset.
           - kind: sealed
-            flags: ''
+            flags: -PphoneOnly=true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -122,11 +122,52 @@ jobs:
           name: screens
           path: shots/
 
+  # Small updates (FEATURES 3.19): for each kind, a patch from each of the last 3 releases to the new APK, so a phone on one of
+  # them downloads a few hundred KB instead of the whole APK. Each patch is checked to rebuild the new APK byte for byte; one that
+  # cannot be made is left out and that phone downloads the whole APK, as before. Runs while the emulator tests run.
+  patches:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [debug-apk]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        kind: [test-build, preview, sealed]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install bsdiff4==1.4.4 numpy==2.2.6
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk-${{ matrix.kind }}
+          path: new
+      - name: Make patches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist old
+          kind=${{ matrix.kind }}
+          one() {
+            code=$((100 + ${1##*.}))
+            gh release download "$1" -p "lock-me-in-$kind.apk" -O "old/$code.apk" \
+              && python -I scripts/delta.py make "old/$code.apk" "new/lock-me-in-$kind.apk" "dist/lock-me-in-$kind-from-$code.patch" \
+              || echo "::warning::no $kind patch from $1: phones on it download the whole APK"
+          }
+          for tag in $(gh release list --limit 3 --exclude-drafts --exclude-pre-releases --json tagName -q '.[].tagName'); do one "$tag" & done
+          wait
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: patch-${{ matrix.kind }}
+          path: dist/
+          if-no-files-found: ignore
+
   # Publishes the APKs as the latest GitHub release, which the app's updater reads. Only from main, and only when the
   # emulator tests passed: a build that fails them never reaches a phone.
   release:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: [core-tests, debug-apk, device-owner-emulator]
+    needs: [core-tests, debug-apk, device-owner-emulator, patches]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -137,11 +178,18 @@ jobs:
           pattern: apk-*
           merge-multiple: true
           path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: patch-*
+          merge-multiple: true
+          path: dist
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           code=$((100 + GITHUB_RUN_NUMBER)); name="0.4.$GITHUB_RUN_NUMBER"
           notes=$(git log -1 --pretty=%s)
-          jq -n --argjson code "$code" --arg name "$name" --arg notes "$notes" '{versionCode: $code, versionName: $name, notes: $notes}' > dist/version.json
+          patches=$(python3 scripts/delta.py index dist)
+          jq -n --argjson code "$code" --arg name "$name" --arg notes "$notes" --argjson patches "$patches" '{versionCode: $code, versionName: $name, notes: $notes, patches: $patches}' > dist/version.json
+          cat dist/version.json
           gh release create "v$name" dist/* --title "Lock Me In $name" --notes "$notes" --latest

@@ -5,12 +5,17 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import app.lockmein.core.DeltaPatch
 import org.json.JSONObject
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
 /** The newest build published on GitHub (version.json next to the APKs of the latest release). */
-data class Release(val code: Int, val name: String, val notes: String)
+data class Release(val code: Int, val name: String, val notes: String, val patch: Patch? = null)
+
+/** A small update (FEATURES 3.19): the file that turns this exact installed version into the new one. */
+data class Patch(val file: String, val size: Long)
 
 /**
  * Updates from the repo's latest GitHub release, like the Money app: check, download, install. As device owner the app installs
@@ -29,44 +34,89 @@ object Updater {
     /** The latest release, or null when there is none or the network is down. */
     fun latest(): Release? = runCatching {
         val json = JSONObject(open("$BASE/version.json").inputStream.bufferedReader().use { it.readText() })
-        Release(json.getInt("versionCode"), json.getString("versionName"), json.optString("notes"))
+        val patch = json.optJSONObject("patches")?.optJSONArray(kind)?.let { list ->
+            (0 until list.length()).map { list.getJSONObject(it) }.firstOrNull { it.optInt("from") == BuildConfig.VERSION_CODE }
+        }?.let { Patch(it.getString("file"), it.getLong("size")) }
+        Release(json.getInt("versionCode"), json.getString("versionName"), json.optString("notes"), patch)
     }.getOrNull()
 
     fun isNewer(release: Release?) = release != null && release.code > BuildConfig.VERSION_CODE
 
-    /** Downloads the APK into an install session and commits it. Null when handed to Android, or why it failed. */
-    fun install(context: Context, progress: (Float) -> Unit): String? = runCatching {
+    /**
+     * Installs the latest release. Small update first (FEATURES 3.19): when the release has a patch for this exact version, only
+     * the patch is downloaded and the new APK is rebuilt from the installed one, checked byte for byte against the new APK's
+     * fingerprint before it goes to Android. Anything wrong on that path (no patch, a different installed APK, a bad download)
+     * falls back to downloading the whole APK, as before. Null when handed to Android, or why it failed.
+     */
+    fun install(context: Context, progress: (Float) -> Unit): String? {
+        saveResult(context, "")
+        val patch = latest()?.patch
+        if (patch != null) {
+            val patched = runCatching { session(context) { installer, id -> writePatched(context, installer, id, patch, progress) } }
+            if (patched.isSuccess) return null
+        }
+        return runCatching { session(context) { installer, id -> writeFull(installer, id, progress) }; null }
+            .getOrElse { "The update could not be downloaded: ${it.message ?: "no connection"}" }
+    }
+
+    /** One install session: written by [write], then committed; a failure on the way never leaves a half-written one. */
+    private fun session(context: Context, write: (PackageInstaller, Int) -> Unit) {
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setAppPackageName(context.packageName)
         }
-        saveResult(context, "")
         val id = installer.createSession(params)
-        // A broken download must not leave a half-written session behind.
-        try { write(context, installer, id, progress) } catch (e: Exception) { runCatching { installer.abandonSession(id) }; throw e }
-        null
-    }.getOrElse { "The update could not be downloaded: ${it.message ?: "no connection"}" }
+        try {
+            write(installer, id)
+            installer.openSession(id).use { session ->
+                val done = PendingIntent.getBroadcast(context, id, Intent(context, UpdateReceiver::class.java), PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+                session.commit(done.intentSender)
+            }
+        } catch (e: Exception) {
+            runCatching { installer.abandonSession(id) }
+            throw e
+        }
+    }
 
-    private fun write(context: Context, installer: PackageInstaller, id: Int, progress: (Float) -> Unit) {
+    private fun writeFull(installer: PackageInstaller, id: Int, progress: (Float) -> Unit) {
         installer.openSession(id).use { session ->
             val connection = open("$BASE/lock-me-in-$kind.apk")
             val total = connection.contentLengthLong.takeIf { it > 0 }
             connection.inputStream.use { input ->
                 session.openWrite("update.apk", 0, total ?: -1).use { out ->
-                    val buffer = ByteArray(64 * 1024)
-                    var done = 0L
-                    while (true) {
-                        val n = input.read(buffer)
-                        if (n < 0) break
-                        out.write(buffer, 0, n)
-                        done += n
-                        if (total != null) progress(done.toFloat() / total)
-                    }
+                    copy(input, out) { done -> if (total != null) progress(done.toFloat() / total) }
                     session.fsync(out)
                 }
             }
-            val done = PendingIntent.getBroadcast(context, id, Intent(context, UpdateReceiver::class.java), PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-            session.commit(done.intentSender)
+        }
+    }
+
+    /** Downloads the patch (a few hundred KB) and writes the rebuilt APK; throws, so the session is dropped, if it is not exact. */
+    private fun writePatched(context: Context, installer: PackageInstaller, id: Int, patch: Patch, progress: (Float) -> Unit) {
+        val file = File(context.cacheDir, "update.patch")
+        try {
+            open("$BASE/${patch.file}").inputStream.use { input -> file.outputStream().use { out -> copy(input, out) { progress(0.2f * it / patch.size.coerceAtLeast(1)) } } }
+            val head = DeltaPatch.header(file)
+            installer.openSession(id).use { session ->
+                session.openWrite("update.apk", 0, head.newSize).use { out ->
+                    DeltaPatch.apply(File(context.applicationInfo.sourceDir), file, out) { progress(0.2f + 0.8f * it) }
+                    session.fsync(out)
+                }
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
+    private fun copy(input: java.io.InputStream, out: java.io.OutputStream, done: (Long) -> Unit) {
+        val buffer = ByteArray(64 * 1024)
+        var total = 0L
+        while (true) {
+            val n = input.read(buffer)
+            if (n < 0) break
+            out.write(buffer, 0, n)
+            total += n
+            done(total)
         }
     }
 
