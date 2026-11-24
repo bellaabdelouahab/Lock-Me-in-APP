@@ -42,6 +42,10 @@ class FilterWatcher : Service() {
             if (dnsBusy.compareAndSet(false, true)) dnsWorker.execute {
                 try { DnsWatch.tick(this@FilterWatcher) } catch (e: Throwable) { Log.w("DnsWatch", "tick failed", e) } finally { dnsBusy.set(false) }
             }
+            // Training uploads (FEATURES 3.20): their own thread too; once a day from 09:00 on an unmetered network.
+            if (trainBusy.compareAndSet(false, true)) trainWorker.execute {
+                try { TrainingUpload.tick(this@FilterWatcher) } catch (e: Throwable) { Log.w("TrainingUpload", "tick failed", e) } finally { trainBusy.set(false) }
+            }
             // On the uptime clock, which pauses while the phone sleeps: no wake-ups, and waking does not look like silence.
             main.postDelayed(this, FilterWatch.BEAT_EVERY_MS)
         }
@@ -161,6 +165,8 @@ class FilterWatcher : Service() {
         private val worker = Executors.newSingleThreadExecutor()
         private val dnsWorker = Executors.newSingleThreadExecutor()
         private val dnsBusy = java.util.concurrent.atomic.AtomicBoolean(false)
+        private val trainWorker = Executors.newSingleThreadExecutor()
+        private val trainBusy = java.util.concurrent.atomic.AtomicBoolean(false)
 
         @Volatile
         private var current: FilterWatch? = null

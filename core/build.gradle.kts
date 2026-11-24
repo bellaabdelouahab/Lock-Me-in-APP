@@ -26,6 +26,7 @@ tasks.test {
     useJUnitPlatform()
     maxHeapSize = "2048m"
     systemProperty("test.modelAccuracy", System.getProperty("test.modelAccuracy") ?: "")
+    System.getProperty("sealed.out")?.let { systemProperty("sealed.out", it) }
     testLogging {
         showStandardStreams = true
     }

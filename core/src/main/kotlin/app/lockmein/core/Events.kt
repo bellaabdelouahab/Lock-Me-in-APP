@@ -62,6 +62,12 @@ enum class EventKind {
     /** A closed app's site was open in a browser and was left (FEATURES 3.18); the detail names the site, the app and the browser. */
     SITE_CLOSED,
 
+    /** Blocks sent to the training server (FEATURES 3.20); the detail holds how many. */
+    TRAINING_SENT,
+
+    /** A judge the trainer passed was filed through the change gate; the detail holds the version and the answer. */
+    TRAINING_OFFER,
+
     /** The private DNS server stopped answering while the network worked: plain automatic DNS until it is back (FEATURES 3.17). */
     DNS_FALLBACK,
 
@@ -99,6 +105,7 @@ data class WeeklyReport(
             if (count(EventKind.REMOTE_CHANGE) > 0) appendLine("Changes asked through the MCP: ${count(EventKind.REMOTE_CHANGE)}")
             if (count(EventKind.BLOCKED_TRY) > 0) appendLine("Tries to open a closed app: ${count(EventKind.BLOCKED_TRY)}")
             if (count(EventKind.DNS_FALLBACK) > 0) appendLine("DNS server down: ${count(EventKind.DNS_FALLBACK)} times, plain DNS (unfiltered) meanwhile")
+            if (count(EventKind.TRAINING_SENT) > 0) appendLine("Days the filter's blocks went to training: ${count(EventKind.TRAINING_SENT)}")
             if (count(EventKind.SITE_CLOSED) > 0) appendLine("Closed apps' sites left in the browser: ${count(EventKind.SITE_CLOSED)}")
             if (count(EventKind.HIDDEN_SCREEN) > 0) appendLine("Private tabs sent home: ${count(EventKind.HIDDEN_SCREEN)}")
             if (newApps.isNotEmpty()) appendLine("New apps held back: ${newApps.joinToString()}")

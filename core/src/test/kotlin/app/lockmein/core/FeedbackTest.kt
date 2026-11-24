@@ -145,18 +145,11 @@ class FeedbackTest {
     }
 
     @Test
-    fun `ten saves a day`() {
-        val day = LocalDate.parse("2026-11-22")
-        assertTrue(Feedback.canSave(List(9) { day }, day))
-        assertFalse(Feedback.canSave(List(10) { day }, day))
-        assertTrue(Feedback.canSave(List(10) { day.minusDays(1) }, day))
-    }
-
-    @Test
-    fun `a correct block loses its image, a wrong block keeps it`() {
+    fun `both labels keep the image for training`() {
         val list = listOf(rec(1, BlockLabel.CLAIMED_FALSE), rec(2, BlockLabel.CLAIMED_FALSE))
         val a = Feedback.label(Feedback.label(list, "r1", BlockLabel.CORRECT, t0), "r2", BlockLabel.WRONG, t0)
-        assertFalse(a[0].hasImage)
+        assertEquals(BlockLabel.CORRECT, a[0].label)
+        assertTrue(a[0].hasImage)
         assertTrue(a[1].hasImage)
         assertEquals(a, Feedback.decode(Feedback.encode(a)))
     }

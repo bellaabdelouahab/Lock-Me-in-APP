@@ -96,7 +96,7 @@ fun FilterScreen(onBack: () -> Unit) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Figure(waiting.size.toString(), "to review")
                 Figure(records.count { it.at.isAfter(weekAgo) }.toString(), "blocks this week")
-                Figure("${runCatching { store.savesToday(zone) }.getOrDefault(0)}/${Feedback.MAX_SAVES_PER_DAY}", "saved today")
+                Figure("${runCatching { store.savesToday(zone) }.getOrDefault(0)}", "saved today")
             }
             Text(
                 if (open) "Review open until ${hm.format(ReviewWindow.closesAt(now, zone))}."

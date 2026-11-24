@@ -44,3 +44,5 @@ resetting the setup. Every change is logged on the phone (REMOTE_CHANGE) and cou
   own (5 s, then up to every 60 s).
 - MCP link page says "the server did not accept this phone": the relay lost its data volume or was re-paired; pair again with a
   new `PAIR_CODE`.
+
+`training_status` (read on the server): uploads, labels and every judge version the trainer made, with its held-out numbers (FEATURES 3.20).

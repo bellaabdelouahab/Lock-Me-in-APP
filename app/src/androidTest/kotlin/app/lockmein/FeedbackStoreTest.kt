@@ -4,7 +4,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import app.lockmein.core.BlockLabel
 import app.lockmein.core.BlockRecord
 import app.lockmein.core.Bundle
-import app.lockmein.core.Feedback
 import app.lockmein.core.StoredScores
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -58,11 +57,28 @@ class FeedbackStoreTest {
     }
 
     @Test
-    fun tenSavesADay() {
+    fun noDailyLimitOnSaves() {
         val store = FeedbackStore(context)
-        repeat(Feedback.MAX_SAVES_PER_DAY + 1) { store.add(record(it)) }
-        repeat(Feedback.MAX_SAVES_PER_DAY) { assertTrue(store.saveForReview("t$it", null)) }
-        assertFalse(store.saveForReview("t${Feedback.MAX_SAVES_PER_DAY}", null))
-        assertEquals(Feedback.MAX_SAVES_PER_DAY, store.savesToday())
+        repeat(25) { store.add(record(it)) }
+        repeat(25) { assertTrue(store.saveForReview("t$it", null)) }
+        assertEquals(25, store.savesToday())
+    }
+
+    @Test
+    fun aCloseKeepsItsScreenshotUntilTheServerHasIt() {
+        val store = FeedbackStore(context)
+        store.add(record(1))
+        store.keepImage("t1", byteArrayOf(1, 2, 3))
+        val kept = store.records().single { it.id == "t1" }
+        assertTrue(kept.hasImage)
+        assertArrayEquals(byteArrayOf(1, 2, 3), store.image(kept))
+        store.uploaded("t1", 1_000)
+        val sent = store.records().single { it.id == "t1" }
+        assertFalse(sent.hasImage)
+        assertEquals(1_000L, sent.uploadedAtMillis)
+        assertNull(store.image(kept))
+        // Once sent, a late screenshot is not kept again.
+        store.keepImage("t1", byteArrayOf(4))
+        assertFalse(store.records().single { it.id == "t1" }.hasImage)
     }
 }

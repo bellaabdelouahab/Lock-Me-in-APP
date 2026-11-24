@@ -9,6 +9,7 @@ Env:
   MCP_SECRET   at least 32 characters; the MCP endpoint is /<MCP_SECRET>/mcp (claude.ai custom connector URL)
   PAIR_CODE    at least 8 characters; typed once into the phone (Lock Me In, Settings, Connect to server)
   DATA_DIR     where the phone's token hash is kept (default /data)
+  TRAINING_DIR the volume shared with server/trainer (FEATURES 3.20): inbox, public key, offer, status (default /training)
   PORT         default 8000
 """
 import asyncio
@@ -264,6 +265,88 @@ def dns_summary(days: int = 7) -> dict:
 def _remove_judge() -> dict: ...
 
 
+# ---- training (FEATURES 3.20): the phone's uploads for server/trainer; this side never opens a screenshot ----
+
+TRAINING = os.environ.get("TRAINING_DIR", "/training")
+TRAIN_DEVICE = os.path.join(DATA, "train-device.json")
+UPLOAD_MAX = 8 * 1024 * 1024
+UPLOAD_ID = __import__("re").compile(r"^[A-Za-z0-9_-]{1,80}$")
+
+
+def _train_ok(request: Request) -> bool:
+    try:
+        device = json.load(open(TRAIN_DEVICE))
+    except (OSError, ValueError):
+        return False
+    auth = request.headers.get("authorization", "")
+    return auth.startswith("Bearer ") and hmac.compare_digest(_hash(auth[7:]), device["token_hash"])
+
+
+async def train_register(_request: Request):
+    """The first phone to ask gets the upload token; one phone only (delete train-device.json in the relay's data to move it)."""
+    if os.path.exists(TRAIN_DEVICE):
+        return JSONResponse({"error": "a phone is already registered for training"}, status_code=409)
+    token = secrets.token_urlsafe(32)
+    os.makedirs(DATA, exist_ok=True)
+    try:
+        fd = os.open(TRAIN_DEVICE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return JSONResponse({"error": "a phone is already registered for training"}, status_code=409)
+    with os.fdopen(fd, "w") as f:
+        json.dump({"token_hash": _hash(token), "registered_at": int(time.time())}, f)
+    return JSONResponse({"token": token})
+
+
+async def train_key(request: Request):
+    if not _train_ok(request):
+        return JSONResponse({"error": "not registered"}, status_code=401)
+    try:
+        return JSONResponse({"public_key": open(os.path.join(TRAINING, "public.pem")).read()})
+    except OSError:
+        return JSONResponse({"error": "the trainer has not started yet"}, status_code=503)
+
+
+async def train_upload(request: Request):
+    """One block: its record, its label and its screenshot sealed for the trainer (or none). Kept as is in the inbox."""
+    if not _train_ok(request):
+        return JSONResponse({"error": "not registered"}, status_code=401)
+    body = await request.body()
+    if len(body) > UPLOAD_MAX:
+        return JSONResponse({"error": "too big"}, status_code=413)
+    try:
+        up = json.loads(body)
+        rid = str(up["record"]["id"])
+        assert UPLOAD_ID.match(rid) and up.get("label") in ("WRONG", "CORRECT")
+    except Exception:
+        return JSONResponse({"error": "not an upload"}, status_code=400)
+    up["received"] = int(time.time())
+    inbox = os.path.join(TRAINING, "inbox")
+    os.makedirs(inbox, exist_ok=True)
+    tmp = os.path.join(inbox, rid + ".part")
+    with open(tmp, "w") as f:
+        json.dump(up, f)
+    os.replace(tmp, os.path.join(inbox, rid + ".json"))
+    return JSONResponse({"ok": True})
+
+
+async def train_offer(request: Request):
+    """The newest judge that passed the trainer's check, or nothing. The phone files it through the change gate."""
+    if not _train_ok(request):
+        return JSONResponse({"error": "not registered"}, status_code=401)
+    try:
+        return JSONResponse({"judge": json.load(open(os.path.join(TRAINING, "offer.json")))})
+    except (OSError, ValueError):
+        return JSONResponse({"judge": None})
+
+
+@mcp.tool(name="training_status", description="The screen filter's training on the server: uploads, labels, and every judge version with its held-out numbers.")
+def training_status() -> dict:
+    try:
+        return json.load(open(os.path.join(TRAINING, "status.json")))
+    except (OSError, ValueError):
+        return {"error": "the trainer has not written a status yet"}
+
+
 # ---- the phone's side ----
 
 async def pair(request: Request):
@@ -332,6 +415,10 @@ app = Starlette(
     routes=[
         Route("/health", health),
         Route("/phone/pair", pair, methods=["POST"]),
+        Route("/train/register", train_register, methods=["POST"]),
+        Route("/train/key", train_key),
+        Route("/train/upload", train_upload, methods=["POST"]),
+        Route("/train/offer", train_offer),
         WebSocketRoute("/phone/ws", phone_ws),
         Mount(f"/{SECRET}", app=mcp_app),
     ],

@@ -56,14 +56,13 @@ class FeedbackStore(private val context: Context) {
         if (saves.exists()) saves.readLines().mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() } else emptyList()
 
     /**
-     * "Save for review": keeps [jpeg] encrypted with the block [id] and marks it as claimed false. Refused (false) over the daily
-     * limit or when the block is gone.
+     * "Save for review": keeps [jpeg] encrypted with the block [id] and marks it as claimed false. No daily limit (his choice,
+     * 2026-11-24, FEATURES 3.20). Refused (false) only when the block is gone.
      */
     @Synchronized
     fun saveForReview(id: String, jpeg: ByteArray?, zone: ZoneId = ZoneId.systemDefault()): Boolean {
         val today = LocalDate.now(zone)
         val days = savedDays()
-        if (!Feedback.canSave(days, today)) return false
         val list = records()
         if (list.none { it.id == id }) return false
         val stored = jpeg != null && runCatching { dir.mkdirs(); image(id).writeBytes(encrypt(jpeg)) }.isSuccess
@@ -73,7 +72,23 @@ class FeedbackStore(private val context: Context) {
         return true
     }
 
-    /** The decrypted screenshot of a saved block, or null. Only for the review screen. */
+    /** A close he let stand keeps its screenshot too, encrypted, until it goes to training (FEATURES 3.20). */
+    @Synchronized
+    fun keepImage(id: String, jpeg: ByteArray) {
+        val list = records()
+        if (list.none { it.id == id && it.uploadedAtMillis == null }) return
+        val stored = runCatching { dir.mkdirs(); image(id).writeBytes(encrypt(jpeg)) }.isSuccess
+        if (stored) write(list.map { if (it.id == id) it.copy(hasImage = true) else it })
+    }
+
+    /** The server has the block: its screenshot leaves the phone, the record stays (for the review and the reports). */
+    @Synchronized
+    fun uploaded(id: String, atMillis: Long) {
+        image(id).delete()
+        write(records().map { if (it.id == id) it.copy(hasImage = false, uploadedAtMillis = atMillis) else it })
+    }
+
+    /** The decrypted screenshot of a saved block, or null. For the review screen and the upload to training. */
     fun image(record: BlockRecord): ByteArray? =
         if (!record.hasImage) null else runCatching { decrypt(image(record.id).readBytes()) }.getOrNull()
 

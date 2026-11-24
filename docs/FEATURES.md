@@ -117,9 +117,9 @@ An outside reviewer compared version 0.2.0 with the owner's rules (rule 14, D-20
   the close, 2026-11-24). One tap saves and shows "Saved"; it changes nothing else: the countdown runs on and the app still
   closes if the content stays. The card after a close only says it closed, and whether the screen was saved. Saving keeps the hit frame (held in memory only until then) AES-GCM encrypted with a key-store key in
   no-backup storage, with the scores, the frames that agreed, the thresholds and the model version. Every block keeps its metadata
-  without an image. 500 records at most, 10 saves a day, each save logged for the weekly report.
-- **Review window** (F4): daily 19:30 to 20:00. Each saved block shows heavily blurred; hold to see it. Wrong block keeps the image
-  for training, Correct block deletes it and keeps the metadata, Skip leaves it. The export (inside the window) is one file in
+  without an image. 500 records at most; no daily limit on saves since 2026-11-24 (it was 10); each save logged for the weekly report.
+- **Review window** (F4): daily 19:30 to 20:00. Each saved block shows heavily blurred; hold to see it. Wrong block and Correct block
+  both keep the image until it goes to training (3.20; Correct deleted it before), Skip leaves it. The export (inside the window) is one file in
   Downloads encrypted with a passphrase shown once; `scripts/judge/decrypt.py` opens it on the laptop.
 - **Eval mode** (F2, inside the window): runs the shipped models and settings over a folder with `normal` and `risky` folders and
   reports false closes, misses, per app (from the screenshot's file name) and per class. Nothing is changed or kept.
@@ -281,3 +281,21 @@ rebuilds the new APK byte for byte; `version.json` lists them. The updater downl
 installed APK is the one the patch is for, rebuilds the new APK into the install session and checks its SHA-256 before handing it
 to Android (which still checks the signature). Anything wrong on the way (no patch, an older version, a different APK, a bad
 download) drops that session and downloads the whole APK as before. The update card shows the size when it is small.
+
+### 3.20 The filter learns on the server
+His choice (2026-11-24): the screen filter learns from his own screens, on his server, toward a model good enough for others.
+- **Labels without a review:** a "Wrong?" tap is a false alarm; a close he lets stand is a real hit. Both keep their screenshot,
+  encrypted on the phone, until it is sent. The 19:30 review still works and can change a label before it is sent.
+- **Upload** (`TrainingUpload`): once a day from 09:00, on an unmetered, working network (the office Wi-Fi), retried every 15
+  minutes until done. Each block's record and label go to `https://lockmein.abdelouahab.xyz/train/upload` (built in; no
+  pairing: the first phone to register gets the only upload token), its screenshot sealed for the trainer (`core/Sealed`:
+  AES-256-GCM, the key wrapped with the trainer's RSA-3072 key). The screenshot is deleted from the phone once the server has
+  it. Only release builds of the real app send: never the preview, never a debug or emulator build. Logged as TRAINING_SENT.
+- **Trainer** (`server/trainer/trainer.py`, its own container): holds the only key that opens the screenshots (a volume no
+  other service mounts) and keeps them there for training the image models later. On new records it trains a judge with
+  `scripts/judge/train.py` (his labels plus the public frames, 20% held out) and keeps every version in `models/vNNN`
+  (report always, judge when it passed): the backups. A version is offered only when it passed (no risky screen loses its
+  close, none of his real blocks dropped, false closes fall), has at least 30 of his false alarms behind it, and is no worse
+  than the one already offered.
+- **Install:** after each upload the phone asks for the offer and files it once as a settings change: a loosening, so it waits in
+  the change gate like any other (TRAINING_OFFER). The MCP's `training_status` shows the counts and every version's numbers.

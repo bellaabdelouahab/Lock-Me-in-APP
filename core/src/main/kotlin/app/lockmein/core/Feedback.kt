@@ -60,6 +60,8 @@ data class BlockRecord(
     val label: BlockLabel = BlockLabel.NONE,
     val hasImage: Boolean = false,
     val labelledAtMillis: Long? = null,
+    /** When it went to the training server (FEATURES 3.20); its image is deleted from the phone then. */
+    val uploadedAtMillis: Long? = null,
 ) {
     val at: Instant get() = Instant.ofEpochMilli(atMillis)
     val waiting: Boolean get() = label == BlockLabel.CLAIMED_FALSE
@@ -72,7 +74,6 @@ data class AgreedFrame(val msBefore: Long, val hit: Boolean)
 object Feedback {
     /** Most records kept; the oldest unlabelled ones go first, then the oldest of the rest. */
     const val MAX_RECORDS = 500
-    const val MAX_SAVES_PER_DAY = 10
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -80,8 +81,6 @@ object Feedback {
 
     fun decode(text: String): List<BlockRecord> =
         runCatching { json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(BlockRecord.serializer()), text) }.getOrDefault(emptyList())
-
-    fun canSave(savedDays: List<LocalDate>, day: LocalDate): Boolean = savedDays.count { it == day } < MAX_SAVES_PER_DAY
 
     /** Adds [record], dropping the oldest when over [MAX_RECORDS]: plain blocks first, waiting items last. Returns (kept, dropped ids). */
     fun add(records: List<BlockRecord>, record: BlockRecord): Pair<List<BlockRecord>, List<String>> {
@@ -93,9 +92,12 @@ object Feedback {
         return all.filter { it.id !in dropped } to dropped.toList()
     }
 
-    /** After labelling: a false alarm keeps its image, a correct block loses it (his call, spec F4). */
+    /**
+     * After labelling. Both keep their image until it goes to the training server (his choice, 2026-11-24: the model learns from
+     * the right closes too, FEATURES 3.20); it was "a correct block loses it" before.
+     */
     fun label(records: List<BlockRecord>, id: String, label: BlockLabel, now: Instant): List<BlockRecord> = records.map {
-        if (it.id != id) it else it.copy(label = label, hasImage = it.hasImage && label != BlockLabel.CORRECT, labelledAtMillis = now.toEpochMilli())
+        if (it.id != id) it else it.copy(label = label, labelledAtMillis = now.toEpochMilli())
     }
 }
 

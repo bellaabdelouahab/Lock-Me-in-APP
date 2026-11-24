@@ -8,11 +8,29 @@ services:
       - MCP_SECRET=${MCP_SECRET}
       - PAIR_CODE=${PAIR_CODE}
       - DATA_DIR=/data
+      - TRAINING_DIR=/training
     command: ["sh", "-c", "pip install -q --root-user-action=ignore mcp==1.30.0 uvicorn==0.38.0 websockets==15.0.1 && python /app/relay.py"]
     volumes:
       - /home/ubuntu/lock-me-in/server/relay.py:/app/relay.py:ro
       - relay-data:/data
       - dns-logs:/dns-logs:ro
+      - training:/training
+    restart: unless-stopped
+  # The trainer (FEATURES 3.20): opens the phone's sealed screenshots with its own key (trainer-private, shared with nothing),
+  # trains a judge version on new labels, keeps every version, and offers one only when it passes the held-out check.
+  trainer:
+    image: python:3.12-slim
+    environment:
+      - TRAINING_DIR=/training
+      - PRIVATE_DIR=/private
+      - JUDGE_DIR=/judge
+    command: ["sh", "-c", "pip install -q --root-user-action=ignore numpy==2.2.6 cryptography==46.0.3 && python /app/trainer.py"]
+    volumes:
+      - /home/ubuntu/lock-me-in/server/trainer/trainer.py:/app/trainer.py:ro
+      - /home/ubuntu/lock-me-in/scripts/judge:/judge:ro
+      - training:/training
+      - trainer-private:/private
+    restart: unless-stopped
   # The DNS server (FEATURES 3.17). No port published to the internet: Coolify's proxy takes DNS-over-TLS on 853 for
   # dns.abdelouahab.xyz (an entry point named dot, added once in the proxy settings, docs/DNS.md) and passes the plain
   # stream to port 53 here.
@@ -38,3 +56,5 @@ services:
 volumes:
   relay-data:
   dns-logs:
+  training:
+  trainer-private:

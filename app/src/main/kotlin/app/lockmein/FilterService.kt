@@ -593,24 +593,26 @@ class FilterService : AccessibilityService() {
     private fun saveWrong(record: BlockRecord, jpeg: ByteArray?): String {
         val store = FeedbackStore(this)
         val saved = runCatching { store.add(record); store.saveForReview(record.id, jpeg) }.getOrDefault(false)
-        if (!saved) return "Limit: ${app.lockmein.core.Feedback.MAX_SAVES_PER_DAY} a day"
+        if (!saved) return "Not saved"
         warningSaved = record
         EventLog(this).add(EventKind.FILTER_SAVED, "${record.pkg} (${store.savesToday()} today)")
         return "Saved"
     }
 
-    /** Keeps the block's record (scores, frames, thresholds; no image unless saved with "Wrong?") and shows the close card. */
+    /** Keeps the block's record (scores, frames, thresholds) and its screenshot for training, and shows the close card. */
     private fun recordBlock(pkg: String, scores: FilterScores, now: Instant) {
         val saved = warningSaved
         warningSaved = null
+        val jpeg = lastHitJpeg?.takeIf { System.currentTimeMillis() - it.first < FeedbackStore.PENDING_MS }?.second
         lastHitJpeg = null
         if (saved == null) {
             val record = blockRecord(pkg, scores, now)
             val store = FeedbackStore(this)
-            serviceScope.launch(Dispatchers.IO) { runCatching { store.add(record) } }
+            // A close he lets stand is a real hit for training (FEATURES 3.20): its screenshot is kept, encrypted, until sent.
+            serviceScope.launch(Dispatchers.IO) { runCatching { store.add(record); if (jpeg != null) store.keepImage(record.id, jpeg) } }
         }
         val label = runCatching { DeviceInventory(this).label(pkg) }.getOrDefault(pkg).ifBlank { pkg }
-        blockCard?.show(label, if (saved != null) "Saved for the review at 19:30." else "The screen filter saw sexual or revealing content.")
+        blockCard?.show(label, if (saved != null) "Saved as a false alarm for training." else "The screen filter saw sexual or revealing content.")
     }
 
     companion object {

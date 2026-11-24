@@ -121,25 +121,15 @@ def closes(frames, judge=None):
     return sum(hits) >= AGREE
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("exports", nargs="*")
-    ap.add_argument("--public", default=os.path.join(HERE, "public-frames.csv"))
-    ap.add_argument("--demo", action="store_true")
-    ap.add_argument("--out", default=None)
-    ap.add_argument("--margin", type=float, default=0.02, help="cutoff at least this far above his highest correct block in training")
-    a = ap.parse_args()
-    if not a.exports and not a.demo:
-        sys.exit("give one or more .lmib exports, or --demo")
-
-    public = load_public(a.public)
-    labels = load_labels(a.exports, public if a.demo else None)
+def train(labels, public, margin=0.02, demo=False, version=None, log=print):
+    """Trains on his labels plus the public frames and checks the result on held-out data (also used by server/trainer.py).
+    Returns {"ok", "reason", "judge" (or None), "metrics"}."""
     mine_train = [r for r in labels if not held_out(r["id"])]
     mine_test = [r for r in labels if held_out(r["id"])]
     wrong = sum(r["wrong"] for r in labels)
-    print(f"his labels: {len(labels)} ({wrong} false alarms, {len(labels) - wrong} correct); held out {len(mine_test)}")
-    if wrong < 30 and not a.demo:
-        print("note: the spec waits for about 150 false alarms; with fewer the judge will likely not pass.")
+    log(f"his labels: {len(labels)} ({wrong} false alarms, {len(labels) - wrong} correct); held out {len(mine_test)}")
+    if wrong < 30 and not demo:
+        log("note: the spec waits for about 150 false alarms; with fewer the judge will likely not pass.")
 
     X, y, w = [], [], []
     for r in mine_train:
@@ -152,7 +142,7 @@ def main():
                 X.append(features(f)); y.append(0 if sc["risky"] else 1); w.append(1.0)
     y_arr = np.asarray(y)
     if y_arr.min() == y_arr.max():
-        sys.exit("training needs both false alarms and real hits")
+        return {"ok": False, "reason": "training needs both false alarms and real hits", "judge": None, "metrics": {"labels": len(labels), "false_alarms": wrong}}
     # Balance the two classes.
     w = np.asarray(w); pos = y_arr == 1
     w[pos] *= w[~pos].sum() / max(w[pos].sum(), 1e-9)
@@ -165,7 +155,7 @@ def main():
     real_max = float(prob(wt, b, mine_real_train).max()) if mine_real_train else 0.0
     cutoff = 0.999
     for c in np.arange(0.5, 0.999, 0.005):
-        if c < real_max + a.margin:
+        if c < real_max + margin:
             continue
         if all(closes(sc["frames"], (wt, b, c)) or not closes(sc["frames"]) for sc in train_risky):
             cutoff = float(c)
@@ -180,18 +170,44 @@ def main():
     mine_wrong = [r for r in mine_test if r["wrong"]]; mine_real = [r for r in mine_test if not r["wrong"]]
     mine_fixed = sum(prob(wt, b, features(r["s"])) >= cutoff for r in mine_wrong)
     mine_lost = sum(prob(wt, b, features(r["s"])) >= cutoff for r in mine_real)
-    print(f"cutoff {cutoff:.3f}")
-    print(f"public held-out: risky screens closed {sum(closes(sc['frames']) for sc in risky)}/{len(risky)} -> lost {lost}; "
-          f"false closes on normal {fc_before}/{len(normal)} -> {fc_after}")
-    print(f"his held-out: false alarms dropped {mine_fixed}/{len(mine_wrong)}, real blocks dropped {mine_lost}/{len(mine_real)}")
+    log(f"cutoff {cutoff:.3f}")
+    log(f"public held-out: risky screens closed {sum(closes(sc['frames']) for sc in risky)}/{len(risky)} -> lost {lost}; "
+        f"false closes on normal {fc_before}/{len(normal)} -> {fc_after}")
+    log(f"his held-out: false alarms dropped {mine_fixed}/{len(mine_wrong)}, real blocks dropped {mine_lost}/{len(mine_real)}")
+    metrics = {"labels": len(labels), "false_alarms": wrong, "held_out": len(mine_test), "cutoff": round(cutoff, 6),
+               "public_risky_lost": int(lost), "public_false_closes_before": int(fc_before), "public_false_closes_after": int(fc_after),
+               "his_false_alarms_dropped": int(mine_fixed), "his_held_out_false_alarms": len(mine_wrong),
+               "his_real_blocks_dropped": int(mine_lost), "his_held_out_real": len(mine_real)}
 
     ok = lost == 0 and mine_lost == 0 and (fc_after < fc_before or mine_fixed > 0)
     if not ok:
-        print("NOT SHIPPING: " + ("it would miss real content" if lost or mine_lost else "false closes do not fall"))
+        return {"ok": False, "reason": "it would miss real content" if lost or mine_lost else "false closes do not fall", "judge": None, "metrics": metrics}
+    version = version or (f"judge-{datetime.date.today()}" + ("-demo" if demo else ""))
+    out = {"version": version, "weights": [round(float(v), 6) for v in wt], "bias": round(float(b), 6), "cutoff": round(cutoff, 6)}
+    return {"ok": True, "reason": "", "judge": out, "metrics": metrics}
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("exports", nargs="*")
+    ap.add_argument("--public", default=os.path.join(HERE, "public-frames.csv"))
+    ap.add_argument("--demo", action="store_true")
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--margin", type=float, default=0.02, help="cutoff at least this far above his highest correct block in training")
+    a = ap.parse_args()
+    if not a.exports and not a.demo:
+        sys.exit("give one or more .lmib exports, or --demo")
+
+    public = load_public(a.public)
+    labels = load_labels(a.exports, public if a.demo else None)
+    result = train(labels, public, a.margin, a.demo)
+    if result["judge"] is None and result["reason"].startswith("training needs"):
+        sys.exit(result["reason"])
+    if not result["ok"]:
+        print("NOT SHIPPING: " + result["reason"])
         return 1
-    version = f"judge-{datetime.date.today()}" + ("-demo" if a.demo else "")
-    out = a.out or f"{version}.json"
-    json.dump({"version": version, "weights": [round(float(v), 6) for v in wt], "bias": round(float(b), 6), "cutoff": round(cutoff, 6)}, open(out, "w"), indent=2)
+    out = a.out or f"{result['judge']['version']}.json"
+    json.dump(result["judge"], open(out, "w"), indent=2)
     print(f"MAY SHIP: wrote {out}. Install it from the phone's Screen filter page; keep the previous file to roll back.")
     return 0
 
