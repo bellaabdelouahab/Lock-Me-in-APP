@@ -10,6 +10,8 @@ import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import androidx.annotation.VisibleForTesting
 import app.lockmein.core.AgreedFrame
+import app.lockmein.core.AppSites
+import app.lockmein.core.KnownBrowsers
 import app.lockmein.core.BlockRecord
 import app.lockmein.core.EventKind
 import app.lockmein.core.StoredScores
@@ -64,6 +66,12 @@ class FilterService : AccessibilityService() {
     private var lastProbeAt = 0L
     private var lastHiddenAt = 0L
     private var blackSince: Long? = null
+    /** Sites of closed apps (FEATURES 3.18): the address-bar watch, what is closed (refreshed every 30 s), and recent hits. */
+    private var siteJob: Job? = null
+    @Volatile private var siteRules: Pair<Set<String>, Set<String>>? = null // closed now, installed
+    private var siteRulesAt = 0L
+    private var siteRulesLoading = false
+    private val siteHits = ArrayDeque<Long>()
     private var isTakingScreenshot = false
     private var screenshotAt = 0L
     // One check at a time: during a video every frame is new and a check can outlast the 1-second tick. Without this the
@@ -85,6 +93,7 @@ class FilterService : AccessibilityService() {
         }
         FilterWatcher.start(this)
         reloadConfig()
+        serviceScope.launch(Dispatchers.Default) { runCatching { siteBrowsers = DeviceInventory(this@FilterService).read().browsers } }
     }
 
     /** Reads the thresholds, per-app settings and judge again (after a change). */
@@ -173,6 +182,7 @@ class FilterService : AccessibilityService() {
         super.onDestroy()
         instance = null
         stopSampling()
+        stopSiteWatch()
         overlay?.dismiss()
         overlay = null
         blockCard?.dismiss()
@@ -223,6 +233,7 @@ class FilterService : AccessibilityService() {
     }
 
     private fun onForegroundAppChanged(pkg: String) {
+        if (pkg in KnownBrowsers.ALL || pkg in (siteBrowsers ?: emptySet())) startSiteWatch(pkg) else stopSiteWatch()
         val config = ConfigStore(this).load()
         val isWatched = config != null && WatchedApps.isWatched(pkg, config.watchedApps)
 
@@ -235,6 +246,88 @@ class FilterService : AccessibilityService() {
                 overlay?.dismiss()
             }
         }
+    }
+
+    /** Every browser on the phone, read once in the background (a browser not in [KnownBrowsers] is still a browser). */
+    @Volatile private var siteBrowsers: Set<String>? = null
+
+    /** While a browser is in front, reads its address bar every second and leaves a closed app's site (FEATURES 3.18). */
+    private fun startSiteWatch(pkg: String) {
+        if (siteJob?.isActive == true) return
+        siteJob = serviceScope.launch {
+            while (isActive && currentForegroundPackage == pkg) {
+                runCatching { checkSite(pkg) }
+                delay(AppSites.CHECK_EVERY_MS)
+            }
+        }
+    }
+
+    private fun stopSiteWatch() {
+        siteJob?.cancel()
+        siteJob = null
+    }
+
+    private fun checkSite(pkg: String) {
+        if (!ConfigStore(this).protectionActive) return
+        val nowMs = System.currentTimeMillis()
+        val rules = siteRules
+        if ((rules == null || nowMs - siteRulesAt > SITE_RULES_EVERY_MS) && !siteRulesLoading) {
+            siteRulesLoading = true
+            serviceScope.launch(Dispatchers.Default) {
+                try {
+                    val config = ConfigStore(this@FilterService).load()
+                    val snapshot = DeviceInventory(this@FilterService).read()
+                    siteBrowsers = snapshot.browsers
+                    siteRules = if (config == null) null else {
+                        PolicyRunner(this@FilterService).planFor(config, asIfInstalled = AppSites.SITES.keys).suspended to snapshot.installed
+                    }
+                    siteRulesAt = System.currentTimeMillis()
+                } catch (_: Exception) {
+                } finally {
+                    siteRulesLoading = false
+                }
+            }
+        }
+        val (closed, installed) = rules ?: return
+        val bar = addressBar(pkg) ?: return
+        val site = AppSites.closedSite(bar, closed, installed) ?: return
+        while (siteHits.isNotEmpty() && nowMs - siteHits.first() > AppSites.STRIKE_WINDOW_MS) siteHits.removeFirst()
+        siteHits.addLast(nowMs)
+        if (siteHits.size == 1) {
+            EventLog(this).add(EventKind.SITE_CLOSED, "${site.host} (${site.app}) in $pkg")
+            PhoneUseLog(this).add(UseKind.BLOCKED, site.app)
+            val label = DeviceInventory(this).label(site.app).takeIf { it != site.app }
+            val note = if (label != null) "${site.host} is closed while $label is." else "${site.host} is closed by your rules."
+            android.widget.Toast.makeText(this, note, android.widget.Toast.LENGTH_LONG).show()
+        }
+        performGlobalAction(if (AppSites.sendHome(siteHits.size)) GLOBAL_ACTION_HOME else GLOBAL_ACTION_BACK)
+    }
+
+    /**
+     * The address bar's text in [pkg]'s window, or null while it is being edited (what is typed is not a page yet) or not on
+     * screen. Known bar ids first; else any visible field whose id names a url, an omnibar, an address or a location bar.
+     */
+    private fun addressBar(pkg: String): String? {
+        val root = rootInActiveWindow ?: return null
+        if (root.packageName?.toString() != pkg) return null
+        val bar = URL_BAR_IDS.firstNotNullOfOrNull { id -> root.findAccessibilityNodeInfosByViewId("$pkg:id/$id").firstOrNull { it.isVisibleToUser } }
+            ?: findBar(root)
+            ?: return null
+        if (bar.isFocused) return null
+        return bar.text?.toString()
+    }
+
+    private fun findBar(root: android.view.accessibility.AccessibilityNodeInfo): android.view.accessibility.AccessibilityNodeInfo? {
+        val queue = ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>().apply { add(root) }
+        var seen = 0
+        while (queue.isNotEmpty() && seen < MAX_BAR_NODES) {
+            val node = queue.removeFirst()
+            seen++
+            val id = node.viewIdResourceName?.substringAfter(":id/")?.lowercase()
+            if (id != null && node.isVisibleToUser && BAR_ID_WORDS.any { id.contains(it) } && node.text?.let { AppSites.host(it.toString()) } != null) return node
+            for (i in 0 until node.childCount) node.getChild(i)?.let(queue::add)
+        }
+        return null
     }
 
     private fun startSampling(pkg: String) {
@@ -529,6 +622,14 @@ class FilterService : AccessibilityService() {
         private const val MAX_TEXT_NODES = 400
         private val SUPPORT_MESSAGE_START = SUPPORT_MESSAGE.take(24)
         private const val MAX_TEXT_CHARS = 8_000
+        private const val SITE_RULES_EVERY_MS = 30_000L
+        private const val MAX_BAR_NODES = 150
+
+        /** Address-bar ids: Chrome, Brave, Edge, Vivaldi, Kiwi (url_bar); Firefox; Samsung Internet; Opera; DuckDuckGo; Mi Browser. */
+        private val URL_BAR_IDS = listOf(
+            "url_bar", "mozac_browser_toolbar_url_view", "location_bar_edit_text", "url_field", "omnibarTextInput", "url", "url_text",
+        )
+        private val BAR_ID_WORDS = listOf("url", "omnibar", "address", "location_bar")
 
         @Volatile
         var instance: FilterService? = null

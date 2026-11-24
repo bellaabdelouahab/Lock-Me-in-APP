@@ -90,8 +90,10 @@ class PolicyRunner(private val context: Context) {
         config: LockConfig,
         now: Instant = TrustedClock(context).now(),
         filterServiceEnabled: Boolean = FilterService.isWorking(context),
+        /** Planned as if these were installed too: the apps whose sites close with them (FEATURES 3.18), installed or not. */
+        asIfInstalled: Set<String> = emptySet(),
     ): PolicyPlan {
-        val snapshot = DeviceInventory(context).read()
+        val snapshot = DeviceInventory(context).read().let { it.copy(installed = it.installed + asIfInstalled) }
         val state = LockState(context)
         val mode = if (BuildConfig.TEST_BUILD) BuildMode.TEST else BuildMode.SEALED
         val schedule = Rules.schedule(config)

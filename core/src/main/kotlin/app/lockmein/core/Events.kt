@@ -59,6 +59,9 @@ enum class EventKind {
     /** A watched app showed a screen the filter cannot see (a private tab) and was sent home (FEATURES 3.16). */
     HIDDEN_SCREEN,
 
+    /** A closed app's site was open in a browser and was left (FEATURES 3.18); the detail names the site, the app and the browser. */
+    SITE_CLOSED,
+
     /** The private DNS server stopped answering while the network worked: plain automatic DNS until it is back (FEATURES 3.17). */
     DNS_FALLBACK,
 
@@ -96,6 +99,7 @@ data class WeeklyReport(
             if (count(EventKind.REMOTE_CHANGE) > 0) appendLine("Changes asked through the MCP: ${count(EventKind.REMOTE_CHANGE)}")
             if (count(EventKind.BLOCKED_TRY) > 0) appendLine("Tries to open a closed app: ${count(EventKind.BLOCKED_TRY)}")
             if (count(EventKind.DNS_FALLBACK) > 0) appendLine("DNS server down: ${count(EventKind.DNS_FALLBACK)} times, plain DNS (unfiltered) meanwhile")
+            if (count(EventKind.SITE_CLOSED) > 0) appendLine("Closed apps' sites left in the browser: ${count(EventKind.SITE_CLOSED)}")
             if (count(EventKind.HIDDEN_SCREEN) > 0) appendLine("Private tabs sent home: ${count(EventKind.HIDDEN_SCREEN)}")
             if (newApps.isNotEmpty()) appendLine("New apps held back: ${newApps.joinToString()}")
             refusals.forEach { appendLine("Refused ${day.format(it.at)}: ${it.detail}") }
