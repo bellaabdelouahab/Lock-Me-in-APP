@@ -113,8 +113,9 @@ An outside reviewer compared version 0.2.0 with the owner's rules (rule 14, D-20
 ### 3.13 Screen filter feedback loop (spec v3.1 F2 to F5)
 - **Per-app strictness** (Screen filter page): Stricter / Default / Looser moves every threshold of one watched app by 0.10. Stricter
   is instant; Looser is a settings request through the change gate.
-- **Wrong block?** (F3): after the filter closes an app, a card on the home screen offers "Wrong block?" then "Save for review".
-  Neither reopens anything. Saving keeps the hit frame (held in memory only until then) AES-GCM encrypted with a key-store key in
+- **Wrong?** (F3): a button on the warning banner itself, while the screen is still in front of him (moved from the card after
+  the close, 2026-11-24). One tap saves and shows "Saved"; it changes nothing else: the countdown runs on and the app still
+  closes if the content stays. The card after a close only says it closed, and whether the screen was saved. Saving keeps the hit frame (held in memory only until then) AES-GCM encrypted with a key-store key in
   no-backup storage, with the scores, the frames that agreed, the thresholds and the model version. Every block keeps its metadata
   without an image. 500 records at most, 10 saves a day, each save logged for the weekly report.
 - **Review window** (F4): daily 19:30 to 20:00. Each saved block shows heavily blurred; hold to see it. Wrong block keeps the image

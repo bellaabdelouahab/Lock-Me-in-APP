@@ -23,8 +23,12 @@ class FilterOverlay(private val context: Context) {
 
     val isShowing: Boolean get() = view != null
 
-    /** Shows the warning with a countdown to the second check: leave the content before it reaches 0. */
-    fun show(seconds: Int = 5) {
+    /**
+     * Shows the warning with a countdown to the second check: leave the content before it reaches 0. [onWrong] backs the
+     * "Wrong?" button (spec v3.1 F3, moved here from the card after the close at his request, 2026-11-24): one tap saves the
+     * screen for the 19:30 review and answers the word to show. It changes nothing else: the countdown and the close go on.
+     */
+    fun show(seconds: Int = 5, onWrong: (() -> String)? = null) {
         if (view != null) return
         val message = { left: Int -> "Sexual or revealing content. Leave it in $left s or the app closes for 30 s." }
 
@@ -94,6 +98,31 @@ class FilterOverlay(private val context: Context) {
                 addView(body)
             }
             addView(textCol)
+
+            if (onWrong != null) {
+                val wrong = TextView(context).apply {
+                    text = "Wrong?"
+                    setTextColor(Color.WHITE)
+                    textSize = 13f
+                    setTypeface(null, Typeface.BOLD)
+                    setPadding(dp(12), dp(8), dp(12), dp(8))
+                    background = GradientDrawable().apply {
+                        setStroke(dp(1), Color.parseColor("#938F99"))
+                        cornerRadius = density * 16f
+                    }
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                        leftMargin = dp(8)
+                    }
+                    contentDescription = "Wrong? Save this screen for review"
+                }
+                wrong.setOnClickListener {
+                    wrong.isClickable = false
+                    wrong.text = onWrong()
+                    wrong.background = null
+                    wrong.setTextColor(Color.parseColor("#CAC4D0"))
+                }
+                addView(wrong)
+            }
         }
 
         // Window parameters: non-blocking, top-pinned banner

@@ -58,6 +58,8 @@ class FilterService : AccessibilityService() {
     /** The label of the last thing tapped (an app icon), kept in memory for 3 s to name the app behind a "blocked" dialog. */
     private var lastClick: Pair<String, Long>? = null
     private var lastTryAt = 0L
+    /** The record saved with "Wrong?" during the current warning, if any: the close that may follow reuses it. */
+    private var warningSaved: BlockRecord? = null
     /** Private tabs (FEATURES 3.16): last window check, last count, and since when the screen is black (Android 11 to 13). */
     private var lastProbeAt = 0L
     private var lastHiddenAt = 0L
@@ -443,7 +445,13 @@ class FilterService : AccessibilityService() {
             is FilterAction.None -> Unit
 
             is FilterAction.ShowWarning -> {
-                overlay?.show()
+                // A warning already up keeps its own record (and its "Saved"); only a new warning starts a new one.
+                if (overlay?.isShowing != true) {
+                    warningSaved = null
+                    val record = blockRecord(pkg, scores, now)
+                    val jpeg = lastHitJpeg?.takeIf { System.currentTimeMillis() - it.first < FeedbackStore.PENDING_MS }?.second
+                    overlay?.show(onWrong = { saveWrong(record, jpeg) })
+                }
                 val state = LockState(this)
                 state.lastFilterHitMillis = now.toEpochMilli()
                 EventLog(this).add(EventKind.FILTER_HIT, "$pkg scores: $scores", now)
@@ -470,10 +478,9 @@ class FilterService : AccessibilityService() {
         }
     }
 
-    /** Keeps the block's record (scores, frames, thresholds; no image) and offers "Wrong block?" (spec v3.1 F3). */
-    private fun recordBlock(pkg: String, scores: FilterScores, now: Instant) {
+    private fun blockRecord(pkg: String, scores: FilterScores, now: Instant): BlockRecord {
         val m = decisionMachine
-        val record = BlockRecord(
+        return BlockRecord(
             id = java.util.UUID.randomUUID().toString(),
             atMillis = now.toEpochMilli(),
             pkg = pkg,
@@ -484,21 +491,33 @@ class FilterService : AccessibilityService() {
             modelVersion = MODEL_VERSION,
             judgeVersion = m.judge?.version,
         )
-        val jpeg = lastHitJpeg?.takeIf { System.currentTimeMillis() - it.first < FeedbackStore.PENDING_MS }?.second
-        lastHitJpeg = null
+    }
+
+    /**
+     * "Wrong?" on the warning (spec v3.1 F3): saves the warned screen, encrypted, labelled as claimed false, for the 19:30 review.
+     * One tap, no second step; the warning, its countdown and any close carry on exactly as without it. Answers the button's word.
+     */
+    private fun saveWrong(record: BlockRecord, jpeg: ByteArray?): String {
         val store = FeedbackStore(this)
-        serviceScope.launch(Dispatchers.IO) { runCatching { store.add(record) } }
-        val label = runCatching { DeviceInventory(this).label(pkg) }.getOrDefault(pkg).ifBlank { pkg }
-        blockCard?.show(label) {
-            val saved = runCatching { store.add(record); store.saveForReview(record.id, jpeg) }.getOrDefault(false)
-            if (saved) {
-                val today = store.savesToday()
-                EventLog(this).add(EventKind.FILTER_SAVED, "$pkg ($today today)")
-                "Saved for the review at 19:30. The app stays closed for 30 s."
-            } else {
-                "Not saved: ${app.lockmein.core.Feedback.MAX_SAVES_PER_DAY} saves a day at most. The app stays closed for 30 s."
-            }
+        val saved = runCatching { store.add(record); store.saveForReview(record.id, jpeg) }.getOrDefault(false)
+        if (!saved) return "Limit: ${app.lockmein.core.Feedback.MAX_SAVES_PER_DAY} a day"
+        warningSaved = record
+        EventLog(this).add(EventKind.FILTER_SAVED, "${record.pkg} (${store.savesToday()} today)")
+        return "Saved"
+    }
+
+    /** Keeps the block's record (scores, frames, thresholds; no image unless saved with "Wrong?") and shows the close card. */
+    private fun recordBlock(pkg: String, scores: FilterScores, now: Instant) {
+        val saved = warningSaved
+        warningSaved = null
+        lastHitJpeg = null
+        if (saved == null) {
+            val record = blockRecord(pkg, scores, now)
+            val store = FeedbackStore(this)
+            serviceScope.launch(Dispatchers.IO) { runCatching { store.add(record) } }
         }
+        val label = runCatching { DeviceInventory(this).label(pkg) }.getOrDefault(pkg).ifBlank { pkg }
+        blockCard?.show(label, if (saved != null) "Saved for the review at 19:30." else "The screen filter saw sexual or revealing content.")
     }
 
     companion object {
