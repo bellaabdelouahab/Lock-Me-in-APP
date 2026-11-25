@@ -15,7 +15,10 @@ object AppSites {
         "com.zhiliaoapp.musically" to setOf("tiktok.com"),
         "com.ss.android.ugc.trill" to setOf("tiktok.com"),
         "com.google.android.youtube" to setOf("youtube.com", "youtu.be", "youtube-nocookie.com"),
+        // ReVanced builds of the same apps: closing one closes its site too.
+        "app.revanced.android.youtube" to setOf("youtube.com", "youtu.be", "youtube-nocookie.com"),
         "com.google.android.apps.youtube.music" to setOf("music.youtube.com"),
+        "app.revanced.android.apps.youtube.music" to setOf("music.youtube.com"),
         "com.google.android.apps.youtube.kids" to setOf("youtubekids.com"),
         "com.twitter.android" to setOf("x.com", "twitter.com"),
         "com.snapchat.android" to setOf("snapchat.com"),

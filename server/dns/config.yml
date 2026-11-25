@@ -1,6 +1,6 @@
-# Blocky for Lock Me In (FEATURES 3.17). No admin page and no API port published: these rules change only by a commit and a
-# redeploy. The phone reaches it as dns.abdelouahab.xyz over DNS-over-TLS; Coolify's proxy holds the certificate and passes the
-# plain DNS stream to port 53 here.
+# Blocky for Lock Me In (FEATURES 3.17). No admin page, and its API port (4000) is reachable only from the relay on the
+# service's own network, never published or routed: these rules change only by a commit and a redeploy. The phone reaches it
+# as dns.abdelouahab.xyz over DNS-over-TLS; Coolify's proxy holds the certificate and passes the plain DNS stream to port 53.
 upstreams:
   groups:
     default:
@@ -16,15 +16,92 @@ bootstrapDns:
 
 blocking:
   denylists:
+    # Every entry is a wildcard (*.name): Blocky matches a plain name exactly, so www.name would get through.
     lists:
-      - https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro-onlydomains.txt
+      - https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/pro.txt
     adult:
-      - https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/nsfw-onlydomains.txt
+      - https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/nsfw.txt
     bypass:
       # Other DNS-over-HTTPS resolvers, VPNs and proxies: ways around this server.
-      - https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/doh-vpn-proxy-bypass-onlydomains.txt
+      - https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/doh-vpn-proxy-bypass.txt
+    gambling:
+      - https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/wildcard/gambling.txt
+    dating:
+      - |
+        *.tinder.com
+        *.gotinder.com
+        *.bumble.com
+        *.bumble.app
+        *.badoo.com
+        *.hinge.co
+        *.okcupid.com
+        *.match.com
+        *.pof.com
+        *.plentyoffish.com
+        *.grindr.com
+        *.grindr.mobi
+        *.happn.com
+        *.happn.app
+        *.hily.com
+        *.meetic.com
+        *.meetic.fr
+        *.lovoo.com
+        *.zoosk.com
+        *.coffeemeetsbagel.com
+        *.feeld.co
+        *.tantanapp.com
+        *.muzz.com
+        *.muzmatch.com
+        *.boo.world
+        *.jaumo.com
+        *.skout.com
+        *.tagged.com
+        *.mamba.ru
+        *.eharmony.com
+        *.elitesingles.com
+        *.lovoo.net
+        *.taimi.com
+    # TikTok, Instagram, Facebook and YouTube, closed outside the recreation time (20:00 to 21:30 every day, as in NextDNS).
+    # The relay opens this group for the recreation time only, through Blocky's API, and Blocky closes it again by itself
+    # when the time is up: if the relay is down, it stays closed.
+    social:
+      - |
+        *.tiktok.com
+        *.tiktokv.com
+        *.tiktokv.us
+        *.tiktokcdn.com
+        *.tiktokcdn-us.com
+        *.tiktokcdn-eu.com
+        *.tiktokw.us
+        *.ttwstatic.com
+        *.musical.ly
+        *.byteoversea.com
+        *.ibytedtos.com
+        *.ibyteimg.com
+        *.muscdn.com
+        *.instagram.com
+        *.cdninstagram.com
+        *.instagr.am
+        *.ig.me
+        *.facebook.com
+        *.facebook.net
+        *.fb.com
+        *.fb.me
+        *.fb.gg
+        *.fbcdn.net
+        *.fbsbx.com
+        *.fb.watch
+        *.youtube.com
+        *.youtu.be
+        *.youtube-nocookie.com
+        *.youtubekids.com
+        *.ytimg.com
+        *.googlevideo.com
+        *.youtubei.googleapis.com
+        *.youtube.googleapis.com
+        *.yt.be
   clientGroupsBlock:
-    default: [lists, adult, bypass]
+    default: [lists, adult, bypass, gambling, dating, social]
   blockType: zeroIp
   blockTTL: 1m
   loading:
@@ -63,6 +140,7 @@ queryLog:
 
 ports:
   dns: 53
+  http: 4000
 
 log:
   level: warn

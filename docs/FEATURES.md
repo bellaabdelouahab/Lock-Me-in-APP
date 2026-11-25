@@ -261,6 +261,13 @@ times across at least a minute; then the phone uses plain automatic DNS, unfilte
 health page. Two good answers a minute apart pin the server back (DNS_RESTORED, with the minutes). The weekly report counts
 the fallbacks. The screen filter, the closed apps and Chrome's safe search keep working meanwhile.
 
+Same rules as NextDNS had (2026-11-25): TikTok, Instagram, Facebook and YouTube (with its video servers) are closed except
+in the recreation time, 20:00 to 21:30 every day (Africa/Casablanca); gambling (HaGeZi) and dating (a fixed list) always. The
+relay opens the social group for what is left of the recreation time through Blocky's API (port 4000, on the service's own
+network only) and Blocky closes it again by itself when that runs out, so a relay that is down leaves it closed. During the
+recreation time YouTube answers in strict restricted mode. Every list entry is a wildcard: Blocky matches a plain name
+exactly, and until this fix www.pornhub.com or www.facebook.com got past the lists (only the family resolvers caught the first).
+
 Switching hosts (2026-11-25, after a switch to a server that was not answering left the lock off): the Private DNS lock is
 never lifted while the protection is on; the device owner sets the host with it in place, so a pass killed halfway leaves
 nothing open. A new host is switched to before it is saved: Android tests it (one try, 10 s at most) and keeps the old host when

@@ -430,10 +430,58 @@ async def health(_request: Request):
 mcp_app = mcp.streamable_http_app()
 
 
+# Recreation time on the DNS (as it was in NextDNS): TikTok, Instagram, Facebook and YouTube (Blocky's "social" group) open
+# from 20:00 to 21:30 every day, Morocco time, and are closed the rest of the day. The relay opens the group for what is left
+# of the window; Blocky closes it again by itself when that runs out, so a relay that is down leaves it closed (fail closed).
+BLOCKY = os.environ.get("BLOCKY_URL", "http://dns:4000")
+RECREATION_ZONE = os.environ.get("RECREATION_ZONE", "Africa/Casablanca")
+RECREATION = os.environ.get("RECREATION", "20:00-21:30")
+RECREATION_GROUP = "social"
+
+
+def recreation_left(now) -> int:
+    """Seconds of recreation time left at [now] (an aware datetime in the recreation zone), 0 outside it."""
+    start, end = ([int(x) for x in t.split(":")] for t in RECREATION.split("-"))
+    begin = now.replace(hour=start[0], minute=start[1], second=0, microsecond=0)
+    finish = now.replace(hour=end[0], minute=end[1], second=0, microsecond=0)
+    return int((finish - now).total_seconds()) if begin <= now < finish else 0
+
+
+def _blocky(path: str) -> dict:
+    import urllib.request
+
+    with urllib.request.urlopen(f"{BLOCKY}{path}", timeout=10) as r:
+        body = r.read()
+    return json.loads(body) if body.strip() else {}
+
+
+async def recreation_loop():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    zone = ZoneInfo(RECREATION_ZONE)
+    while True:
+        try:
+            left = recreation_left(datetime.now(zone))
+            status = await asyncio.to_thread(_blocky, "/api/blocking/status")
+            opened = RECREATION_GROUP in (status.get("disabledGroups") or [])
+            if left > 0 and not opened:
+                await asyncio.to_thread(_blocky, f"/api/blocking/disable?duration={left}s&groups={RECREATION_GROUP}")
+                print(f"recreation: {RECREATION_GROUP} open for {left // 60} min", flush=True)
+            elif left == 0 and opened:
+                await asyncio.to_thread(_blocky, "/api/blocking/enable")
+                print(f"recreation: {RECREATION_GROUP} closed", flush=True)
+        except Exception as e:  # Blocky restarting: it starts with everything closed, which is the safe side.
+            print(f"recreation: {e!r}", flush=True)
+        await asyncio.sleep(30)
+
+
 @asynccontextmanager
 async def lifespan(_app):
+    task = asyncio.create_task(recreation_loop())
     async with mcp.session_manager.run():
         yield
+    task.cancel()
 
 
 app = Starlette(

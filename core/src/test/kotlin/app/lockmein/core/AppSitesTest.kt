@@ -56,4 +56,11 @@ class AppSitesTest {
         assertFalse(AppSites.sendHome(2))
         assertTrue(AppSites.sendHome(3))
     }
+
+    @Test
+    fun youTubeClosesWithItsReVancedBuild() {
+        val revanced = "app.revanced.android.youtube"
+        assertEquals(revanced, AppSites.closedSite("m.youtube.com/watch?v=x", setOf(revanced), setOf(revanced))?.app)
+        assertEquals(null, AppSites.closedSite("m.youtube.com", emptySet(), setOf(revanced)), "open while ReVanced is open")
+    }
 }

@@ -9,7 +9,7 @@ services:
       - PAIR_CODE=${PAIR_CODE}
       - DATA_DIR=/data
       - TRAINING_DIR=/training
-    command: ["sh", "-c", "pip install -q --root-user-action=ignore mcp==1.30.0 uvicorn==0.38.0 websockets==15.0.1 && python /app/relay.py"]
+    command: ["sh", "-c", "pip install -q --root-user-action=ignore mcp==1.30.0 uvicorn==0.38.0 websockets==15.0.1 tzdata==2025.2 && python /app/relay.py"]
     volumes:
       - /home/ubuntu/lock-me-in/server/relay.py:/app/relay.py:ro
       - relay-data:/data
