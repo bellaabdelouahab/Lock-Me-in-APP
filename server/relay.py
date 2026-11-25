@@ -23,6 +23,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -89,6 +90,13 @@ mcp = FastMCP(
     stateless_http=True,
     json_response=True,
     streamable_http_path="/mcp",
+    # The SDK only lets 127.0.0.1 in by default (421 "Invalid Host header" behind the proxy). Keep the DNS-rebinding check on and
+    # allow just the relay's own domain, and claude.ai as a browser origin.
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[h.strip() for h in os.environ.get("RELAY_HOST", "lockmein.abdelouahab.xyz").split(",")] + ["127.0.0.1:*", "localhost:*"],
+        allowed_origins=["https://claude.ai", "https://claude.com", "http://127.0.0.1:*", "http://localhost:*"],
+    ),
 )
 
 
