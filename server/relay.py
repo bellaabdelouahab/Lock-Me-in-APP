@@ -350,9 +350,16 @@ async def train_offer(request: Request):
 @mcp.tool(name="training_status", description="The screen filter's training on the server: uploads, labels, and every judge version with its held-out numbers.")
 def training_status() -> dict:
     try:
-        return json.load(open(os.path.join(TRAINING, "status.json")))
+        status = json.load(open(os.path.join(TRAINING, "status.json")))
     except (OSError, ValueError):
-        return {"error": "the trainer has not written a status yet"}
+        status = {"error": "the trainer has not written a status yet"}
+    # Where an upload can stop before the trainer sees it: the phone never registered, or the trainer has no key yet.
+    try:
+        status["phone_registered_at"] = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(json.load(open(TRAIN_DEVICE))["registered_at"]))
+    except (OSError, ValueError, KeyError):
+        status["phone_registered_at"] = None
+    status["trainer_key_ready"] = os.path.exists(os.path.join(TRAINING, "public.pem"))
+    return status
 
 
 # ---- the phone's side ----
