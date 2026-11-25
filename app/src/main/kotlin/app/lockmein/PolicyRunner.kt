@@ -34,6 +34,11 @@ class PolicyRunner(private val context: Context) {
     fun run(config: LockConfig, now: Instant = TrustedClock(context).now()): RunResult {
         // The preview build only shows the screens: it is never the device owner and applies nothing.
         if (BuildConfig.PREVIEW) return RunResult(ApplyReport(emptyList()), now.plus(CHECK_EVERY))
+        // One pass at a time: the alarm, a filter block and a screen can each start one, and two halves must never interleave.
+        synchronized(LOCK) { return runLocked(config, now) }
+    }
+
+    private fun runLocked(config: LockConfig, now: Instant): RunResult {
 
         // Every pass makes sure the filter watcher runs (it may have been stopped by Android).
         FilterWatcher.start(context)
@@ -50,6 +55,7 @@ class PolicyRunner(private val context: Context) {
         }
 
         val report = PolicyApplier(context).apply(plan)
+        report.dnsRefused?.let { keepWorkingDns(it, now) }
         state.noteUnsuspendable(report.unsuspendable)
         // HyperOS hides the Themes app on a phone with a device owner: shown and enabled again where Android lets us.
         runCatching { Personalize(context).restore() }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { events.add(EventKind.PASS_OK, "Personalization: ${it.joinToString()}", now) }
@@ -64,6 +70,19 @@ class PolicyRunner(private val context: Context) {
         val next = candidates.min()
         scheduleAt(next, now)
         return RunResult(report, next)
+    }
+
+    /**
+     * Android would not take the DNS host in the settings and still holds the one it last accepted: the settings go back to that
+     * host, so nothing keeps retrying a host that fails and nothing claims a DNS the phone does not use.
+     */
+    private fun keepWorkingDns(refusal: DnsRefusal, now: Instant) {
+        val store = ConfigStore(context)
+        val current = store.load() ?: return
+        if (!store.protectionActive || current.dnsHost != refusal.host) return
+        store.save(current.copy(dnsHost = refusal.kept))
+        LockState(context).noteDnsChangeFailed(refusal.host, refusal.reason, refusal.kept, now)
+        events.add(EventKind.DNS_CHANGE_FAILED, "${refusal.host}: ${refusal.reason} (code ${refusal.code}); kept ${refusal.kept}", now)
     }
 
     private fun sendHomeIfForeground(packages: Set<String>) {
@@ -145,5 +164,6 @@ class PolicyRunner(private val context: Context) {
 
     companion object {
         val CHECK_EVERY: Duration = Duration.ofMinutes(15)
+        private val LOCK = Any()
     }
 }

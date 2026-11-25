@@ -162,6 +162,29 @@ class PolicyApplierTest {
     }
 
     @Test
+    fun b3_theDnsIsSwitchedWithTheLockOnAndARefusedHostLeavesTheOldOne() {
+        val applier = PolicyApplier(context)
+        applier.apply(planner.plan(Phase.DAY, BuildMode.TEST, inventory))
+        assertTrue(users.hasUserRestriction(Restrictions.CONFIG_PRIVATE_DNS))
+        // The device owner sets the host with the lock in place: it is never lifted for a switch.
+        assertNull(applier.switchDns("dns.google"))
+        assertTrue("the lock stays on during a switch", users.hasUserRestriction(Restrictions.CONFIG_PRIVATE_DNS))
+
+        // A host that does not serve DNS-over-TLS is refused, and Android keeps the one it had.
+        assertNotNull(applier.switchDns("nothing.invalid"))
+        assertEquals(DevicePolicyManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME, dpm.getGlobalPrivateDnsMode(admin))
+        assertEquals("dns.google", dpm.getGlobalPrivateDnsHost(admin))
+        assertTrue(users.hasUserRestriction(Restrictions.CONFIG_PRIVATE_DNS))
+
+        // A pass planned for that host says which host Android kept, and leaves the lock on.
+        val refused = applier.apply(PolicyPlanner(Rules.forDevice(snapshot, context.packageName, config), "nothing.invalid").plan(Phase.DAY, BuildMode.TEST, inventory))
+        assertEquals("nothing.invalid", refused.dnsRefused?.host)
+        assertEquals("dns.google", refused.dnsRefused?.kept)
+        assertEquals("dns.google", dpm.getGlobalPrivateDnsHost(admin))
+        assertTrue(users.hasUserRestriction(Restrictions.CONFIG_PRIVATE_DNS))
+    }
+
+    @Test
     fun c1_suspendingAndUnsuspendingChangesTheStateAndroidSees() {
         val app = anAppToSuspend()
         val closed = planner.plan(Phase.DAY, BuildMode.TEST, inventory).copy(suspended = setOf(app), unsuspended = emptySet())
@@ -511,6 +534,23 @@ class PolicyApplierTest {
     private fun runShellCommand(cmd: String): String {
         val pfd = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(cmd)
         return java.io.FileInputStream(pfd.fileDescriptor).bufferedReader().use { it.readText() }
+    }
+
+    @Test
+    fun h2_aDnsHostAndroidRefusesGoesBackToTheOneInForceAndSaysWhy() {
+        assertTrue(store.protectionActive)
+        val working = dpm.getGlobalPrivateDnsHost(admin)
+        assertNotNull(working)
+        // As after an approved change to a server that does not answer: the settings name a host Android never took.
+        store.save(store.load()!!.copy(dnsHost = "nothing.invalid"))
+        PolicyRunner(context).run(store.load()!!)
+        assertEquals("the settings go back to the host in force", working, store.load()!!.dnsHost)
+        assertEquals(working, dpm.getGlobalPrivateDnsHost(admin))
+        assertTrue(users.hasUserRestriction(Restrictions.CONFIG_PRIVATE_DNS))
+        assertTrue(events.read().any { it.kind == EventKind.DNS_CHANGE_FAILED && "nothing.invalid" in it.detail })
+        val dns = Health(context).check().first { it.title == "Private DNS" }
+        assertTrue(dns.detail, dns.ok)
+        assertTrue(dns.detail, "nothing.invalid" in dns.detail)
     }
 
     @Test

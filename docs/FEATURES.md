@@ -261,6 +261,14 @@ times across at least a minute; then the phone uses plain automatic DNS, unfilte
 health page. Two good answers a minute apart pin the server back (DNS_RESTORED, with the minutes). The weekly report counts
 the fallbacks. The screen filter, the closed apps and Chrome's safe search keep working meanwhile.
 
+Switching hosts (2026-11-25, after a switch to a server that was not answering left the lock off): the Private DNS lock is
+never lifted while the protection is on; the device owner sets the host with it in place, so a pass killed halfway leaves
+nothing open. A new host is switched to before it is saved: Android tests it (one try, 10 s at most) and keeps the old host when
+it does not answer DNS-over-TLS; then the old host stays in the settings too, DNS_CHANGE_FAILED logs the host, the reason and
+the code, and the health page shows it. A pass that finds the settings naming a host Android refused, while Android holds
+another named host, goes back to that one the same way, so nothing keeps retrying a failing host. Passes run one at a time and
+never on the main thread (a filter block started one there). The fallback above only probes the host Android actually took.
+
 ### 3.18 Closed apps' websites
 While an app is closed (always blocked, window app outside 20:00 to 21:30, night list, held new app, closed by the filter), its
 website is closed too: "I'll just open it in the browser" stops working. The screen filter reads the address bar of the browser

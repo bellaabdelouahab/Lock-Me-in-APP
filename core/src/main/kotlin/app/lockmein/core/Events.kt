@@ -30,6 +30,9 @@ enum class EventKind {
     /** A change was refused (detail says why). */
     DENIED,
 
+    /** Android would not take a new private DNS host; the phone kept the one it had (detail: host, reason, code, kept host). */
+    DNS_CHANGE_FAILED,
+
     /** A change that closes the phone more was applied. */
     TIGHTENED,
     EMERGENCY_USED,

@@ -567,8 +567,8 @@ class FilterService : AccessibilityService() {
                 EventLog(this).add(EventKind.FILTER_BLOCKED, "$pkg until $until (${action.reason}) scores: $scores", now)
                 recordBlock(pkg, scores, now)
 
-                // Reapply policy to suspend the package via device owner
-                PolicyRunner(this).runIfActive(now)
+                // Reapply policy to suspend the package via device owner. Off the main thread: a pass can wait on Android's DNS test.
+                serviceScope.launch(Dispatchers.Default) { runCatching { PolicyRunner(this@FilterService).runIfActive(now) } }
             }
         }
     }

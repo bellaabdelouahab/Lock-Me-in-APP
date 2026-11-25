@@ -295,13 +295,15 @@ class ChangeManager(private val context: Context) {
             RequestKind.REKEY_FRIEND -> return Outcome.Refused("Make the new friend's code on the Friend's code page in the monthly window (1st of the month, 20:00 to 21:00).")
         }
         ConfigRules.problems(updated).firstOrNull()?.let { return Outcome.Refused(it) }
-        if (updated != config) { store.save(updated); FilterService.instance?.reloadConfig() }
+        val changes = if (request.kind == RequestKind.SETTINGS) ": " + app.lockmein.core.SettingsDiff.summary(app.lockmein.core.SettingsDiff.changes(config, updated)) else ""
+        val (final, dnsNote) = withDnsSwitched(config, updated, now)
+        if (final != config) { store.save(final); FilterService.instance?.reloadConfig() }
         state.requests = Requests.cancel(state.requests, request.id)
-        events.add(EventKind.LOOSENED, "${request.kind} ${request.target}$how", now)
+        events.add(EventKind.LOOSENED, "${request.kind} ${request.target}$how$changes", now)
         if (request.kind == RequestKind.BROWSER) events.add(EventKind.BROWSER_APPROVED, request.target, now)
         if (request.kind == RequestKind.RELEASE_APP) events.add(EventKind.APP_RELEASED, request.target, now)
         PolicyRunner(context).runIfActive(now)
-        return Outcome.Done("Carried out.")
+        return Outcome.Done(if (dnsNote == null) "Carried out." else "Carried out, except the private DNS: $dnsNote")
     }
 
     /** Add or remove an app on the night list, always-blocked list, or window apps list. */
@@ -376,10 +378,26 @@ class ChangeManager(private val context: Context) {
             events.add(EventKind.LOOSEN_REQUESTED, "Requested settings change (asked $count times): $changes", now)
             return Outcome.Done("Settings change requested. Review on Sunday 20:00 to 21:00.")
         }
-        store.save(updated)
+        val (final, dnsNote) = withDnsSwitched(config(), updated, now)
+        store.save(final)
         FilterService.instance?.reloadConfig()
         PolicyRunner(context).runIfActive(now)
-        return Outcome.Done("Saved.")
+        return Outcome.Done(if (dnsNote == null) "Saved." else "Saved, except the private DNS: $dnsNote")
+    }
+
+    /**
+     * A new DNS host is switched to before it is saved, with the Private DNS lock left on. When Android will not take it, the old
+     * host stays in force and in the settings (fail closed), and the reason is logged and shown in the health check. Returns the
+     * settings to save and, on a failure, what to tell him.
+     */
+    private fun withDnsSwitched(before: LockConfig, updated: LockConfig, now: Instant): Pair<LockConfig, String?> {
+        if (updated.dnsHost == before.dnsHost || BuildConfig.PREVIEW || !store.protectionActive) return updated to null
+        if (!dpm.isDeviceOwnerApp(context.packageName)) return updated to null
+        val why: String = runCatching { PolicyApplier(context).switchDns(updated.dnsHost) }.getOrElse { it.message ?: it.javaClass.simpleName }
+            ?: return (updated to null).also { state.clearDnsChangeFailed() }
+        state.noteDnsChangeFailed(updated.dnsHost, why, before.dnsHost, now)
+        events.add(EventKind.DNS_CHANGE_FAILED, "${updated.dnsHost}: $why; kept ${before.dnsHost}", now)
+        return updated.copy(dnsHost = before.dnsHost) to "${updated.dnsHost} did not take ($why), so the phone keeps ${before.dnsHost}."
     }
 
     /** Lets a held-back new app through. When locked, recorded as request. */

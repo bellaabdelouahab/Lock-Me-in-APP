@@ -39,6 +39,8 @@ class Health(private val context: Context) {
         }
         val dnsMode = dpm.getGlobalPrivateDnsMode(admin)
         val dnsHost = dpm.getGlobalPrivateDnsHost(admin)
+        // The last host Android refused, with its reason, so a failed switch reads as more than "Problem".
+        val lastFailure = LockState(context).dnsChangeFailed?.let { " $it" }.orEmpty()
         if (fallbackSince == null) items += HealthItem(
             "Private DNS",
             dnsMode == DevicePolicyManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME && dnsHost == config.dnsHost && restrictions.getBoolean(Restrictions.CONFIG_PRIVATE_DNS),
@@ -47,7 +49,7 @@ class Health(private val context: Context) {
                 dnsHost != config.dnsHost -> "Pinned to $dnsHost instead of ${config.dnsHost}."
                 !restrictions.getBoolean(Restrictions.CONFIG_PRIVATE_DNS) -> "Uses ${config.dnsHost}, but the setting is not locked."
                 else -> "Pinned to ${config.dnsHost} and locked."
-            },
+            } + lastFailure,
         )
 
         // Private space (and its restriction) exists from Android 15; older versions have nothing to close.

@@ -9,8 +9,18 @@ import app.lockmein.core.PolicyPlan
 import app.lockmein.core.Restrictions
 
 /** What the phone refused or could not do, for the log. Empty means the plan is in force. */
-data class ApplyReport(val failed: List<String>, val unsuspendable: List<String> = emptyList()) {
+data class ApplyReport(
+    val failed: List<String>,
+    val unsuspendable: List<String> = emptyList(),
+    /** Android refused the planned DNS host and still holds this other host, the last one it accepted. */
+    val dnsRefused: DnsRefusal? = null,
+) {
     val ok get() = failed.isEmpty()
+}
+
+/** A DNS host Android would not take ([code] from DevicePolicyManager), and the host it kept. */
+data class DnsRefusal(val host: String, val code: Int, val kept: String) {
+    val reason get() = PolicyApplier.dnsError(code)
 }
 
 /**
@@ -27,15 +37,17 @@ class PolicyApplier(context: Context) {
         check(dpm.isDeviceOwnerApp(packageName)) { "this app is not the device owner" }
         val failed = mutableListOf<String>()
 
+        // Restrictions first, the Private DNS lock among them: it is never lifted while the protection is on. The device owner sets
+        // the DNS with the lock in place (the lock only closes the Settings page), so no pass, even one killed halfway, leaves it open.
         for (key in ALL_RESTRICTIONS) {
             if (key in plan.restrictions) dpm.addUserRestriction(admin, key) else dpm.clearUserRestriction(admin, key)
         }
+        var dnsRefused: DnsRefusal? = null
 
         val host = plan.privateDnsHost
         if (host == null) {
             // The server is down (DnsWatch): plain automatic DNS until it answers again, as he chose (FEATURES 3.17).
             if (dpm.getGlobalPrivateDnsMode(admin) != DevicePolicyManager.PRIVATE_DNS_MODE_OPPORTUNISTIC) {
-                dpm.clearUserRestriction(admin, Restrictions.CONFIG_PRIVATE_DNS)
                 val code = dpm.setGlobalPrivateDnsModeOpportunistic(admin)
                 if (code != DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR) failed += "automatic DNS: Android refused (code $code)"
             }
@@ -45,14 +57,17 @@ class PolicyApplier(context: Context) {
             val pinned = dpm.getGlobalPrivateDnsMode(admin) == DevicePolicyManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME &&
                 dpm.getGlobalPrivateDnsHost(admin) == host
             if (!pinned) {
-                // The DNS call is refused while the Private DNS restriction is on, so the host is set first.
-                dpm.clearUserRestriction(admin, Restrictions.CONFIG_PRIVATE_DNS)
                 val dns = setDnsHost(host)
-                if (dns == DevicePolicyManager.PRIVATE_DNS_SET_ERROR_HOST_NOT_SERVING) failed += "private DNS $host did not answer (offline?), tried again at the next pass"
-                else if (dns != DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR) failed += "private DNS $host: Android refused (code $dns)"
+                if (dns != DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR) {
+                    failed += "private DNS $host: ${dnsError(dns)}"
+                    // Android keeps the host it had. When that is another named host, it is the one that works: the caller goes back to it.
+                    val kept = dpm.getGlobalPrivateDnsHost(admin)
+                    if (dpm.getGlobalPrivateDnsMode(admin) == DevicePolicyManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME && !kept.isNullOrBlank() && kept != host) {
+                        dnsRefused = DnsRefusal(host, dns, kept)
+                    }
+                }
             }
         }
-        if (Restrictions.CONFIG_PRIVATE_DNS in plan.restrictions) dpm.addUserRestriction(admin, Restrictions.CONFIG_PRIVATE_DNS)
 
         // The clock and the zone come from the network and cannot be changed by hand (the restriction above closes the Settings page).
         dpm.setAutoTimeEnabled(admin, true)
@@ -75,7 +90,21 @@ class PolicyApplier(context: Context) {
         val (system, other) = refused.partition { isSystemApp(it) }
         failed += other.map { "suspend $it" }
         failed += dpm.setPackagesSuspended(admin, plan.unsuspended.toTypedArray(), false).map { "unsuspend $it" }
-        return ApplyReport(failed, system)
+        return ApplyReport(failed, system, dnsRefused)
+    }
+
+    /**
+     * Switches the private DNS to [host] for a settings change, with the lock left on. Android tests the host first and keeps the
+     * old one when it does not answer DNS-over-TLS. Returns null when [host] is in force (read back from Android), or why not.
+     */
+    fun switchDns(host: String): String? {
+        check(dpm.isDeviceOwnerApp(packageName)) { "this app is not the device owner" }
+        dpm.addUserRestriction(admin, Restrictions.CONFIG_PRIVATE_DNS)
+        val code = setDnsHost(host, attempts = 1)
+        if (code != DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR) return dnsError(code)
+        val now = dpm.getGlobalPrivateDnsHost(admin)
+        return if (dpm.getGlobalPrivateDnsMode(admin) == DevicePolicyManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME && now == host) null
+        else "Android reported success but holds ${now ?: "no host"}"
     }
 
     /**
@@ -85,7 +114,7 @@ class PolicyApplier(context: Context) {
     fun release(suspended: Set<String>): ApplyReport {
         check(dpm.isDeviceOwnerApp(packageName)) { "this app is not the device owner" }
         val failed = mutableListOf<String>()
-        for (key in ALL_RESTRICTIONS + Restrictions.CONFIG_PRIVATE_DNS) dpm.clearUserRestriction(admin, key)
+        for (key in ALL_RESTRICTIONS) dpm.clearUserRestriction(admin, key)
         dpm.setGlobalPrivateDnsModeOpportunistic(admin)
         dpm.setApplicationRestrictions(admin, ChromePolicy.PACKAGE, Bundle())
         for (pkg in app.lockmein.core.KnownBrowsers.CHROMIUM) runCatching { dpm.setApplicationRestrictions(admin, pkg, Bundle()) }
@@ -110,19 +139,37 @@ class PolicyApplier(context: Context) {
      * Android only accepts the host after the DNS server answers, so right after boot (no network yet) the first tries can fail.
      * A few tries cover that; if all fail, the report says so and the watchdog tries again later.
      */
-    private fun setDnsHost(host: String): Int {
+    private fun setDnsHost(host: String, attempts: Int = DNS_ATTEMPTS): Int {
         var code = DevicePolicyManager.PRIVATE_DNS_SET_ERROR_HOST_NOT_SERVING
-        repeat(DNS_ATTEMPTS) { attempt ->
-            code = dpm.setGlobalPrivateDnsModeSpecifiedHost(admin, host)
+        repeat(attempts) { attempt ->
+            code = setDnsHostOnce(host)
             if (code == DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR) return code
-            if (attempt < DNS_ATTEMPTS - 1) Thread.sleep(DNS_PAUSE_MS)
+            if (attempt < attempts - 1) Thread.sleep(DNS_PAUSE_MS)
         }
         return code
     }
 
+    /**
+     * One try, given at most [DNS_TIMEOUT_MS]: Android's own test of the host can hang on a server that never answers, and a pass
+     * stuck there was killed by Android before it finished. A try that runs out counts as the host not serving.
+     */
+    private fun setDnsHostOnce(host: String): Int {
+        val task = java.util.concurrent.FutureTask { dpm.setGlobalPrivateDnsModeSpecifiedHost(admin, host) }
+        Thread(task, "lock-me-in-dns").apply { isDaemon = true }.start()
+        return runCatching { task.get(DNS_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }
+            .getOrDefault(DevicePolicyManager.PRIVATE_DNS_SET_ERROR_HOST_NOT_SERVING)
+    }
+
     companion object {
-        private const val DNS_ATTEMPTS = 4
+        private const val DNS_ATTEMPTS = 3
         private const val DNS_PAUSE_MS = 5_000L
+        const val DNS_TIMEOUT_MS = 10_000L
+
+        fun dnsError(code: Int) = when (code) {
+            DevicePolicyManager.PRIVATE_DNS_SET_ERROR_HOST_NOT_SERVING -> "the host did not answer DNS-over-TLS (or took over 10 s)"
+            DevicePolicyManager.PRIVATE_DNS_SET_ERROR_FAILURE_SETTING -> "Android could not save it"
+            else -> "Android refused (code $code)"
+        }
 
         /** Every restriction the planner can set, so one that leaves the plan is cleared. */
         val ALL_RESTRICTIONS = listOf(
@@ -135,6 +182,7 @@ class PolicyApplier(context: Context) {
             Restrictions.ADD_PRIVATE_PROFILE,
             Restrictions.CONFIG_VPN,
             Restrictions.INSTALL_UNKNOWN_SOURCES_GLOBALLY,
+            Restrictions.CONFIG_PRIVATE_DNS,
         )
     }
 }

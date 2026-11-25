@@ -29,6 +29,10 @@ object DnsWatch {
         val failover = state.dnsFailover
         val now = System.currentTimeMillis()
         if (now - lastProbe < DnsFailover.PROBE_EVERY_MS - 5_000) return
+        // Only the host Android actually took can be what breaks the network: a host it refused (it kept the old one) is never probed
+        // into a fall back to unfiltered DNS.
+        val admin = android.content.ComponentName(context, AdminReceiver::class.java)
+        if (!failover.isFallback && dpm.getGlobalPrivateDnsHost(admin) != config.dnsHost) return
         if (!failover.isFallback && !looksBroken(context)) {
             if (failover.fails > 0) state.dnsFailover = failover.copy(fails = 0, firstFailAt = 0)
             return

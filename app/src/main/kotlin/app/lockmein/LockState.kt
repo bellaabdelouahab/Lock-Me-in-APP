@@ -96,6 +96,16 @@ class LockState(context: Context) {
         get() = if (prefs.contains(LAST_CODE)) prefs.getLong(LAST_CODE, 0L) else null
         set(value) = prefs.edit().apply { if (value == null) remove(LAST_CODE) else putLong(LAST_CODE, value) }.apply()
 
+    /** The last DNS host Android would not take, why, the host it kept, and when; for the health check. */
+    val dnsChangeFailed: String? get() = prefs.getString(DNS_CHANGE_FAILED, null)
+
+    fun noteDnsChangeFailed(host: String, reason: String, kept: String, now: Instant) {
+        val at = java.time.format.DateTimeFormatter.ofPattern("EEE d MMM HH:mm").withZone(java.time.ZoneId.systemDefault()).format(now)
+        prefs.edit().putString(DNS_CHANGE_FAILED, "The change to $host failed on $at: $reason. The phone kept $kept.").apply()
+    }
+
+    fun clearDnsChangeFailed() = prefs.edit().remove(DNS_CHANGE_FAILED).apply()
+
     /** Everything that opens the phone up and is waiting for Sunday review or friend code approval. */
     var requests: List<ChangeRequest>
         get() = Requests.decode(prefs.getString(REQUESTS, "[]").orEmpty())
@@ -182,6 +192,7 @@ class LockState(context: Context) {
         const val LAST_FILTER_HIT = "last_filter_hit"
         const val FILTER_DOWN = "filter_down"
         const val DNS_FALLBACK_SINCE = "dns_fallback_since"
+        const val DNS_CHANGE_FAILED = "dns_change_failed"
         const val DNS_FAILS = "dns_fails"
         const val DNS_FIRST_FAIL = "dns_first_fail"
         const val DNS_OKS = "dns_oks"
