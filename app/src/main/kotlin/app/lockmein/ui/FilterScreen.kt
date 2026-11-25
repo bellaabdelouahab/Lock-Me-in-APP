@@ -85,76 +85,39 @@ fun FilterScreen(onBack: () -> Unit) {
     val open = ReviewWindow.isOpen(now, zone) || previewOpen
     val records = remember(version) { runCatching { store.records() }.getOrDefault(emptyList()) }
     val config = remember(version) { ConfigStore(context).load() }
-    val hm = DateTimeFormatter.ofPattern("HH:mm").withZone(zone)
     val dayHm = DateTimeFormatter.ofPattern("EEE d MMM, HH:mm").withZone(zone)
     var skipped by remember { mutableStateOf(setOf<String>()) }
 
     Page("Screen filter", onBack) {
         val waiting = records.filter { it.waiting }
         val weekAgo = now.minusSeconds(7 * 24 * 3600)
+        // Training runs on its own (FEATURES 3.20): this card says where it stands and that nothing is asked of the user.
+        val training = remember(version) { context.getSharedPreferences("lock_training", android.content.Context.MODE_PRIVATE) }
+        val toSend = app.lockmein.core.Training.pending(records).size
+        val falseAlarms = records.count { it.label == BlockLabel.WRONG || it.label == BlockLabel.CLAIMED_FALSE }
+        val today = now.atZone(zone).toLocalDate()
+        val sentToday = training.getString("done_on", null) == today.toString()
+        val beforeNine = now.atZone(zone).toLocalTime().isBefore(app.lockmein.core.Training.SEND_FROM)
+        Heading("Training")
         InfoCard {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Figure(waiting.size.toString(), "to review")
+                Figure(toSend.toString(), "to send")
+                Figure(falseAlarms.toString(), "false alarms")
                 Figure(records.count { it.at.isAfter(weekAgo) }.toString(), "blocks this week")
-                Figure("${runCatching { store.savesToday(zone) }.getOrDefault(0)}", "saved today")
             }
             Text(
-                if (open) "Review open until ${hm.format(ReviewWindow.closesAt(now, zone))}."
-                else "Review opens daily 19:30 to 20:00. Next: ${dayHm.format(ReviewWindow.nextOpening(now, zone))}.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        OutcomeText(outcome)
-
-        Heading("Review")
-        if (!open) {
-            InfoCard {
-                Note("Saved screens stay encrypted and out of sight until the window opens. A block always completes; saving one only marks it for review.")
-            }
-        } else if (waiting.none { it.id !in skipped }) {
-            InfoCard { Note(if (waiting.isEmpty()) "Nothing waiting. Blocks you mark with \"Wrong block?\" show here." else "Everything left was skipped for now.") }
-        } else {
-            for (r in waiting.filter { it.id !in skipped }.take(20)) {
-                ReviewItem(r, store, inventory.label(r.pkg), dayHm) { label ->
-                    if (label == null) skipped = skipped + r.id
-                    else scope.background({ store.label(r.id, label, now) }) { version++ }
-                }
-            }
-        }
-
-        val labelled = records.filter { it.label == BlockLabel.WRONG || it.label == BlockLabel.CORRECT }
-        Heading("Labelled")
-        InfoCard {
-            Text(
-                "${labelled.count { it.label == BlockLabel.WRONG }} false alarms, ${labelled.count { it.label == BlockLabel.CORRECT }} correct blocks. " +
-                    "A personal judge is worth training from about 150 false alarms.",
+                when {
+                    training.getString("token", null) == null -> "Connecting to the training server. It happens on its own while protection is on."
+                    toSend == 0 -> "Everything is sent. Nothing to do."
+                    sentToday -> "Sent today. New blocks go tomorrow from 09:00 on Wi-Fi."
+                    beforeNine -> "Goes today from 09:00 on Wi-Fi, on its own."
+                    else -> "Goes on its own at the next Wi-Fi connection today."
+                },
                 style = MaterialTheme.typography.bodyMedium,
             )
-            var passphrase by remember { mutableStateOf<String?>(null) }
-            if (open) {
-                SecondaryButton("Export for training (encrypted)", {
-                    val phrase = newPassphrase()
-                    scope.background({
-                        runCatching {
-                            val (bytes, count) = store.exportBundle(phrase)
-                            val name = "lockmein-review-${now.atZone(zone).toLocalDate()}.lmib"
-                            saveToDownloads(context, name, "application/octet-stream", bytes)
-                            "$count blocks saved to Downloads as $name. Copy it to the laptop by USB."
-                        }
-                    }) { r ->
-                        r.onSuccess { passphrase = phrase }
-                        outcome = r.fold({ Outcome.Done(it) }, { Outcome.Refused("Could not export: ${it.message}") })
-                    }
-                })
-            } else {
-                Note("The export opens with the review window.")
-            }
-            passphrase?.let {
-                Text("Passphrase for this file (shown once):", style = MaterialTheme.typography.bodySmall)
-                Text(it, style = MaterialTheme.typography.titleMedium, fontFamily = FontFamily.Monospace)
-            }
+            Note("You do nothing here: tap \"Wrong?\" only on a block that should not have happened. Every block goes to training with its screen, encrypted. A better filter is offered once the server has 30 of your false alarms and it passes its check; installing it waits for the change gate.")
         }
+        OutcomeText(outcome)
 
         if (config != null) {
             Heading("Strictness per app")
@@ -206,7 +169,46 @@ fun FilterScreen(onBack: () -> Unit) {
                 if (judge != null) SecondaryButton("Take the judge off", {
                     scope.background({ manager.saveSettings(config.copy(filterJudge = null)) }) { outcome = it; version++ }
                 })
-                Note("Trained on the laptop (scripts/judge/train.py), and shipped only if it misses nothing the filter catches today. Installing one waits for the change gate; taking it off is instant.")
+                Note("Trained on the server from your blocks and offered here on its own when it passes; a file from the laptop works too. Installing one waits for the change gate; taking it off is instant.")
+            }
+        }
+
+        Heading("Look at saved screens (optional)")
+        if (!open) {
+            InfoCard {
+                Note("Opens daily 19:30 to 20:00. Saved screens stay encrypted and out of sight until then. Not needed for training.")
+            }
+        } else {
+            if (waiting.none { it.id !in skipped }) {
+                InfoCard { Note(if (waiting.isEmpty()) "Nothing saved to look at." else "Everything left was skipped for now.") }
+            } else {
+                for (r in waiting.filter { it.id !in skipped }.take(20)) {
+                    ReviewItem(r, store, inventory.label(r.pkg), dayHm) { label ->
+                        if (label == null) skipped = skipped + r.id
+                        else scope.background({ store.label(r.id, label, now) }) { version++ }
+                    }
+                }
+            }
+            InfoCard {
+                var passphrase by remember { mutableStateOf<String?>(null) }
+                SecondaryButton("Export to the laptop (encrypted)", {
+                    val phrase = newPassphrase()
+                    scope.background({
+                        runCatching {
+                            val (bytes, count) = store.exportBundle(phrase)
+                            val name = "lockmein-review-${now.atZone(zone).toLocalDate()}.lmib"
+                            saveToDownloads(context, name, "application/octet-stream", bytes)
+                            "$count blocks saved to Downloads as $name. Copy it to the laptop by USB."
+                        }
+                    }) { r ->
+                        r.onSuccess { passphrase = phrase }
+                        outcome = r.fold({ Outcome.Done(it) }, { Outcome.Refused("Could not export: ${it.message}") })
+                    }
+                })
+                passphrase?.let {
+                    Text("Passphrase for this file (shown once):", style = MaterialTheme.typography.bodySmall)
+                    Text(it, style = MaterialTheme.typography.titleMedium, fontFamily = FontFamily.Monospace)
+                }
             }
         }
 

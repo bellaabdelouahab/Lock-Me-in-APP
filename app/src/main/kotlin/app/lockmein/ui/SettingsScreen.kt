@@ -3,6 +3,9 @@ package app.lockmein.ui
 import androidx.compose.material.icons.filled.Lock
 import android.content.Intent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -419,18 +422,34 @@ fun SettingsScreen(onBack: () -> Unit) {
                 onDismissRequest = { activeDialog = SettingsDialog.NONE },
                 shape = CardShape,
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                title = { Text("Weekly open window", style = MaterialTheme.typography.titleMedium) },
+                title = { Text("Weekly settings window", style = MaterialTheme.typography.titleMedium) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Day of week:", style = MaterialTheme.typography.bodySmall)
-                        val days = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+                        // Seven buttons share a narrow dialog: one letter each, so the label always fits; the full name is said below.
+                        val days = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             days.forEachIndexed { idx, d ->
                                 val dayVal = idx + 1
-                                if (dayNum == dayVal) MenuButtonSmall(d) {}
-                                else SecondaryButtonSmall(d) { dayNum = dayVal }
+                                val picked = dayNum == dayVal
+                                androidx.compose.foundation.layout.Box(
+                                    Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                        .clip(androidx.compose.foundation.shape.CircleShape)
+                                        .background(if (picked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest)
+                                        .clickable { dayNum = dayVal },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        d.take(1),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = if (picked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
                             }
                         }
+                        Text(days.getOrNull(dayNum - 1) ?: "", style = MaterialTheme.typography.bodyMedium)
                         OutlinedTextField(
                             value = startText,
                             onValueChange = { startText = it },

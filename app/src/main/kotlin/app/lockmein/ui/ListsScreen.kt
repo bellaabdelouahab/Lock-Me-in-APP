@@ -77,7 +77,7 @@ fun ListsScreen(onBack: () -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
     var pendingRemoval by remember { mutableStateOf<PendingRemoval?>(null) }
 
-    val config = remember(version) { store.load() } ?: return Page("Apps", onBack) { Note("Finish the setup first.") }
+    val config = remember(version) { store.load() } ?: return Page("App rules", onBack) { Note("Finish the setup first.") }
     val isSetupComplete = remember(version) { store.setupComplete }
     val isLocked = remember(version) { manager.locked }
     val now = TrustedClock(context).now()
@@ -102,7 +102,7 @@ fun ListsScreen(onBack: () -> Unit) {
     )
 
     Page(
-        title = "Apps",
+        title = "App rules",
         onBack = onBack,
         bottomBar = {
             if (selectedTab < 4) {

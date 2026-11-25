@@ -26,6 +26,14 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -66,6 +74,7 @@ import app.lockmein.ui.HealthScreen
 import app.lockmein.ui.HomeScreen
 import app.lockmein.ui.ListsScreen
 import app.lockmein.ui.LocalOpenDrawer
+import app.lockmein.ui.LocalTopLevel
 import app.lockmein.ui.LockTheme
 import app.lockmein.ui.Navigation
 import app.lockmein.ui.Palette
@@ -106,6 +115,9 @@ private data class DrawerItem(
     val screen: Screen,
     val icon: ImageVector,
 )
+
+/** The side bar in groups, each opened by a quiet label. Names say what the page does, the same on the page's own title. */
+private data class DrawerGroup(val label: String?, val items: List<DrawerItem>)
 
 @Composable
 private fun LockApp(requested: String?) {
@@ -151,19 +163,31 @@ private fun LockApp(requested: String?) {
         scope.launch { drawerState.close() }
     }
 
-    val destinations = listOf(
-        DrawerItem("Home", Screen.HOME, Icons.Filled.Home),
-        DrawerItem("Apps", Screen.LISTS, Icons.Filled.Apps),
-        DrawerItem("Requests", Screen.WINDOW, Icons.Filled.EventAvailable),
-        DrawerItem("Holder code", Screen.EMERGENCY, Icons.Filled.Key),
-        DrawerItem("Is it working?", Screen.HEALTH, Icons.Filled.CheckCircle),
-        DrawerItem("Weekly report", Screen.REPORT, Icons.Filled.Insights),
-        DrawerItem("Phone use", Screen.PHONE_USE, Icons.Filled.BarChart),
-        DrawerItem("Screen filter", Screen.FILTER, Icons.Filled.Shield),
-        DrawerItem("Themes & wallpaper", Screen.THEMES, Icons.Filled.Palette),
-        DrawerItem("MCP link", Screen.REMOTE, Icons.Filled.Link),
-        DrawerItem("Settings", Screen.SETTINGS, Icons.Filled.Settings),
+    val groups = listOf(
+        DrawerGroup(null, listOf(
+            DrawerItem("Home", Screen.HOME, Icons.Filled.Home),
+        )),
+        DrawerGroup("What is closed", listOf(
+            DrawerItem("App rules", Screen.LISTS, Icons.Filled.Apps),
+            DrawerItem("Browsers", Screen.BROWSERS, Icons.Filled.Language),
+            DrawerItem("Screen filter", Screen.FILTER, Icons.Filled.Shield),
+        )),
+        DrawerGroup("Changing it", listOf(
+            DrawerItem("Change requests", Screen.WINDOW, Icons.Filled.EventAvailable),
+            DrawerItem("Friend's code", Screen.EMERGENCY, Icons.Filled.Key),
+        )),
+        DrawerGroup("How it is going", listOf(
+            DrawerItem("Health check", Screen.HEALTH, Icons.Filled.CheckCircle),
+            DrawerItem("Weekly report", Screen.REPORT, Icons.Filled.Insights),
+            DrawerItem("App usage", Screen.PHONE_USE, Icons.Filled.BarChart),
+        )),
+        DrawerGroup("App", listOf(
+            DrawerItem("Look and wallpaper", Screen.THEMES, Icons.Filled.Palette),
+            DrawerItem("Connect Claude", Screen.REMOTE, Icons.Filled.Link),
+            DrawerItem("Settings", Screen.SETTINGS, Icons.Filled.Settings),
+        )),
     )
+    val topLevel = groups.flatMap { g -> g.items.map { it.screen } }.toSet() + Screen.ABOUT
 
     @Composable
     fun DrawerHeader() {
@@ -189,7 +213,16 @@ private fun LockApp(requested: String?) {
 
     @Composable
     fun DrawerItems() {
-        destinations.forEach { item ->
+        groups.forEach { group ->
+        if (group.label != null) {
+            Text(
+                group.label,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 28.dp, end = 24.dp, top = 16.dp, bottom = 6.dp),
+            )
+        }
+        group.items.forEach { item ->
             val isSelected = screen == item.screen
             NavigationDrawerItem(
                 label = { Text(item.title, style = MaterialTheme.typography.labelLarge) },
@@ -207,6 +240,7 @@ private fun LockApp(requested: String?) {
                     unselectedTextColor = MaterialTheme.colorScheme.onSurface,
                 ),
             )
+        }
         }
 
         HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
@@ -235,10 +269,26 @@ private fun LockApp(requested: String?) {
         )
     }
 
+    /** Always scrolls a little past the last item, even when everything fits, so the bottom items can be pulled up to the thumb. */
+    @Composable
+    fun DrawerBody() {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val room = maxHeight
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding()) {
+                Column(Modifier.heightIn(min = room + 96.dp)) {
+                    DrawerHeader()
+                    DrawerItems()
+                    Spacer(Modifier.height(24.dp))
+                }
+            }
+        }
+    }
+
     @Composable
     fun MainContent() {
         CompositionLocalProvider(
             LocalOpenDrawer provides { scope.launch { drawerState.open() } },
+            LocalTopLevel provides (screen in topLevel),
         ) {
             Navigation(navigate = { screen = it }) {
                 when (screen) {
@@ -269,8 +319,7 @@ private fun LockApp(requested: String?) {
                     drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                     drawerContentColor = MaterialTheme.colorScheme.onSurface,
                 ) {
-                    DrawerHeader()
-                    DrawerItems()
+                    DrawerBody()
                 }
             },
         ) {
@@ -284,8 +333,7 @@ private fun LockApp(requested: String?) {
                     drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                     drawerContentColor = MaterialTheme.colorScheme.onSurface,
                 ) {
-                    DrawerHeader()
-                    DrawerItems()
+                    DrawerBody()
                 }
             },
         ) {

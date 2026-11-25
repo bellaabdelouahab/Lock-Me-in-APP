@@ -33,7 +33,7 @@ fun RemoteScreen(onBack: () -> Unit) {
     // The link's state changes on its own (connects, drops, reconnects): refreshed every few seconds while the page is open.
     LaunchedEffect(Unit) { while (true) { delay(3_000); version++ } }
 
-    Page("MCP link", onBack) {
+    Page("Connect Claude", onBack) {
         InfoCard {
             Text(
                 when {

@@ -30,7 +30,13 @@ class DeviceInventory(private val context: Context) {
             .sortedBy { it.label.lowercase() }
     }
 
-    fun label(packageName: String): String = runCatching { pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString() }.getOrDefault(packageName)
+    /** The app's name; a suspended, hidden or disabled app still has one. Falls back to the package id only when the app is gone. */
+    fun label(packageName: String): String = runCatching { pm.getApplicationLabel(info(packageName)).toString() }.getOrDefault(packageName)
+
+    fun isInstalled(packageName: String): Boolean = runCatching { info(packageName) }.isSuccess
+
+    private fun info(packageName: String) =
+        pm.getApplicationInfo(packageName, PackageManager.MATCH_DISABLED_COMPONENTS or PackageManager.MATCH_UNINSTALLED_PACKAGES)
 
     /** Feed and video apps, the usual night pull. Used only to pre-tick the setup list. */
     fun suggestedNightApps(): Set<String> = launchableApps().map { it.packageName }.filter { app.lockmein.core.NightRisk.warning(it) != null }.toSet()

@@ -64,6 +64,9 @@ import kotlinx.coroutines.withContext
 
 private val CLOCK = DateTimeFormatter.ofPattern("HH:mm")
 
+/** Closed apps listed on Home: three keeps the whole page on one screen; the rest are a tap away. */
+private const val SHOWN_ON_HOME = 3
+
 @Composable
 fun HomeScreen() {
     val context = LocalContext.current
@@ -133,6 +136,7 @@ private fun WelcomeStep(number: Int, title: String, text: String) {
  * 3. Which apps are closed now, and why.
  * 4. The three things done most: Apps, Requests (with what waits), Friend's code.
  * Everything else lives on its own page: the windows' times on Requests and Apps, the filter's week on Report, the build on About.
+ * It fits one phone screen without scrolling.
  */
 @Composable
 private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) {
@@ -201,15 +205,15 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
     }
     val failingHealth = healthItems?.count { !it.ok } ?: 0
 
-    TintedCard(Modifier, Color.Unspecified, quiet = true, padding = 20.dp) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+    TintedCard(Modifier, Color.Unspecified, quiet = true, padding = 16.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
             Ring(
                 progress = fraction(spanStart, spanEnd, now),
-                size = 124.dp,
-                stroke = 8.dp,
+                size = 104.dp,
+                stroke = 7.dp,
                 color = MaterialTheme.colorScheme.primary,
             ) {
-                Text(short(Duration.between(now, spanEnd)), style = MaterialTheme.typography.headlineSmall, maxLines = 1)
+                Text(short(Duration.between(now, spanEnd)), style = MaterialTheme.typography.titleLarge, maxLines = 1)
                 Text("until $nextPhaseName", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -232,10 +236,9 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
                 }
             }
         }
-        Spacer(Modifier.height(4.dp))
         RowDivider()
         Row(
-            modifier = Modifier.fillMaxWidth().clip(TileShape).clickable { navigate(Screen.HEALTH) }.padding(top = 8.dp, bottom = 2.dp),
+            modifier = Modifier.fillMaxWidth().clip(TileShape).clickable { navigate(Screen.HEALTH) }.padding(top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -263,7 +266,7 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
 
     // 3. The three things done most.
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        QuickAction(Modifier.weight(1f), Icons.Filled.Apps, "Apps") { navigate(Screen.LISTS) }
+        QuickAction(Modifier.weight(1f), Icons.Filled.Apps, "App rules") { navigate(Screen.LISTS) }
         QuickAction(Modifier.weight(1f), Icons.Filled.EventAvailable, "Requests", badge = waiting.size) { navigate(Screen.WINDOW) }
         QuickAction(Modifier.weight(1f), Icons.Filled.Key, "Friend's code") { navigate(Screen.EMERGENCY) }
     }
@@ -274,7 +277,7 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
     }
     val closedNow = closed?.count { it.closedNow }
     Heading(if (closedNow == null) "Closed now" else "Closed now ($closedNow)")
-    TintedCard(Modifier, Color.Unspecified, quiet = true, padding = 16.dp) {
+    TintedCard(Modifier, Color.Unspecified, quiet = true, padding = 12.dp) {
         val list = closed
         when {
             list == null -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -283,7 +286,7 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
             }
             list.isEmpty() -> Text("Nothing is closed at this hour.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             else -> {
-                val shown = list.sortedBy { it.closedNow }.take(4)
+                val shown = list.sortedBy { it.closedNow }.take(SHOWN_ON_HOME)
                 shown.forEachIndexed { index, app ->
                     AppRow(
                         packageName = app.packageName,
@@ -301,7 +304,7 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                if ((closed?.size ?: 0) > 4) "See all ${closed!!.size} in Apps" else "Open Apps",
+                if ((closed?.size ?: 0) > SHOWN_ON_HOME) "See all ${closed!!.size} in App rules" else "Open App rules",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f),
@@ -309,20 +312,7 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
             Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
         }
     }
-
-    // Only a build that is not the sealed one says so here (the full line is on About).
-    if (BuildConfig.PREVIEW || BuildConfig.TEST_BUILD || !owner) {
-        Text(
-            when {
-                BuildConfig.PREVIEW -> "Preview build: nothing is applied to this phone."
-                BuildConfig.TEST_BUILD -> "Test build: can be removed over USB."
-                else -> "Sealed build."
-            } + if (owner) " Device owner: yes." else " Device owner: no.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
-        )
-    }
+    // The build kind and device owner line lives on About.
 }
 
 /** Start and end of the current [phase]: walks the schedule's transitions from a day and a half back. */
@@ -365,12 +355,12 @@ private fun QuickAction(modifier: Modifier, icon: ImageVector, label: String, ba
             .clip(CardShape)
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .clickable(onClick = onClick)
-            .padding(top = 16.dp, bottom = 14.dp),
+            .padding(top = 10.dp, bottom = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Box(Modifier.size(width = 56.dp, height = 32.dp), contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
+        Box(Modifier.size(width = 52.dp, height = 28.dp), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
             if (badge > 0) {
                 Box(
                     Modifier.align(Alignment.TopEnd).size(20.dp).clip(CircleShape).background(Palette.Attention),

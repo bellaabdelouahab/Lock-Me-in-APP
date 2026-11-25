@@ -16,7 +16,7 @@ the phone's token.
 
 ## 2. Pair the phone (once)
 
-Lock Me In, side bar, **MCP link**: the server (`lockmein.abdelouahab.xyz`) and the pair code, then Connect. The page shows
+Lock Me In, side bar, **Connect Claude**: the server (`lockmein.abdelouahab.xyz`) and the pair code, then Connect. The page shows
 Connected within a few seconds; `/health` shows `"phone_connected": true`. The code works once: to pair again (new phone,
 reinstall), set a new `PAIR_CODE` and redeploy. Disconnect on the same page cuts the link at once.
 
@@ -42,7 +42,7 @@ resetting the setup. Every change is logged on the phone (REMOTE_CHANGE) and cou
 
 - "The phone is not connected (last seen N s ago)": the phone has no internet, or Android paused the app; it reconnects on its
   own (5 s, then up to every 60 s).
-- MCP link page says "the server did not accept this phone": the relay lost its data volume or was re-paired; pair again with a
+- Connect Claude page says "the server did not accept this phone": the relay lost its data volume or was re-paired; pair again with a
   new `PAIR_CODE`.
 
 `training_status` (read on the server): uploads, labels and every judge version the trainer made, with its held-out numbers (FEATURES 3.20).

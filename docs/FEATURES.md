@@ -146,7 +146,7 @@ no setup reset. Every change is logged as REMOTE_CHANGE and counted in the weekl
 - Reads: status (phase, what is closed and why, the health checks), phone use by day and raw events, weekly report, event log,
   apps and their lists, requests, settings, filter blocks; saved screenshots inside the review window only (relayed, never stored).
 - The relay keeps only the hash of the phone's token; the MCP endpoint is `/<MCP_SECRET>/mcp`; its access log is off so the secret
-  never reaches the logs. Pairing: Settings side bar, MCP link, server address and the PAIR_CODE (once). Disconnect any time.
+  never reaches the logs. Pairing: side bar, Connect Claude, server address and the PAIR_CODE (once). Disconnect any time.
 - Deploy: `server/docker-compose.yml` in Coolify, with MCP_SECRET, PAIR_CODE and a domain.
 
 ## 4. Scenarios

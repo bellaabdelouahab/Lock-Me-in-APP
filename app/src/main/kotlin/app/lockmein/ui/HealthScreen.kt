@@ -67,7 +67,7 @@ fun HealthScreen(onBack: () -> Unit) {
     val hasFailing = failing.isNotEmpty()
 
     Page(
-        title = "Is it working?",
+        title = "Health check",
         onBack = onBack,
         actions = {
             IconButton(onClick = { recheck() }, enabled = items != null) {

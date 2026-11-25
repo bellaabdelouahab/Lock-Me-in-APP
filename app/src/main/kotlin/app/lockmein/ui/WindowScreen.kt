@@ -63,7 +63,7 @@ fun WindowScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var version by remember { mutableIntStateOf(0) }
     var outcome by remember { mutableStateOf<Outcome?>(null) }
-    val config = store.load() ?: return Page("Requests", onBack) { Note("Finish the setup first.") }
+    val config = store.load() ?: return Page("Change requests", onBack) { Note("Finish the setup first.") }
 
     val schedule = Rules.schedule(config)
     val gate = ChangeGate(schedule)
@@ -88,7 +88,7 @@ fun WindowScreen(onBack: () -> Unit) {
     }
 
     Page(
-        title = "Requests",
+        title = "Change requests",
         onBack = onBack,
         bottomBar = {
             BottomBar {
@@ -250,13 +250,15 @@ fun WindowScreen(onBack: () -> Unit) {
         } else {
             AppCard {
                 held.forEachIndexed { index, pkg ->
-                    val label = inventory.label(pkg)
+                    // An app removed since it was held back has no name left on the phone: say so instead of a cut-off package id.
+                    val installed = inventory.isInstalled(pkg)
                     AppRow(
                         packageName = pkg,
-                        title = label,
-                        subtitle = "Installed recently (quarantined)",
-                    ) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        title = if (installed) inventory.label(pkg) else "Removed app",
+                        subtitle = if (installed) "Installed recently, held back" else pkg,
+                    ) {}
+                    // The two actions sit under the name, so the name keeps the full width.
+                    Row(Modifier.fillMaxWidth().padding(start = 44.dp), horizontalArrangement = Arrangement.End) {
                             TextButton(onClick = {
                                 scope.background({ manager.releaseApp(pkg) }) {
                                     outcome = it
@@ -277,7 +279,6 @@ fun WindowScreen(onBack: () -> Unit) {
                             }) {
                                 Text("Block", color = Palette.Closed)
                             }
-                        }
                     }
                     if (index < held.lastIndex) {
                         RowDivider(inset = 52.dp)

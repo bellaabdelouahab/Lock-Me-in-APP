@@ -89,7 +89,15 @@ fun AboutScreen(onBack: () -> Unit) {
                 Text("Lock Me In", style = MaterialTheme.typography.titleLarge)
             }
             Text("Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", style = MaterialTheme.typography.bodyMedium)
-            Text("Build kind: ${Updater.kind}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "Build kind: ${Updater.kind}" + when {
+                    BuildConfig.PREVIEW -> ". Preview: nothing is applied to this phone."
+                    BuildConfig.TEST_BUILD -> ". Test build: can be removed over USB."
+                    else -> "."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(if (isOwner) "Device owner: active on this phone." else "Device owner: inactive.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 "Keeps the phone calm at night through Android's device management layer. Rules are decided while calm and cannot be loosened on the spot.",

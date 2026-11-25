@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
@@ -108,16 +109,18 @@ enum class Screen {
     REPORT,
     SETTINGS,
     REMOVE,
-    HEALTH,    // Is it working?
+    HEALTH,    // Health check
     ABOUT,
     PHONE_USE,
     FILTER,    // Screen filter: review, per app, eval, judge
-    THEMES,    // Themes & wallpaper
-    REMOTE,    // MCP link
+    THEMES,    // Look and wallpaper
+    REMOTE,    // Connect Claude (MCP link)
 }
 
 val LocalNavigate = compositionLocalOf<(Screen) -> Unit> { {} }
 val LocalOpenDrawer = compositionLocalOf<() -> Unit> { {} }
+/** True on a page the side bar lists: its top bar shows the menu button; the phone's back still goes home. */
+val LocalTopLevel = compositionLocalOf { false }
 
 @Composable
 fun Navigation(navigate: (Screen) -> Unit, content: @Composable () -> Unit) =
@@ -125,7 +128,7 @@ fun Navigation(navigate: (Screen) -> Unit, content: @Composable () -> Unit) =
 
 /**
  * Common page skeleton:
- * - Top app bar on the page background: menu icon (Home) or back arrow (subpages), title in sentence case, optional actions.
+ * - Top app bar on the page background: menu icon (pages in the side bar) or back arrow (subpages), title in sentence case, optional actions.
  * - Single column, 16dp side margins, 12dp between blocks; sections are opened by a quiet [Heading].
  * - Pinned bottom bar for the one primary thumb-zone action.
  */
@@ -140,13 +143,14 @@ fun Page(
 ) {
     if (onBack != null) BackHandler(onBack = onBack)
     val openDrawer = LocalOpenDrawer.current
+    val topLevel = LocalTopLevel.current
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1) },
                 navigationIcon = {
-                    if (onBack != null) {
+                    if (onBack != null && !topLevel) {
                         IconButton(onClick = onBack) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
@@ -729,7 +733,7 @@ fun MultiAppPicker(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -752,6 +756,9 @@ fun MultiAppPicker(
                                 style = MaterialTheme.typography.titleLarge,
                                 modifier = Modifier.weight(1f),
                             )
+                            if (selected.isNotEmpty()) {
+                                TextButton(onClick = { selected.clear() }) { Text("Clear ${selected.size}") }
+                            }
                         }
                         OutlinedTextField(
                             value = query,
@@ -781,8 +788,9 @@ fun MultiAppPicker(
                     modifier = Modifier
                         .padding(padding)
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                        .padding(horizontal = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp),
                 ) {
                     if (filtered.isEmpty()) {
                         item {
@@ -796,33 +804,37 @@ fun MultiAppPicker(
                     } else {
                         items(filtered, key = { it.packageName }) { app ->
                             val isChecked = selected.any { it.packageName == app.packageName }
+                            val toggle = {
+                                if (isChecked) selected.removeAll { it.packageName == app.packageName }
+                                else selected.add(app)
+                            }
+                            // A picked app is tinted, not only ticked, so the choice reads from across the list.
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable {
-                                        if (isChecked) selected.removeAll { it.packageName == app.packageName }
-                                        else selected.add(app)
-                                    }
-                                    .padding(vertical = 10.dp),
+                                    .clip(TileShape)
+                                    .background(if (isChecked) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                                    .clickable { toggle() }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
                             ) {
-                                AppIcon(app.packageName, size = 40.dp)
+                                AppIcon(app.packageName, size = 36.dp)
                                 Text(
                                     app.label,
-                                    style = MaterialTheme.typography.titleMedium,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 1,
                                     modifier = Modifier.weight(1f),
                                 )
-                                Checkbox(
-                                    checked = isChecked,
-                                    onCheckedChange = { checked ->
-                                        if (checked) selected.add(app)
-                                        else selected.removeAll { it.packageName == app.packageName }
-                                    },
+                                Icon(
+                                    if (isChecked) Icons.Filled.CheckCircle else Icons.Filled.AddCircleOutline,
+                                    contentDescription = if (isChecked) "Picked" else "Pick",
+                                    tint = if (isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(24.dp),
                                 )
                             }
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         }
+                        item { Spacer(Modifier.height(8.dp)) }
                     }
                 }
             }

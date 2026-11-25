@@ -56,7 +56,7 @@ fun PhoneUseScreen(onBack: () -> Unit) {
     // Two small files (the day and the one before), read right here so the page shows at once.
     val use: DayUse? = remember(day) { runCatching { PhoneUse.summarize(PhoneUseLog(context).read(day), day, zone, Instant.now(), ignore) }.getOrNull() }
 
-    Page("Phone use", onBack) {
+    Page("App usage", onBack) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { day = day.minusDays(1) }, enabled = day > today.minusDays(PhoneUseLog.KEEP_DAYS)) {
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Day before")

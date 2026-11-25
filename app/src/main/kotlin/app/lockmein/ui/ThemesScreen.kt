@@ -39,7 +39,7 @@ fun ThemesScreen(onBack: () -> Unit) {
         }
     }
 
-    Page("Themes & wallpaper", onBack) {
+    Page("Look and wallpaper", onBack) {
         InfoCard {
             Text("Themes app", style = MaterialTheme.typography.titleSmall)
             Text(p.describe(state), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
