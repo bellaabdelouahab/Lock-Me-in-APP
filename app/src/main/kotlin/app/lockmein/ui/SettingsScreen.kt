@@ -3,6 +3,8 @@ package app.lockmein.ui
 import androidx.compose.material.icons.filled.Lock
 import android.content.Intent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.draw.clip
@@ -157,7 +159,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 icon = Icons.Filled.LocationOn,
                 title = "Location and fajr",
                 tint = Palette.Info,
-                value = "${current.latitude}, ${current.longitude} (${current.sunAngleDegrees} deg)",
+                value = (app.lockmein.core.Places.nameOf(current.latitude, current.longitude) ?: "${current.latitude}, ${current.longitude}") + " (${current.sunAngleDegrees} deg)",
                 onClick = { activeDialog = SettingsDialog.LOCATION },
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -480,33 +482,21 @@ fun SettingsScreen(onBack: () -> Unit) {
             )
         }
         SettingsDialog.LOCATION -> {
-            var latText by remember { mutableStateOf(current.latitude.toString()) }
-            var lonText by remember { mutableStateOf(current.longitude.toString()) }
-            var angleText by remember { mutableStateOf(current.sunAngleDegrees.toString()) }
-            var offsetText by remember { mutableStateOf(current.fajrOffsetMinutes.toString()) }
-
+            var place by remember { mutableStateOf(current) }
             AlertDialog(
                 onDismissRequest = { activeDialog = SettingsDialog.NONE },
                 shape = CardShape,
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
                 title = { Text("Location and fajr", style = MaterialTheme.typography.titleMedium) },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Fajr is calculated from your coordinates.", style = MaterialTheme.typography.bodySmall)
-                        OutlinedTextField(value = latText, onValueChange = { latText = it }, label = { Text("Latitude") }, singleLine = true, shape = FieldShape, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = lonText, onValueChange = { lonText = it }, label = { Text("Longitude") }, singleLine = true, shape = FieldShape, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = angleText, onValueChange = { angleText = it }, label = { Text("Sun angle (deg)") }, singleLine = true, shape = FieldShape, modifier = Modifier.fillMaxWidth())
-                        OutlinedTextField(value = offsetText, onValueChange = { offsetText = it }, label = { Text("Fajr offset (minutes)") }, singleLine = true, shape = FieldShape, modifier = Modifier.fillMaxWidth())
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        LocationFields(place) { place = it }
                     }
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        val lat = latText.toDoubleOrNull() ?: current.latitude
-                        val lon = lonText.toDoubleOrNull() ?: current.longitude
-                        val ang = angleText.toDoubleOrNull() ?: current.sunAngleDegrees
-                        val off = offsetText.toIntOrNull() ?: current.fajrOffsetMinutes
                         activeDialog = SettingsDialog.NONE
-                        save(current.copy(latitude = lat, longitude = lon, sunAngleDegrees = ang, fajrOffsetMinutes = off))
+                        save(current.copy(latitude = place.latitude, longitude = place.longitude, sunAngleDegrees = place.sunAngleDegrees, fajrOffsetMinutes = place.fajrOffsetMinutes))
                     }) { Text("Save") }
                 },
                 dismissButton = {

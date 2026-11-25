@@ -14,6 +14,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.lockmein.core.DnsHost
 import app.lockmein.core.LockConfig
+import app.lockmein.core.Place
+import app.lockmein.core.Places
+import app.lockmein.PhoneLocation
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import kotlinx.coroutines.launch
 import java.time.LocalTime
 
 /** A text field that keeps what was typed, and passes a value on only when it parses; [hint] says what is expected. */
@@ -82,31 +89,116 @@ fun RhythmFields(config: LockConfig, onChange: (LockConfig) -> Unit) {
     }
 }
 
-private data class Place(val name: String, val latitude: Double, val longitude: Double, val angle: Double)
-
-private val PLACES = listOf(
-    Place("Agadir", 30.4278, -9.5981, 19.0),
-    Place("Casablanca", 33.5731, -7.5898, 19.0),
-    Place("Marrakech", 31.6295, -7.9811, 19.0),
-    Place("Paris", 48.8566, 2.3522, 18.0),
-    Place("Brussels", 50.8503, 4.3517, 18.0),
-    Place("Geneva", 46.2044, 6.1432, 18.0),
-)
-
+/** Where the night ends: the phone's location when given, else a city picked from the list; the coordinates stay one tap away. */
 @Composable
 fun LocationFields(config: LockConfig, onChange: (LockConfig) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Note("Fajr, where the night ends, is worked out from where you are. Pick a place or type your own.")
-        PLACES.chunked(3).forEach { row ->
-            ButtonRow {
-                row.forEach { place ->
-                    SecondaryButtonSmall(place.name) { onChange(config.copy(latitude = place.latitude, longitude = place.longitude, sunAngleDegrees = place.angle)) }
-                }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var status by remember { mutableStateOf<String?>(null) }
+    var picking by remember { mutableStateOf(false) }
+    var advanced by remember { mutableStateOf(false) }
+
+    fun useLocation() {
+        status = "Finding where you are..."
+        scope.launch {
+            val loc = PhoneLocation.current(context)
+            if (loc == null) {
+                status = "Location is not available. Turn it on, or pick your city."
+            } else {
+                val (near, km) = Places.nearest(loc.first, loc.second)
+                val angle = if (km <= 300) Places.angleFor(near.country) else config.sunAngleDegrees
+                onChange(config.copy(latitude = round4(loc.first), longitude = round4(loc.second), sunAngleDegrees = angle))
+                status = if (km <= 30) "Set to your location, near ${near.name}." else "Set to your location."
             }
         }
-        ValidatedField("Latitude", config.latitude.toString(), "-66 to 66", { it.trim().toDoubleOrNull()?.takeIf { v -> v in -66.0..66.0 } }) { onChange(config.copy(latitude = it)) }
-        ValidatedField("Longitude", config.longitude.toString(), "-180 to 180", { it.trim().toDoubleOrNull()?.takeIf { v -> v in -180.0..180.0 } }) { onChange(config.copy(longitude = it)) }
-        ValidatedField("Sun angle for fajr (degrees)", config.sunAngleDegrees.toString(), "10 to 25 (19 in Morocco, 18 in much of Europe)", { it.trim().toDoubleOrNull()?.takeIf { v -> v in 10.0..25.0 } }) { onChange(config.copy(sunAngleDegrees = it)) }
-        ValidatedField("Fajr adjustment in minutes", config.fajrOffsetMinutes.toString(), "-60 to 60; compare with your prayer app", { it.trim().toIntOrNull()?.takeIf { n -> n in -60..60 } }) { onChange(config.copy(fajrOffsetMinutes = it)) }
+    }
+    val askPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted -> if (granted) useLocation() else status = "No location permission. Pick your city instead." }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Note("Fajr, where the night ends, is worked out from where you are.")
+        Text(
+            Places.nameOf(config.latitude, config.longitude) ?: "${config.latitude}, ${config.longitude}",
+            style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            "Sun angle ${config.sunAngleDegrees} deg" + if (config.fajrOffsetMinutes != 0) ", adjusted ${config.fajrOffsetMinutes} min" else "",
+            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        ButtonRow {
+            SecondaryButtonSmall("Use my location") {
+                val has = context.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (has) useLocation() else askPermission.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+            }
+            SecondaryButtonSmall("Pick a city") { picking = true }
+        }
+        status?.let { Note(it) }
+        androidx.compose.material3.TextButton(onClick = { advanced = !advanced }) {
+            Text(if (advanced) "Hide coordinates and angle" else "Coordinates and angle")
+        }
+        if (advanced) {
+            ValidatedField("Latitude", config.latitude.toString(), "-66 to 66", { it.trim().toDoubleOrNull()?.takeIf { v -> v in -66.0..66.0 } }) { onChange(config.copy(latitude = it)) }
+            ValidatedField("Longitude", config.longitude.toString(), "-180 to 180", { it.trim().toDoubleOrNull()?.takeIf { v -> v in -180.0..180.0 } }) { onChange(config.copy(longitude = it)) }
+            ValidatedField("Sun angle for fajr (degrees)", config.sunAngleDegrees.toString(), "10 to 25 (19 in Morocco, 18 in much of Europe)", { it.trim().toDoubleOrNull()?.takeIf { v -> v in 10.0..25.0 } }) { onChange(config.copy(sunAngleDegrees = it)) }
+            ValidatedField("Fajr adjustment in minutes", config.fajrOffsetMinutes.toString(), "-60 to 60; compare with your prayer app", { it.trim().toIntOrNull()?.takeIf { n -> n in -60..60 } }) { onChange(config.copy(fajrOffsetMinutes = it)) }
+        }
+    }
+
+    if (picking) {
+        CityPicker(onDismiss = { picking = false }) { place ->
+            picking = false
+            status = null
+            onChange(config.copy(latitude = place.latitude, longitude = place.longitude, sunAngleDegrees = Places.angleFor(place.country)))
+        }
     }
 }
+
+private fun round4(v: Double) = Math.round(v * 10_000) / 10_000.0
+
+/** Search by city or country; the list is grouped by country. */
+@Composable
+private fun CityPicker(onDismiss: () -> Unit, onPick: (Place) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    val found = remember(query) { Places.search(query) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = CardShape,
+        title = { Text("Pick your city") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = query, onValueChange = { query = it },
+                    placeholder = { Text("City or country") }, singleLine = true, shape = FieldShape,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
+                    if (found.isEmpty()) item { Note("Not in the list: close this and use \"Coordinates and angle\".") }
+                    found.groupBy { it.country }.forEach { (country, cities) ->
+                        item(key = "h-$country") {
+                            Text(
+                                country,
+                                style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
+                            )
+                        }
+                        cities.forEach { place ->
+                            item(key = place.name) {
+                                Text(
+                                    place.city,
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.fillMaxWidth().clickable { onPick(place) }.padding(vertical = 10.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+

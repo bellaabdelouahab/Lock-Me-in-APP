@@ -3,6 +3,8 @@
 
     <!-- Android checks the private DNS server from inside this app's process before it accepts the host. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Rough position only, asked when "Use my location" is tapped: fajr needs the city, never more. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <!-- The planner has to see every installed app to suspend it. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
