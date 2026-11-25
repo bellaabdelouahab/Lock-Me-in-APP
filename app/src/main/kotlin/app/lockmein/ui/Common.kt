@@ -11,6 +11,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -755,17 +758,26 @@ fun MultiAppPicker(
         else choices.filter { it.label.contains(query, ignoreCase = true) || it.packageName.contains(query, ignoreCase = true) }
     }
 
+    // A dialog window is not told the system bars' size on every phone (HyperOS put the button under the gesture bar), so they
+    // are measured here, on the app's own window, and whatever the dialog is not told is added as padding.
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val outsideTop = with(density) { WindowInsets.statusBars.getTop(density).toDp() }
+    val outsideBottom = with(density) { WindowInsets.navigationBars.getBottom(density).toDp() }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
+        val insideTop = with(density) { WindowInsets.statusBars.getTop(density).toDp() }
+        val insideBottom = with(density) { WindowInsets.navigationBars.getBottom(density).toDp() }
+        val extraTop = (outsideTop - insideTop).coerceAtLeast(0.dp)
+        val extraBottom = (outsideBottom - insideBottom).coerceAtLeast(0.dp)
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background,
         ) {
             Scaffold(
                 topBar = {
-                    Column(Modifier.statusBarsPadding()) {
+                    Column(Modifier.statusBarsPadding().padding(top = extraTop)) {
                         Row(
                             Modifier
                                 .fillMaxWidth()
@@ -799,12 +811,14 @@ fun MultiAppPicker(
                     }
                 },
                 bottomBar = {
+                    Box(Modifier.padding(bottom = extraBottom)) {
                     BottomBar {
                         PrimaryButton(
                             label = if (selected.isEmpty()) "Select apps" else "Add ${selected.size} app" + if (selected.size > 1) "s" else "",
                             enabled = selected.isNotEmpty(),
                             onClick = { onConfirm(selected.toList()) },
                         )
+                    }
                     }
                 },
             ) { padding ->
