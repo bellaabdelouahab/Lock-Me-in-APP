@@ -287,7 +287,12 @@ class ChangeManager(private val context: Context) {
             RequestKind.BLOCKED_REMOVE -> config.copy(alwaysBlocked = config.alwaysBlocked - request.target)
             RequestKind.WINDOW_REMOVE -> config.copy(windowApps = config.windowApps - request.target)
             RequestKind.WATCHED_REMOVE -> config.copy(watchedApps = config.watchedApps - request.target)
-            RequestKind.SETTINGS -> request.settingsApplied(config) ?: return Outcome.Refused("That request holds no settings.")
+            RequestKind.SETTINGS -> {
+                // A request saved by an older version holds a whole copy of the settings and no base: applying it could undo what
+                // was made stricter since, so it is refused (fail closed) and asked again.
+                if (request.base == null) return Outcome.Refused("This settings request was saved by an older version and could undo changes made since. Dismiss it and ask again.")
+                request.settingsApplied(config) ?: return Outcome.Refused("That request holds no settings.")
+            }
             RequestKind.BROWSER -> { state.approveBrowser(request.target); config }
             RequestKind.RELEASE_APP -> { state.release(request.target); config }
             RequestKind.REDO_SETUP -> { reopenSetup(); config }

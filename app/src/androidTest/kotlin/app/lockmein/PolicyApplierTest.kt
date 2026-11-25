@@ -308,9 +308,15 @@ class PolicyApplierTest {
         assertTrue(manager.approveRequest(reqId, mondayNoon) is Outcome.Refused)
         assertEquals("22:00", store.load()!!.nightStart)
 
-        // Inside Sunday window: approval applies the change
+        // Made stricter while the request waits: approving it must not undo that (it once put back the whole old copy).
+        val brave = "com.brave.browser"
+        assertTrue(manager.saveSettings(store.load()!!.copy(filterAppOffsets = mapOf(brave to -0.1f)), mondayNoon) is Outcome.Done)
+        assertEquals(mapOf(brave to -0.1f), store.load()!!.filterAppOffsets)
+
+        // Inside Sunday window: approval applies the change, and only the change
         assertTrue(manager.approveRequest(reqId, sunday8thEvening) is Outcome.Done)
         assertEquals("21:30", store.load()!!.nightStart)
+        assertEquals("the stricter filter set since stays", mapOf(brave to -0.1f), store.load()!!.filterAppOffsets)
     }
 
     @Test
