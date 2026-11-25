@@ -85,6 +85,7 @@ fun WindowScreen(onBack: () -> Unit) {
         RequestKind.SETTINGS -> "Change settings" to null
         RequestKind.REDO_SETUP -> "Redo setup" to null
         RequestKind.REMOVE_PROTECTION -> "Remove protection" to null
+        RequestKind.REKEY_FRIEND -> "New friend's code (monthly window)" to null
     }
 
     Page(

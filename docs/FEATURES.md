@@ -6,7 +6,7 @@ Status: version 0.3.0 (revised after an outside review against the owner's rules
 
 ## 1. What problem it solves
 
-You decide the rules while calm. The phone enforces them and you cannot loosen them on the spot. Tightening is instant. Anything that opens the phone up is a request that waits 7 days and is carried out only in a weekly one-hour window. A friend's code unblocks one app for an hour and changes nothing else.
+You decide the rules while calm. The phone enforces them and you cannot loosen them on the spot. Tightening is instant. Anything that opens the phone up is a request that waits 7 days and is carried out only in a weekly one-hour window. A friend's code unblocks one app for an hour and changes nothing else. A new friend's code is made either at once with the current code, or asked for and made in the monthly window (1st of the month, 20:00 to 21:00); the old code keeps working until a code from the new one is typed back.
 
 ## 2. Agreed design (from the planning questions)
 

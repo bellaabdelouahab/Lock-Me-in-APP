@@ -184,14 +184,33 @@ fun EmergencyScreen(onBack: () -> Unit) {
 
             Spacer(Modifier.height(8.dp))
 
+            // Two ways to a new friend's code: now, with the current code; or asked for and made in the monthly window.
             SecondaryButton(
-                label = "Re-key friend's code (new QR)",
+                label = "New friend's code (with the current one)",
                 onClick = {
                     rekeyingStep = 1
                     code = ""
                     rekeyError = null
                 },
             )
+            val due = remember(version) { manager.dueReKey() }
+            val asked = remember(version) { manager.requests().any { it.kind == app.lockmein.core.RequestKind.REKEY_FRIEND } }
+            when {
+                due != null -> SecondaryButton(
+                    label = "Make the new friend's code now (monthly window)",
+                    onClick = {
+                        newSecret = manager.reKeyFromRequest()
+                        confirmNewCode = ""
+                        rekeyError = null
+                        if (newSecret != null) rekeyingStep = 2
+                    },
+                )
+                asked -> Note("A new friend's code is requested. Make it here in the monthly window, the 1st of the month from 20:00 to 21:00.")
+                else -> SecondaryButton(
+                    label = "Ask for a new friend's code (monthly window)",
+                    onClick = { outcome = manager.requestReKey(); version++ },
+                )
+            }
         }
     }
 
@@ -453,7 +472,7 @@ fun EmergencyScreen(onBack: () -> Unit) {
                         }
                     }
                     Text(
-                        "Have Mom or your brother scan this with their authenticator app. Once confirmed, this QR code is never shown again.",
+                        "Have your friend scan this with their authenticator app, then type the code it shows. Until then the old code keeps working. Once confirmed, this QR code is never shown again.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -467,7 +486,8 @@ fun EmergencyScreen(onBack: () -> Unit) {
                 TextButton(
                     enabled = confirmNewCode.length == 6,
                     onClick = {
-                        val ok = manager.verifyEnrolment(confirmNewCode)
+                        // The new code replaces the old one only now, once the friend has it.
+                        val ok = manager.confirmNewSecret(secret, confirmNewCode)
                         if (ok) {
                             rekeyingStep = 0
                             newSecret = null

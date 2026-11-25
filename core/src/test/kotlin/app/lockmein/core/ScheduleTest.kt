@@ -81,6 +81,15 @@ class ScheduleTest {
     }
 
     @Test
+    fun `a monthly request is due in the window only when asked before it began`() {
+        val asked = at("2026-10-20", "10:00")
+        assertTrue(schedule.monthlyRequestDue(asked, at("2026-11-01", "20:10")))
+        assertFalse(schedule.monthlyRequestDue(asked, at("2026-11-01", "19:50")))
+        assertFalse(schedule.monthlyRequestDue(asked, at("2026-11-02", "20:10")))
+        assertFalse(schedule.monthlyRequestDue(at("2026-11-01", "20:05"), at("2026-11-01", "20:10")))
+    }
+
+    @Test
     fun `daytime for decisions ends at 20 00`() {
         assertFalse(schedule.isDaytime(at("2026-11-02", "05:29")))
         assertTrue(schedule.isDaytime(at("2026-11-02", "05:30")))

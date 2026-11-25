@@ -139,6 +139,10 @@ class Schedule(
         }
     }
 
+    /** A request for the monthly window (a new friend's code) is carried out in it only when made before that window began. */
+    fun monthlyRequestDue(requestedAt: Instant, now: Instant): Boolean =
+        inUninstallWindow(now) && requestedAt.isBefore(ZonedDateTime.of(now.atZone(zone).toLocalDate(), UNINSTALL_WINDOW_START, zone).toInstant())
+
     /** Start of the next monthly uninstall window, or [instant] if currently running. */
     fun nextUninstallWindowStart(instant: Instant): Instant {
         if (inUninstallWindow(instant)) return instant

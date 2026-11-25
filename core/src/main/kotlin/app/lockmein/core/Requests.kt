@@ -34,6 +34,9 @@ enum class RequestKind {
 
     /** Take the whole protection off (monthly uninstall window). */
     REMOVE_PROTECTION,
+
+    /** A new friend's code, made in the monthly window (1st, 20:00 to 21:00) when asked before it; or at once with the current code. */
+    REKEY_FRIEND,
 }
 
 @Serializable

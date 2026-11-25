@@ -209,7 +209,39 @@ class ChangeManager(private val context: Context) {
         state.lastCodeCounter = check.counter
         state.failedCodeAttempts = 0
         state.lockoutUntil = null
-        return newFriendSecret()
+        // Not saved yet: the old code keeps working until the friend has scanned the new one and a code from it is confirmed.
+        return FriendCode.newSecret()
+    }
+
+    /** Asks for a new friend's code without the current one: it can be made in the next monthly window. */
+    fun requestReKey(now: Instant = TrustedClock(context).now()): Outcome {
+        val count = state.addRequest(ChangeRequest(RequestKind.REKEY_FRIEND, "", now.toEpochMilli()), now)
+        events.add(EventKind.LOOSEN_REQUESTED, "Requested a new friend's code (asked $count times)", now)
+        val start = Rules.schedule(config()).nextUninstallWindowStart(now)
+        return Outcome.Done("Requested. Make the new code in the monthly window: ${java.time.format.DateTimeFormatter.ofPattern("EEE d MMM, HH:mm").withZone(java.time.ZoneId.systemDefault()).format(start)}.")
+    }
+
+    /** The waiting re-key request that may be carried out now (in the monthly window, asked before it), or null. */
+    fun dueReKey(now: Instant = TrustedClock(context).now()): ChangeRequest? {
+        val schedule = Rules.schedule(config())
+        return state.requests.firstOrNull { it.kind == RequestKind.REKEY_FRIEND && schedule.monthlyRequestDue(it.requestedAt, now) }
+    }
+
+    /** A new secret for a due re-key request (not saved until confirmed), or null when none is due. */
+    fun reKeyFromRequest(now: Instant = TrustedClock(context).now()): ByteArray? = dueReKey(now)?.let { FriendCode.newSecret() }
+
+    /**
+     * Saves [secret] as the friend's code once a code made from it is typed back, so the friend surely has it.
+     * Any re-key request is then done.
+     */
+    fun confirmNewSecret(secret: ByteArray, code: String, now: Instant = TrustedClock(context).now()): Boolean {
+        val check = CodeChecker(secret).check(code, now, null)
+        if (check !is CodeCheck.Accepted) return false
+        secrets.save(secret)
+        state.lastCodeCounter = check.counter
+        state.requests = state.requests.filterNot { it.kind == RequestKind.REKEY_FRIEND }
+        events.add(EventKind.LOOSENED, "New friend's code", now)
+        return true
     }
 
     /** The waiting requests, sorted by most asked first. */
@@ -260,6 +292,7 @@ class ChangeManager(private val context: Context) {
             RequestKind.RELEASE_APP -> { state.release(request.target); config }
             RequestKind.REDO_SETUP -> { reopenSetup(); config }
             RequestKind.REMOVE_PROTECTION -> return Outcome.Refused("Use Remove Lock Me In during the monthly uninstall window.")
+            RequestKind.REKEY_FRIEND -> return Outcome.Refused("Make the new friend's code on the Friend's code page in the monthly window (1st of the month, 20:00 to 21:00).")
         }
         ConfigRules.problems(updated).firstOrNull()?.let { return Outcome.Refused(it) }
         if (updated != config) { store.save(updated); FilterService.instance?.reloadConfig() }
