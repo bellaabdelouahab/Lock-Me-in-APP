@@ -44,7 +44,7 @@ class FilterWatcher : Service() {
             }
             // Training uploads (FEATURES 3.20): their own thread too; once a day from 09:00 on an unmetered network.
             if (trainBusy.compareAndSet(false, true)) trainWorker.execute {
-                try { TrainingUpload.tick(this@FilterWatcher) } catch (e: Throwable) { Log.w("TrainingUpload", "tick failed", e) } finally { trainBusy.set(false) }
+                try { TrainingUpload.tick(this@FilterWatcher); RemoteLink.autoPair(this@FilterWatcher) } catch (e: Throwable) { Log.w("TrainingUpload", "tick failed", e) } finally { trainBusy.set(false) }
             }
             // On the uptime clock, which pauses while the phone sleeps: no wake-ups, and waking does not look like silence.
             main.postDelayed(this, FilterWatch.BEAT_EVERY_MS)

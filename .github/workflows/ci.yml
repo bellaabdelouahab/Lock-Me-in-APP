@@ -99,6 +99,7 @@ jobs:
       - run: ./gradlew :app:assembleRelease ${{ matrix.flags }} --console=plain
         env:
           LMI_KEYSTORE_PASSWORD: ${{ secrets.LMI_KEYSTORE_PASSWORD }}
+          LMI_PAIR_CODE: ${{ secrets.LMI_PAIR_CODE }}
       - run: mkdir -p dist && cp app/build/outputs/apk/release/app-release.apk dist/lock-me-in-${{ matrix.kind }}.apk
       - uses: actions/upload-artifact@v4
         with:

@@ -58,11 +58,16 @@ android {
             manifestPlaceholders["testOnly"] = if (preview) "false" else "true"
             buildConfigField("boolean", "PREVIEW", preview.toString())
             buildConfigField("boolean", "TEST_BUILD", (!preview).toString())
+            // Debug builds run tests on emulators: never the live relay's pair code.
+            buildConfigField("String", "PAIR_CODE", "\"\"")
         }
         release {
             manifestPlaceholders["testOnly"] = "false"
             buildConfigField("boolean", "PREVIEW", preview.toString())
             buildConfigField("boolean", "TEST_BUILD", testBuild.toString())
+            // The relay's one-time pair code, from a CI secret (never in the repo); a preview build never gets it.
+            val pairCode = if (preview) "" else (System.getenv("LMI_PAIR_CODE") ?: "").filter { it.isLetterOrDigit() || it == '-' }
+            buildConfigField("String", "PAIR_CODE", "\"$pairCode\"")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

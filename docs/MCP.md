@@ -16,7 +16,7 @@ the phone's token.
 
 ## 2. Pair the phone (once)
 
-Lock Me In, side bar, **Connect Claude**: the server (`lockmein.abdelouahab.xyz`) and the pair code, then Connect. The page shows
+Lock Me In connects on its own: the server is built in and the one-time pair code comes from the `LMI_PAIR_CODE` CI secret (the same value as PAIR_CODE in Coolify; never in the repo). By hand, if needed: Settings, **Connect Claude**: the server (`lockmein.abdelouahab.xyz`) and the pair code, then Connect. The page shows
 Connected within a few seconds; `/health` shows `"phone_connected": true`. The code works once: to pair again (new phone,
 reinstall), set a new `PAIR_CODE` and redeploy. Disconnect on the same page cuts the link at once.
 

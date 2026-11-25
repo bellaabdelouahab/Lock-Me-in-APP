@@ -28,7 +28,7 @@ fun RemoteScreen(onBack: () -> Unit) {
     var version by remember { mutableIntStateOf(0) }
     var outcome by remember { mutableStateOf<Outcome?>(null) }
     val paired = remember(version) { RemoteLink.isPaired(context) }
-    var url by remember { mutableStateOf(RemoteLink.server(context) ?: "") }
+    var url by remember { mutableStateOf(RemoteLink.server(context) ?: app.lockmein.core.Training.DEFAULT_SERVER) }
     var code by remember { mutableStateOf("") }
     // The link's state changes on its own (connects, drops, reconnects): refreshed every few seconds while the page is open.
     LaunchedEffect(Unit) { while (true) { delay(3_000); version++ } }

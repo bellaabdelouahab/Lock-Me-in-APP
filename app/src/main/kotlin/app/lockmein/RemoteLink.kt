@@ -47,6 +47,8 @@ object RemoteLink {
     @Volatile var lastCallAt: Long = 0
         private set
 
+    private const val AUTO = "lock_remote_auto"
+
     fun isPaired(context: Context) = Store(context).token() != null
     fun server(context: Context) = Store(context).url()
 
@@ -65,7 +67,29 @@ object RemoteLink {
         start(context)
     }
 
+    /**
+     * Connects to the owner's relay on its own (no typing): the server is built in and the one-time pair code comes with the
+     * build. Tried at most every 15 minutes; never again once paired, refused, or disconnected by hand. Blocks: off the main thread.
+     */
+    fun autoPair(context: Context, now: Long = System.currentTimeMillis()) {
+        if (BuildConfig.PREVIEW || BuildConfig.PAIR_CODE.isBlank() || isPaired(context)) return
+        val prefs = context.getSharedPreferences(AUTO, Context.MODE_PRIVATE)
+        if (prefs.getBoolean("done", false) || now - prefs.getLong("tried", 0) < 15 * 60_000L) return
+        prefs.edit().putLong("tried", now).apply()
+        try {
+            pair(context, app.lockmein.core.Training.DEFAULT_SERVER, BuildConfig.PAIR_CODE)
+            prefs.edit().putBoolean("done", true).apply()
+        } catch (e: IllegalStateException) {
+            // The server answered no (code used or wrong): asking again would not change that. Pair by hand on Connect Claude.
+            prefs.edit().putBoolean("done", true).apply()
+            EventLog(context).add(app.lockmein.core.EventKind.REMOTE_CHANGE, "Could not connect to the relay on its own: ${e.message}")
+        } catch (_: java.io.IOException) {
+            // No network: tried again later.
+        }
+    }
+
     fun disconnect(context: Context) {
+        context.getSharedPreferences(AUTO, Context.MODE_PRIVATE).edit().putBoolean("done", true).apply()
         Store(context).clear()
         stop()
         EventLog(context).add(app.lockmein.core.EventKind.REMOTE_CHANGE, "Disconnected from the relay")
