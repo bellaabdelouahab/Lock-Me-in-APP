@@ -269,6 +269,11 @@ the code, and the health page shows it. A pass that finds the settings naming a 
 another named host, goes back to that one the same way, so nothing keeps retrying a failing host. Passes run one at a time and
 never on the main thread (a filter block started one there). The fallback above only probes the host Android actually took.
 
+Approving a settings request (2026-11-25) applies only what it changed: the request keeps the settings in force when it was
+asked, and approval puts the difference on top of today's settings, lists as their drops and adds, maps key by key. Before,
+it put back the whole copy, and an approval at 11:18 undid Brave's stricter filter and its place on the night list, both set
+at 07:11. The request list and the MCP show what approval would change on that basis.
+
 ### 3.18 Closed apps' websites
 While an app is closed (always blocked, window app outside 20:00 to 21:30, night list, held new app, closed by the filter), its
 website is closed too: "I'll just open it in the browser" stops working. The screen filter reads the address bar of the browser

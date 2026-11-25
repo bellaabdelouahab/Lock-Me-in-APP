@@ -41,4 +41,32 @@ class SettingsDiffTest {
         val asked = now.copy(filterAppOffsets = mapOf("com.brave.browser" to -0.1f))
         assertEquals(listOf(SettingChange("filterAppOffsets.com.brave.browser", "none", "-0.1")), SettingsDiff.changes(now, asked))
     }
+
+    @Test
+    fun approvingARequestKeepsWhatWasMadeStricterSince() {
+        // Asked at 06:00: a new DNS host. At 07:11 Brave was made stricter and added to the night list. Approved at 11:18.
+        val base = now
+        val asked = base.copy(dnsHost = "dns.mine.example")
+        val current = base.copy(filterAppOffsets = mapOf("com.brave.browser" to -0.1f), nightClosed = base.nightClosed + "com.brave.browser")
+        val applied = ChangeRequest(RequestKind.SETTINGS, "", 0, settings = asked, base = base).settingsApplied(current)!!
+        assertEquals("dns.mine.example", applied.dnsHost)
+        assertEquals(mapOf("com.brave.browser" to -0.1f), applied.filterAppOffsets)
+        assertTrue("com.brave.browser" in applied.nightClosed)
+    }
+
+    @Test
+    fun aListChangeInTheRequestIsAppliedAsItsDropsAndAdds() {
+        val base = now.copy(nightClosed = setOf("a", "b"))
+        val asked = base.copy(nightClosed = setOf("a", "c"))
+        val current = base.copy(nightClosed = setOf("a", "b", "d"))
+        assertEquals(setOf("a", "c", "d"), SettingsDiff.merge(current, base, asked).nightClosed.toSet())
+        val m = SettingsDiff.merge(current.copy(filterAppOffsets = mapOf("x" to -0.1f)), base, base.copy(filterAppOffsets = mapOf("y" to 0.1f)))
+        assertEquals(mapOf("x" to -0.1f, "y" to 0.1f), m.filterAppOffsets)
+    }
+
+    @Test
+    fun anOldRequestWithoutABaseIsAppliedWhole() {
+        val asked = now.copy(nightStart = "23:00")
+        assertEquals(asked, ChangeRequest(RequestKind.SETTINGS, "", 0, settings = asked).settingsApplied(now.copy(filterSexyThreshold = 0.6f)))
+    }
 }

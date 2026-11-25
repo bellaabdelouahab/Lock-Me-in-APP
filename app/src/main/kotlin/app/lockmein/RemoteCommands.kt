@@ -270,7 +270,7 @@ class RemoteCommands(private val context: Context) {
                 add(buildJsonObject {
                     put("id", r.id); put("kind", r.kind.name); put("target", r.target); put("app", r.target.takeIf { it.isNotEmpty() }?.let { inventory.label(it) })
                     put("asked_times", r.count); put("first_asked", r.requestedAt.atZone(zone).toString())
-                    r.settings?.let { asked ->
+                    r.settingsApplied(manager.config())?.let { asked ->
                         put("changes", buildJsonArray {
                             app.lockmein.core.SettingsDiff.changes(manager.config(), asked).forEach { c ->
                                 add(buildJsonObject { put("field", c.field); put("now", c.before); put("asked", c.after) })

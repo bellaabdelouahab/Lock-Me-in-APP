@@ -29,6 +29,35 @@ object SettingsDiff {
         return diff("", a, b)
     }
 
+    /**
+     * The settings to apply when a request is approved: only what the request changed ([base] is the settings in force when it was
+     * asked, [asked] what it asked for), on top of [current]. Anything changed since (a stricter filter for one app, an app added to
+     * a list) stays. A list takes the request's drops and adds; a map or object is merged key by key.
+     */
+    fun merge(current: LockConfig, base: LockConfig, asked: LockConfig): LockConfig {
+        val c = json.encodeToJsonElement(LockConfig.serializer(), current).jsonObject
+        val b = json.encodeToJsonElement(LockConfig.serializer(), base).jsonObject
+        val a = json.encodeToJsonElement(LockConfig.serializer(), asked).jsonObject
+        return json.decodeFromJsonElement(LockConfig.serializer(), mergeObject(c, b, a))
+    }
+
+    private fun mergeObject(c: JsonObject, b: JsonObject, a: JsonObject): JsonObject {
+        val out = c.toMutableMap()
+        for (key in b.keys + a.keys) {
+            val was = b[key] ?: JsonNull
+            val want = a[key] ?: JsonNull
+            if (was == want) continue
+            val now = c[key] ?: JsonNull
+            out[key] = when {
+                was is JsonObject && want is JsonObject && now is JsonObject -> mergeObject(now, was, want)
+                was is JsonArray && want is JsonArray && now is JsonArray -> JsonArray(now.filter { it !in (was - want.toSet()) } + (want - was.toSet()).filter { it !in now })
+                else -> want
+            }
+            if (out[key] == JsonNull && key !in a) out.remove(key)
+        }
+        return JsonObject(out)
+    }
+
     /** One line for the event log and the MCP: "field: old to new; ..." (or "nothing" when the request changes nothing now). */
     fun summary(changes: List<SettingChange>): String = if (changes.isEmpty()) "nothing (it matches the settings in force)" else changes.joinToString("; ")
 

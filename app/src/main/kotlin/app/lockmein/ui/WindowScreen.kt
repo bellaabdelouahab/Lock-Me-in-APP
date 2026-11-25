@@ -146,7 +146,7 @@ fun WindowScreen(onBack: () -> Unit) {
                                 Text(targetLabel, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                             }
                             // What approving would change, against the settings in force now.
-                            request.settings?.let { asked ->
+                            request.settingsApplied(config)?.let { asked ->
                                 val changes = app.lockmein.core.SettingsDiff.changes(config, asked)
                                 if (changes.isEmpty()) {
                                     Text("Nothing: it matches the settings in force.", style = MaterialTheme.typography.bodyMedium)

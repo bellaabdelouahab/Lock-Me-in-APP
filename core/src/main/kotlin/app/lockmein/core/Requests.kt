@@ -55,8 +55,16 @@ data class ChangeRequest(
     val count: Int = 1,
     val requestTimes: List<Long> = listOf(requestedAtMillis),
     val settings: LockConfig? = null,
+    /** The settings in force when [settings] was asked for: approving applies only the difference (SettingsDiff.merge). */
+    val base: LockConfig? = null,
 ) {
     val id: String get() = "$kind:$target"
+
+    /**
+     * The settings approving this request would put in force on top of [current]: only what it changed. A request saved by an
+     * older version has no [base] and is applied whole.
+     */
+    fun settingsApplied(current: LockConfig): LockConfig? = settings?.let { asked -> base?.let { SettingsDiff.merge(current, it, asked) } ?: asked }
     val requestedAt: Instant get() = Instant.ofEpochMilli(requestedAtMillis)
 }
 
@@ -93,6 +101,7 @@ object Requests {
                 count = existing.count + 1,
                 requestTimes = existing.requestTimes + nowMillis,
                 settings = if (new.kind == RequestKind.SETTINGS && new.settings != null) new.settings else existing.settings,
+                base = if (new.kind == RequestKind.SETTINGS && new.settings != null) new.base else existing.base,
             )
             requests.map { if (it.id == new.id) updated else it }
         }

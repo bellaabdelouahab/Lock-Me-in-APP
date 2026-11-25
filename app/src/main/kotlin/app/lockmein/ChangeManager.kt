@@ -287,7 +287,7 @@ class ChangeManager(private val context: Context) {
             RequestKind.BLOCKED_REMOVE -> config.copy(alwaysBlocked = config.alwaysBlocked - request.target)
             RequestKind.WINDOW_REMOVE -> config.copy(windowApps = config.windowApps - request.target)
             RequestKind.WATCHED_REMOVE -> config.copy(watchedApps = config.watchedApps - request.target)
-            RequestKind.SETTINGS -> request.settings ?: return Outcome.Refused("That request holds no settings.")
+            RequestKind.SETTINGS -> request.settingsApplied(config) ?: return Outcome.Refused("That request holds no settings.")
             RequestKind.BROWSER -> { state.approveBrowser(request.target); config }
             RequestKind.RELEASE_APP -> { state.release(request.target); config }
             RequestKind.REDO_SETUP -> { reopenSetup(); config }
@@ -372,7 +372,7 @@ class ChangeManager(private val context: Context) {
                 FilterService.instance?.reloadConfig()
                 return Outcome.Done("Saved. Stricter takes effect at once.")
             }
-            val req = ChangeRequest(RequestKind.SETTINGS, "", now.toEpochMilli(), settings = updated)
+            val req = ChangeRequest(RequestKind.SETTINGS, "", now.toEpochMilli(), settings = updated, base = config())
             val count = state.addRequest(req, now)
             val changes = app.lockmein.core.SettingsDiff.summary(app.lockmein.core.SettingsDiff.changes(config(), updated))
             events.add(EventKind.LOOSEN_REQUESTED, "Requested settings change (asked $count times): $changes", now)
