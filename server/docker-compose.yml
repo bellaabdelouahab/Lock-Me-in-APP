@@ -42,16 +42,18 @@ services:
     labels:
       - traefik.enable=true
       - traefik.tcp.routers.lockmein-dot.entrypoints=dot
-      - traefik.tcp.routers.lockmein-dot.rule=HostSNI(`${DNS_DOMAIN:-dns.abdelouahab.xyz}`)
+      - traefik.tcp.routers.lockmein-dot.rule=HostSNI(`dns.abdelouahab.xyz`)
       - traefik.tcp.routers.lockmein-dot.tls=true
       - traefik.tcp.routers.lockmein-dot.tls.certresolver=letsencrypt
       - traefik.tcp.routers.lockmein-dot.service=lockmein-dot
       - traefik.tcp.services.lockmein-dot.loadbalancer.server.port=53
       # The same name over HTTP, only so Let's Encrypt can check it (port 80): every page answers 404.
-      - traefik.http.routers.lockmein-dns-cert.rule=Host(`${DNS_DOMAIN:-dns.abdelouahab.xyz}`)
+      - traefik.http.routers.lockmein-dns-cert.rule=Host(`dns.abdelouahab.xyz`)
       - traefik.http.routers.lockmein-dns-cert.entrypoints=https
       - traefik.http.routers.lockmein-dns-cert.tls.certresolver=letsencrypt
       - traefik.http.routers.lockmein-dns-cert.service=noop@internal
+      # Traefik wants a port for every container it routes, even one whose only HTTP router goes to noop.
+      - traefik.http.services.lockmein-dns-cert.loadbalancer.server.port=4000
     restart: unless-stopped
 volumes:
   relay-data:

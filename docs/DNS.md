@@ -17,6 +17,10 @@ it as `dns.abdelouahab.xyz` over DNS-over-TLS (port 853). Coolify's proxy holds 
    ```
 4. **Coolify proxy:** Servers, localhost, Proxy, Configuration. In the Traefik `command:` list add
    `- '--entrypoints.dot.address=:853'`, and under `ports:` add `- '853:853'`. Save, then Restart Proxy.
+   (Done 2026-11-25 by editing `/data/coolify/proxy/docker-compose.yml` and recreating the proxy. A proxy recreated by hand
+   loses the service networks Coolify attaches to it, and every site answers 504: reconnect each with
+   `sudo docker network connect <network> coolify-proxy`.) Labels use the literal host: Coolify escapes `${...}` in labels,
+   so a variable there reaches Traefik as text and the DoT router never matches.
 
 ## 2. Deploy
 
