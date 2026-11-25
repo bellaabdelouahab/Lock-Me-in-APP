@@ -12,11 +12,12 @@ object Rules {
         appPackage = appPackage,
         allowedBrowser = config.allowedBrowser,
         browsers = snapshot.browsers,
+        securedBrowsersOpen = config.openSecuredBrowsers,
         nightClosed = config.nightClosed,
         protectedPackages = snapshot.protectedPackages + unsuspendable,
         alwaysBlocked = config.alwaysBlocked,
         windowApps = config.windowApps,
-        watchedApps = config.watchedApps,
+        watchedApps = config.watchedNow(),
     )
 
     fun schedule(config: LockConfig, zone: ZoneId = ZoneId.systemDefault()) =

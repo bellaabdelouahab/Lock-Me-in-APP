@@ -35,6 +35,8 @@ data class LockConfig(
     val dnsHost: String,
     /** The one browser that stays open; every other browser is closed until requested. Null closes them all. */
     val allowedBrowser: String? = null,
+    /** Every browser in [KnownBrowsers.SECURED] stays open (and watched), not only [allowedBrowser]. Turning it on waits for the gate. */
+    val openSecuredBrowsers: Boolean = false,
     /** Apps closed from the night start until fajr. Everything else keeps running. (The old `nightAllowlist`, the reverse, is ignored on load.) */
     val nightClosed: Set<String> = emptySet(),
     val alwaysBlocked: Set<String> = ALWAYS_BLOCKED_DEFAULT,
@@ -83,6 +85,12 @@ data class LockConfig(
     )
 
     fun fajrConfig() = FajrConfig(latitude, longitude, sunAngleDegrees, fajrOffsetMinutes.toLong())
+
+    /** The browsers that stay open: the chosen one, plus every secured browser when that is on. */
+    fun openBrowsers(): Set<String> = setOfNotNull(allowedBrowser) + if (openSecuredBrowsers) KnownBrowsers.SECURED else emptySet()
+
+    /** What the screen filter watches: the chosen apps, plus every open browser (an open browser is always watched). */
+    fun watchedNow(): Set<String> = watchedApps + if (openSecuredBrowsers) KnownBrowsers.SECURED else emptySet()
 
     companion object {
         val ALWAYS_BLOCKED_DEFAULT: Set<String> = app.lockmein.core.ALWAYS_BLOCKED_DEFAULT

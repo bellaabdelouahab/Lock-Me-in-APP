@@ -110,6 +110,30 @@ class PolicyPlannerTest {
     }
 
     @Test
+    fun `with every secured browser open, the secured ones run and Tor, Opera and unknown browsers stay closed`() {
+        val tor = "org.torproject.torbrowser"; val opera = "com.opera.browser"; val aloha = "com.aloha.browser"; val edge = "com.microsoft.emmx"
+        val open = PolicyPlanner(rules.copy(securedBrowsersOpen = true, browsers = rules.browsers + aloha), "abc123.dns.nextdns.io")
+        val plan = open.plan(Phase.DAY, BuildMode.SEALED, Inventory(installed + tor + opera + aloha + edge))
+        assertTrue(listOf(brave, chrome, firefox, edge).none { it in plan.suspended })
+        assertTrue(listOf(tor, opera, aloha).all { it in plan.suspended })
+        // Off, only the chosen one stays open, as before.
+        assertTrue(listOf(chrome, firefox).all { it in planner.plan(Phase.DAY, BuildMode.SEALED, inventory).suspended })
+    }
+
+    @Test
+    fun `an open secured browser closes when the screen filter is off, because the filter is what secures it`() {
+        val open = PolicyPlanner(rules.copy(securedBrowsersOpen = true), "abc123.dns.nextdns.io")
+        val plan = open.plan(Phase.DAY, BuildMode.SEALED, inventory.copy(filterServiceEnabled = false))
+        assertTrue(listOf(brave, chrome, firefox).all { it in plan.suspended })
+    }
+
+    @Test
+    fun `every installed Chromium browser gets the managed configuration`() {
+        val edge = "com.microsoft.emmx"
+        assertEquals(setOf(brave, chrome, edge), planner.plan(Phase.DAY, BuildMode.SEALED, Inventory(installed + edge)).managedBrowsers)
+    }
+
+    @Test
     fun `Chrome gets managed configuration when it is installed`() {
         assertTrue(planner.plan(Phase.DAY, BuildMode.SEALED, inventory).managedChrome)
         assertFalse(planner.plan(Phase.DAY, BuildMode.SEALED, Inventory(installed - chrome)).managedChrome)

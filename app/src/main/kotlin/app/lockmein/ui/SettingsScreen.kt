@@ -104,7 +104,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     }
 
     val windowDayName = DayOfWeek.of(current.windowDay).getDisplayName(TextStyle.FULL, Locale.getDefault())
-    val browserLabel = current.allowedBrowser?.let { inventory.label(it) } ?: "No browser stays open"
+    val browserLabel = if (current.openSecuredBrowsers) "Every secured browser" else current.allowedBrowser?.let { inventory.label(it) } ?: "No browser stays open"
 
     Page("Settings", onBack) {
         OutcomeText(outcome)
@@ -135,7 +135,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             SettingsItem(
                 icon = Icons.Filled.Language,
-                title = "Approved browser",
+                title = "Browsers",
                 value = browserLabel,
                 onClick = { activeDialog = SettingsDialog.BROWSER },
             )
@@ -333,24 +333,42 @@ fun SettingsScreen(onBack: () -> Unit) {
                 found.map { AppInfo(it, inventory.label(it)) }
             }
             var selectedBrowser by remember { mutableStateOf(current.allowedBrowser) }
+            var allSecured by remember { mutableStateOf(current.openSecuredBrowsers) }
 
             AlertDialog(
                 onDismissRequest = { activeDialog = SettingsDialog.NONE },
                 shape = CardShape,
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                title = { Text("Approved browser", style = MaterialTheme.typography.titleMedium) },
+                title = { Text("Browsers", style = MaterialTheme.typography.titleMedium) },
                 text = {
                     LazyColumn {
-                        items(browserChoices) { b ->
+                        item {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { selectedBrowser = b.packageName }
+                                    .clickable { allSecured = true }
                                     .padding(vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                RadioButton(selected = selectedBrowser == b.packageName, onClick = { selectedBrowser = b.packageName })
+                                RadioButton(selected = allSecured, onClick = { allSecured = true })
+                                Column(Modifier.weight(1f)) {
+                                    Text("Every secured browser", style = MaterialTheme.typography.bodyMedium)
+                                    Text("Chrome, Edge, Brave, Firefox, Samsung, Mi Browser, all watched. Tor, Opera and VPN browsers stay closed.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                            Text("Or only one:", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                        }
+                        items(browserChoices) { b ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedBrowser = b.packageName; allSecured = false }
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                RadioButton(selected = !allSecured && selectedBrowser == b.packageName, onClick = { selectedBrowser = b.packageName; allSecured = false })
                                 AppIcon(b.packageName, size = 32.dp)
                                 Text(b.label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                             }
@@ -359,12 +377,12 @@ fun SettingsScreen(onBack: () -> Unit) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { selectedBrowser = null }
+                                    .clickable { selectedBrowser = null; allSecured = false }
                                     .padding(vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                RadioButton(selected = selectedBrowser == null, onClick = { selectedBrowser = null })
+                                RadioButton(selected = !allSecured && selectedBrowser == null, onClick = { selectedBrowser = null; allSecured = false })
                                 Text("No browser stays open", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                             }
                         }
@@ -373,7 +391,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                 confirmButton = {
                     TextButton(onClick = {
                         activeDialog = SettingsDialog.NONE
-                        save(current.copy(allowedBrowser = selectedBrowser))
+                        // "Every secured browser" keeps the one chosen before as well, so turning it off later returns to it.
+                        save(current.copy(allowedBrowser = selectedBrowser, openSecuredBrowsers = allSecured))
                     }) { Text("Save") }
                 },
                 dismissButton = {

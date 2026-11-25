@@ -61,6 +61,10 @@ class PolicyApplier(context: Context) {
         dpm.setShortSupportMessage(admin, SUPPORT_MESSAGE)
 
         dpm.setApplicationRestrictions(admin, ChromePolicy.PACKAGE, if (plan.managedChrome) chromeBundle() else Bundle())
+        // Edge and Brave read the same Chromium policies: private windows off, their own DNS off, safe search forced.
+        for (pkg in app.lockmein.core.KnownBrowsers.CHROMIUM - ChromePolicy.PACKAGE) {
+            runCatching { dpm.setApplicationRestrictions(admin, pkg, if (pkg in plan.managedBrowsers) chromeBundle() else Bundle()) }
+        }
 
         for (pkg in plan.uninstallBlocked) dpm.setUninstallBlocked(admin, pkg, true)
         dpm.setUserControlDisabledPackages(admin, plan.userControlDisabled.toList())
@@ -84,6 +88,7 @@ class PolicyApplier(context: Context) {
         for (key in ALL_RESTRICTIONS + Restrictions.CONFIG_PRIVATE_DNS) dpm.clearUserRestriction(admin, key)
         dpm.setGlobalPrivateDnsModeOpportunistic(admin)
         dpm.setApplicationRestrictions(admin, ChromePolicy.PACKAGE, Bundle())
+        for (pkg in app.lockmein.core.KnownBrowsers.CHROMIUM) runCatching { dpm.setApplicationRestrictions(admin, pkg, Bundle()) }
         dpm.setUninstallBlocked(admin, packageName, false)
         dpm.setUserControlDisabledPackages(admin, emptyList())
         dpm.setShortSupportMessage(admin, null)

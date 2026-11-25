@@ -20,6 +20,25 @@ object KnownBrowsers {
         "com.kiwibrowser.browser",
         // Not the Google app: the Gemini app runs through it, so closing it closed Gemini. Its searches still go through the DNS filter.
     )
+
+    /**
+     * Browsers that can be secured, open when the owner chooses "every secured browser": the screen filter watches them, their
+     * private tabs are sent home, a closed app's site closes in them, and Android's VPN lock keeps their VPN (Brave's) shut.
+     * Left out on purpose: Tor and Opera (their own tunnel goes around the DNS), DuckDuckGo and Vivaldi (a VPN of their own),
+     * Kiwi (extensions can add a proxy), and any browser not named here.
+     */
+    val SECURED: Set<String> = setOf(
+        CHROME,
+        "com.microsoft.emmx",
+        "com.brave.browser",
+        "org.mozilla.firefox",
+        "com.sec.android.app.sbrowser",
+        "com.mi.globalbrowser",
+        "com.android.browser",
+    )
+
+    /** Chromium browsers that read Chrome's managed configuration (private windows off, their own DNS off, safe search forced). */
+    val CHROMIUM: Set<String> = setOf(CHROME, "com.microsoft.emmx", "com.brave.browser")
 }
 
 /**

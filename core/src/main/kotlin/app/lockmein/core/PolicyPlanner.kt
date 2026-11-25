@@ -24,6 +24,8 @@ data class AppRules(
     val allowedBrowser: String?,
     /** Every browser installed; all but [allowedBrowser] are suspended unless approved. */
     val browsers: Set<String>,
+    /** Every browser in [KnownBrowsers.SECURED] stays open too. */
+    val securedBrowsersOpen: Boolean = false,
     /** The apps the owner picked to close at night. Everything else keeps running. */
     val nightClosed: Set<String>,
     /** Launcher, keyboard, SystemUI, Settings, dialer: never suspended, in any phase. */
@@ -60,6 +62,8 @@ data class PolicyPlan(
     val unsuspended: Set<String>,
     /** Chrome gets managed configuration (secure DNS off, private windows off, safe search forced). */
     val managedChrome: Boolean,
+    /** Every installed Chromium browser that gets the same managed configuration as Chrome. */
+    val managedBrowsers: Set<String> = emptySet(),
 )
 
 /** Turns the phase, the build mode and what is installed into the exact policy to apply. Pure, so it is tested here. */
@@ -80,6 +84,7 @@ class PolicyPlanner(private val rules: AppRules, private val privateDnsHost: Str
             suspended = suspended,
             unsuspended = managed - suspended,
             managedChrome = KnownBrowsers.CHROME in inventory.installed,
+            managedBrowsers = KnownBrowsers.CHROMIUM.intersect(inventory.installed),
         )
     }
 
@@ -101,13 +106,15 @@ class PolicyPlanner(private val rules: AppRules, private val privateDnsHost: Str
 
     private fun suspendedFor(phase: Phase, inventory: Inventory, dailyWindowOpen: Boolean): Set<String> {
         val managed = inventory.installed - rules.protectedPackages - rules.appPackage
-        val otherBrowsers = ((rules.browsers + KnownBrowsers.ALL) - setOfNotNull(rules.allowedBrowser) - inventory.approvedBrowsers).intersect(managed)
+        val secured = if (rules.securedBrowsersOpen) KnownBrowsers.SECURED else emptySet()
+        val otherBrowsers = ((rules.browsers + KnownBrowsers.ALL) - setOfNotNull(rules.allowedBrowser) - secured - inventory.approvedBrowsers).intersect(managed)
         val quarantined = inventory.quarantined.intersect(managed)
         val window = if (!dailyWindowOpen) rules.windowApps.intersect(managed) else emptySet()
         val nightOnly = if (phase == Phase.NIGHT) rules.nightClosed.intersect(managed) else emptySet()
         val blocked = rules.alwaysBlocked.intersect(managed)
         val filterBlocked = inventory.filterBlocked.intersect(managed)
-        val filterServiceOff = if (!inventory.filterServiceEnabled) rules.watchedApps.intersect(managed) else emptySet()
+        // A secured browser is open only because the filter watches it: with the filter off it closes like any watched app.
+        val filterServiceOff = if (!inventory.filterServiceEnabled) (rules.watchedApps + secured).intersect(managed) else emptySet()
         return (otherBrowsers + quarantined + window + nightOnly + blocked + filterBlocked + filterServiceOff) - inventory.temporarilyAllowed
     }
 }

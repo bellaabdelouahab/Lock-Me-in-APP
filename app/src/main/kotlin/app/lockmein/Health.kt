@@ -118,7 +118,7 @@ class Health(private val context: Context) {
 
         if (plan.managedChrome) {
             val chrome = !dpm.getApplicationRestrictions(admin, ChromePolicy.PACKAGE).isEmpty
-            items += HealthItem("Chrome settings", chrome, if (chrome) "Private windows off, safe search on, YouTube strict." else "Chrome is not configured: private windows and its own DNS work.")
+            items += HealthItem("Chrome settings", chrome, if (chrome) "Private windows off, safe search on, YouTube strict (Edge and Brave get the same)." else "Chrome is not configured: private windows and its own DNS work.")
         }
 
         val filterEnabled = FilterService.isWorking(context)

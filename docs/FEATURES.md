@@ -22,7 +22,7 @@ You decide the rules while calm. The phone enforces them and you cannot loosen t
 | Always blocked | A separate list that stays blocked in every phase |
 | Social apps | Usable by day until the cut-off, suspended at night |
 | YouTube | Blocked in every phase, the window included |
-| Browsers | One approved browser (recommended: Chrome, configured by the app). Every other browser, Brave, Mi Browser, Opera, Firefox, Tor, the Google app, is suspended. A new browser is a request like any other |
+| Browsers | One approved browser (recommended: Chrome, configured by the app), or every secured browser (Chrome, Edge, Brave, Firefox, Samsung Internet, Mi Browser), each watched by the screen filter, Chromium ones configured like Chrome. Tor, Opera and browsers with their own VPN or tunnel stay suspended. Switching to every secured browser waits for the change gate |
 | New apps | Quarantined (suspended). Letting one through is a request |
 | DNS | A private DNS host (NextDNS) is pinned and the setting is locked |
 | Friend code | The friend scans a QR code on their own phone, in person. No text, no link, no copy button |
@@ -78,7 +78,7 @@ An outside reviewer compared version 0.2.0 with the owner's rules (rule 14, D-20
 - The app itself and system essentials cannot be put on a list.
 
 ### 3.5 Browsers
-- One approved browser. Every other browser the phone knows (the ones that open web links, plus Brave, Mi Browser, Opera, Firefox, Edge, Tor, Vivaldi, Kiwi and the Google app) is suspended.
+- One approved browser, or every secured browser (Settings, Browsers; it waits for the change gate; a secured browser closes when the screen filter is off). Every other browser the phone knows (the ones that open web links, plus Brave, Mi Browser, Opera, Firefox, Edge, Tor, Vivaldi, Kiwi and the Google app) is suspended.
 - Requesting another is an ordinary 7-day request carried out in the window. Once approved it stays approved (see section 8).
 
 ### 3.6 New-app quarantine

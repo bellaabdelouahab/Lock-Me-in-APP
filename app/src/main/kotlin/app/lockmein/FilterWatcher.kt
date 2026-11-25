@@ -113,7 +113,7 @@ class FilterWatcher : Service() {
         try {
             val config = ConfigStore(this).load() ?: return
             val now = TrustedClock(this).now()
-            val watched = PolicyRunner(this).planFor(config, now, filterServiceEnabled = false).suspended.intersect(config.watchedApps)
+            val watched = PolicyRunner(this).planFor(config, now, filterServiceEnabled = false).suspended.intersect(config.watchedNow())
             val refused = dpm().setPackagesSuspended(admin(), watched.toTypedArray(), true).toList()
             EventLog(this).add(
                 EventKind.FILTER_BLOCKED,
@@ -132,7 +132,7 @@ class FilterWatcher : Service() {
             val config = ConfigStore(this).load() ?: return
             val now = TrustedClock(this).now()
             val closed = PolicyRunner(this).planFor(config, now, filterServiceEnabled = true).suspended
-            val open = config.watchedApps - closed
+            val open = config.watchedNow() - closed
             dpm().setPackagesSuspended(admin(), open.toTypedArray(), false)
             EventLog(this).add(EventKind.FILTER_CLEARED, "screen filter back on and answering: watched apps open again", now)
         } catch (e: Exception) {

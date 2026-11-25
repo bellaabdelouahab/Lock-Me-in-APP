@@ -26,12 +26,12 @@ object ClosedReasons {
         return PolicyRunner(context).planFor(config, now).suspended.map { pkg ->
             val why = when {
                 filterBlocked[pkg] != null -> "Closed by the screen filter until ${clock.format(filterBlocked[pkg])}."
-                filterOff && pkg in config.watchedApps -> "Watched app: closed while the screen filter is off or not answering. Turn it on in Accessibility; it opens a few seconds after."
+                filterOff && pkg in config.watchedNow() -> "Watched app: closed while the screen filter is off or not answering. Turn it on in Accessibility; it opens a few seconds after."
                 pkg in held -> "New app: closed until you let it through (friend's code, or approve it on Sunday 20:00 to 21:00)."
                 pkg in config.alwaysBlocked -> "Always blocked."
                 pkg in config.windowApps -> "Window app: open only from 20:00 to 21:30."
                 pkg in config.nightClosed -> "Closed at night, until fajr."
-                pkg in browsers -> "Other browser: only ${config.allowedBrowser?.let { DeviceInventory(context).label(it) } ?: "none"} stays open."
+                pkg in browsers || pkg in app.lockmein.core.KnownBrowsers.ALL -> if (config.openSecuredBrowsers) "Browser that can't be secured (its own VPN or tunnel goes around the filters)." else "Other browser: only ${config.allowedBrowser?.let { DeviceInventory(context).label(it) } ?: "none"} stays open."
                 else -> "Closed by the rules."
             }
             Reason(pkg, why, owner && runCatching { dpm.isPackageSuspended(admin, pkg) }.getOrDefault(false), pkg in held)

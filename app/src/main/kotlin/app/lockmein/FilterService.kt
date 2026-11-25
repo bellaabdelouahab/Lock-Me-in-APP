@@ -235,7 +235,7 @@ class FilterService : AccessibilityService() {
     private fun onForegroundAppChanged(pkg: String) {
         if (pkg in KnownBrowsers.ALL || pkg in (siteBrowsers ?: emptySet())) startSiteWatch(pkg) else stopSiteWatch()
         val config = ConfigStore(this).load()
-        val isWatched = config != null && WatchedApps.isWatched(pkg, config.watchedApps)
+        val isWatched = config != null && WatchedApps.isWatched(pkg, config.watchedNow())
 
         if (isWatched) {
             startSampling(pkg)

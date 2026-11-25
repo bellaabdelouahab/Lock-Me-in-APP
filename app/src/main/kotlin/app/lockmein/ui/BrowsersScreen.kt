@@ -40,13 +40,14 @@ fun BrowsersScreen(onBack: () -> Unit) {
 
     val inventory = remember { DeviceInventory(context) }
     val snapshot = remember(version) { inventory.read() }
-    val closed = ((snapshot.browsers + KnownBrowsers.ALL).filter { it in snapshot.installed } - setOfNotNull(config.allowedBrowser) - state.approvedBrowsers).sorted()
+    val closed = ((snapshot.browsers + KnownBrowsers.ALL).filter { it in snapshot.installed } - config.openBrowsers() - state.approvedBrowsers).sorted()
 
     Page("Browsers", onBack) {
         AppCard {
             CardTitle(Icons.Filled.Language, MaterialTheme.colorScheme.primary, "Browser policy")
             Text(
-                "Open: ${config.allowedBrowser?.let(inventory::label) ?: "None"}. Other browsers are closed to prevent filter bypass. Approving another requires requesting it for Sunday review (20:00 to 21:00) or using the friend's code.",
+                if (config.openSecuredBrowsers) "Every browser that can be secured is open and watched by the screen filter: Chrome, Edge, Brave, Firefox, Samsung Internet, Mi Browser. Browsers with their own VPN or tunnel (Tor, Opera, Aloha...) stay closed."
+                else "Open: ${config.allowedBrowser?.let(inventory::label) ?: "None"}. Other browsers are closed to prevent filter bypass. Approving another requires requesting it for Sunday review (20:00 to 21:00) or using the friend's code.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
