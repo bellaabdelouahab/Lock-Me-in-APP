@@ -105,7 +105,9 @@ def tool(name: str, doc: str):
 
     def register(fn):
         async def forward(**kwargs):
-            return await phone.call(name, {k: v for k, v in kwargs.items() if v is not None})
+            result = await phone.call(name, {k: v for k, v in kwargs.items() if v is not None})
+            # A bare list becomes one content item per element, and an empty one no content at all: wrap it.
+            return {"items": result, "count": len(result)} if isinstance(result, list) else result
 
         forward.__name__ = name
         forward.__doc__ = doc

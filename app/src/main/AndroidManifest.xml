@@ -3,6 +3,8 @@
 
     <!-- Android checks the private DNS server from inside this app's process before it accepts the host. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Reading the active network: the DNS fallback's "network up but not validated" check, and training's Wi-Fi-only rule. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Rough position only, asked when "Use my location" is tapped: fajr needs the city, never more. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.SET_WALLPAPER" />

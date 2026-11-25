@@ -32,6 +32,7 @@ import java.time.ZoneId
  */
 class RemoteCommands(private val context: Context) {
     private val zone: ZoneId = ZoneId.systemDefault()
+    private val hms = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")
     private val manager by lazy { ChangeManager(context) }
     private val inventory by lazy { DeviceInventory(context) }
     private val events by lazy { EventLog(context) }
@@ -207,7 +208,7 @@ class RemoteCommands(private val context: Context) {
         fun leads(list: List<app.lockmein.core.Lead>) = buildJsonArray {
             list.forEach { l ->
                 add(buildJsonObject {
-                    put("at", l.at.atZone(zone).toLocalTime().withNano(0).toString()); put("app", name(l.app) ?: "not named")
+                    put("at", hms.format(l.at.atZone(zone))); put("app", name(l.app) ?: "not named")
                     put("previous_app", name(l.previousApp)); put("seconds_since_unlock", l.sinceUnlockSeconds); put("started_by_notification_from", name(l.startedBy))
                 })
             }
@@ -225,7 +226,7 @@ class RemoteCommands(private val context: Context) {
             put("requests_to_open_up", d.loosenAsked)
             put("tightenings", d.tightened)
             put("top_apps", buildJsonArray { d.topApps.forEach { a -> add(buildJsonObject { put("app", name(a.pkg)); put("minutes", a.millis / 60_000) }) } })
-            put("moods", buildJsonArray { d.moods.forEach { m -> add(buildJsonObject { put("at", m.at.atZone(zone).toLocalTime().withNano(0).toString()); put("score", m.score); put("asked", m.asked) }) } })
+            put("moods", buildJsonArray { d.moods.forEach { m -> add(buildJsonObject { put("at", hms.format(m.at.atZone(zone))); put("score", m.score); put("asked", m.asked) }) } })
             put("usage_log_starts", log.firstDay()?.toString())
         }
     }

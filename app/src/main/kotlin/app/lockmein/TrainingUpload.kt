@@ -52,7 +52,9 @@ object TrainingUpload {
             val zone = ZoneId.systemDefault()
             val pending = Training.pending(store.records())
             val doneOn = prefs.getString("done_on", null)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-            if (!Training.due(TrustedClock(context).now().atZone(zone), doneOn, unmetered(context), pending.size)) return
+            // The time and what waits first: the network is only read when it would matter.
+            val now = TrustedClock(context).now().atZone(zone)
+            if (!Training.due(now, doneOn, unmetered = true, pending.size) || !unmetered(context)) return
             val key = get(server, "/train/key", token).getValue("public_key").jsonPrimitive.content
             var sent = 0
             for (record in pending.take(Training.MAX_PER_RUN)) {
