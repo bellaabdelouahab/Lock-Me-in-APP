@@ -249,7 +249,10 @@ private fun LockApp(requested: String?) {
     fun DrawerBody() {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val room = maxHeight
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding()) {
+            // Every time the side bar opens it starts at the top.
+            val scroll = rememberScrollState()
+            LaunchedEffect(drawerState.targetValue) { if (drawerState.targetValue == DrawerValue.Open) scroll.scrollTo(0) }
+            Column(Modifier.fillMaxSize().verticalScroll(scroll).navigationBarsPadding()) {
                 Column(Modifier.heightIn(min = room + 96.dp)) {
                     DrawerHeader()
                     DrawerItems()

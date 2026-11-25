@@ -151,44 +151,25 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
     val inventory = remember { DeviceInventory(context) }
     val waiting = state.requests
 
-    // Check for updates
-    var latestRelease by remember { mutableStateOf<Release?>(null) }
-    LaunchedEffect(Unit) {
-        latestRelease = withContext(Dispatchers.IO) { Updater.latest() }
-    }
-    val hasUpdate = Updater.isNewer(latestRelease)
+    // 1. A decision to make: setup not finished, or an update ready (the update card shows the download and takes one tap).
     var bannerDismissed by remember { mutableStateOf(false) }
-
-    // 1. A decision to make: setup not finished, or an update ready.
     val setupIncomplete = !store.setupComplete
-    if (!bannerDismissed && (setupIncomplete || hasUpdate)) {
+    if (setupIncomplete && !bannerDismissed) {
         Callout(
-            kind = if (setupIncomplete) StatusKind.ATTENTION else null,
-            icon = if (setupIncomplete) Icons.Filled.WarningAmber else Icons.Filled.SystemUpdate,
-            title = if (setupIncomplete) (if (store.redoing) "Setup reopened" else "Setup not complete")
-            else "Update ready: version ${latestRelease?.name}",
-            text = if (setupIncomplete) "Every change works at once until the setup passes every check and completes."
-            else latestRelease?.notes?.ifBlank { "A newer version is ready to install." } ?: "A newer version is ready to install.",
+            kind = StatusKind.ATTENTION,
+            icon = Icons.Filled.WarningAmber,
+            title = if (store.redoing) "Setup reopened" else "Setup not complete",
+            text = "Every change works at once until the setup passes every check and completes.",
             onDismiss = { bannerDismissed = true },
         ) {
-            if (setupIncomplete) {
-                PrimaryButton(
-                    label = if (store.redoing) "Go through steps" else "Finish setup",
-                    onClick = { navigate(Screen.SETUP) },
-                    modifier = Modifier.fillMaxWidth().height(44.dp),
-                )
-            } else if (hasUpdate) {
-                PrimaryButton(
-                    label = "Update now",
-                    onClick = {
-                        scope.launch {
-                            withContext(Dispatchers.IO) { Updater.install(context) {} }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(44.dp),
-                )
-            }
+            PrimaryButton(
+                label = if (store.redoing) "Go through steps" else "Finish setup",
+                onClick = { navigate(Screen.SETUP) },
+                modifier = Modifier.fillMaxWidth().height(44.dp),
+            )
         }
+    } else if (!setupIncomplete) {
+        UpdateCard(onlyIfNewer = true)
     }
 
     // 2. The phase as a ring that fills as it runs out, the time left in the middle, and whether Android confirms the rules.
