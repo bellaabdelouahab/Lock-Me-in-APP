@@ -59,7 +59,7 @@ class PolicyApplier(context: Context) {
             if (!pinned) {
                 val dns = setDnsHost(host)
                 if (dns != DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR) {
-                    failed += "private DNS $host: ${dnsError(dns)}"
+                    failed += "private DNS $host: ${dnsError(dns)}${if (dns == DNS_THREW) " ($lastDnsError)" else ""}"
                     // Android keeps the host it had. When that is another named host, it is the one that works: the caller goes back to it.
                     val kept = dpm.getGlobalPrivateDnsHost(admin)
                     if (dpm.getGlobalPrivateDnsMode(admin) == DevicePolicyManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME && !kept.isNullOrBlank() && kept != host) {
@@ -100,8 +100,8 @@ class PolicyApplier(context: Context) {
     fun switchDns(host: String): String? {
         check(dpm.isDeviceOwnerApp(packageName)) { "this app is not the device owner" }
         dpm.addUserRestriction(admin, Restrictions.CONFIG_PRIVATE_DNS)
-        val code = setDnsHost(host, attempts = 1)
-        if (code != DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR) return dnsError(code)
+        val code = setDnsHost(host, attempts = 2)
+        if (code != DevicePolicyManager.PRIVATE_DNS_SET_NO_ERROR) return if (code == DNS_THREW) "Android threw $lastDnsError" else dnsError(code)
         val now = dpm.getGlobalPrivateDnsHost(admin)
         return if (dpm.getGlobalPrivateDnsMode(admin) == DevicePolicyManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME && now == host) null
         else "Android reported success but holds ${now ?: "no host"}"
@@ -156,17 +156,32 @@ class PolicyApplier(context: Context) {
     private fun setDnsHostOnce(host: String): Int {
         val task = java.util.concurrent.FutureTask { dpm.setGlobalPrivateDnsModeSpecifiedHost(admin, host) }
         Thread(task, "lock-me-in-dns").apply { isDaemon = true }.start()
-        return runCatching { task.get(DNS_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }
-            .getOrDefault(DevicePolicyManager.PRIVATE_DNS_SET_ERROR_HOST_NOT_SERVING)
+        return try {
+            task.get(DNS_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (e: java.util.concurrent.TimeoutException) {
+            DNS_TIMED_OUT
+        } catch (e: java.util.concurrent.ExecutionException) {
+            lastDnsError = e.cause?.toString()
+            DNS_THREW
+        }
     }
+
+    /** What Android threw on the last try, for the reason given. */
+    private var lastDnsError: String? = null
 
     companion object {
         private const val DNS_ATTEMPTS = 3
         private const val DNS_PAUSE_MS = 5_000L
         const val DNS_TIMEOUT_MS = 10_000L
 
+        /** Not Android's codes: a try that ran out of time, or one where Android threw. */
+        const val DNS_TIMED_OUT = -2
+        const val DNS_THREW = -3
+
         fun dnsError(code: Int) = when (code) {
-            DevicePolicyManager.PRIVATE_DNS_SET_ERROR_HOST_NOT_SERVING -> "the host did not answer DNS-over-TLS (or took over 10 s)"
+            DevicePolicyManager.PRIVATE_DNS_SET_ERROR_HOST_NOT_SERVING -> "the host did not answer DNS-over-TLS"
+            DNS_TIMED_OUT -> "Android's test of the host took over 10 s"
+            DNS_THREW -> "Android threw an error"
             DevicePolicyManager.PRIVATE_DNS_SET_ERROR_FAILURE_SETTING -> "Android could not save it"
             else -> "Android refused (code $code)"
         }

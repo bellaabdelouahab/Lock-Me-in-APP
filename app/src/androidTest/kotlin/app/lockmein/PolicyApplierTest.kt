@@ -538,16 +538,18 @@ class PolicyApplierTest {
 
     @Test
     fun h2_aDnsHostAndroidRefusesGoesBackToTheOneInForceAndSaysWhy() {
-        assertTrue(store.protectionActive)
+        store.protectionActive = true
+        val first = PolicyRunner(context).run(store.load()!!)
+        assertEquals(emptyList<String>(), first.report.failed)
         val working = dpm.getGlobalPrivateDnsHost(admin)
-        assertNotNull(working)
+        assertEquals("dns.google", working)
         // As after an approved change to a server that does not answer: the settings name a host Android never took.
         store.save(store.load()!!.copy(dnsHost = "nothing.invalid"))
         PolicyRunner(context).run(store.load()!!)
         assertEquals("the settings go back to the host in force", working, store.load()!!.dnsHost)
         assertEquals(working, dpm.getGlobalPrivateDnsHost(admin))
-        assertTrue(users.hasUserRestriction(Restrictions.CONFIG_PRIVATE_DNS))
-        assertTrue(events.read().any { it.kind == EventKind.DNS_CHANGE_FAILED && "nothing.invalid" in it.detail })
+        assertTrue("the lock stays on", users.hasUserRestriction(Restrictions.CONFIG_PRIVATE_DNS))
+        assertTrue(events.read().toString(), events.read().any { it.kind == EventKind.DNS_CHANGE_FAILED && "nothing.invalid" in it.detail })
         val dns = Health(context).check().first { it.title == "Private DNS" }
         assertTrue(dns.detail, dns.ok)
         assertTrue(dns.detail, "nothing.invalid" in dns.detail)
