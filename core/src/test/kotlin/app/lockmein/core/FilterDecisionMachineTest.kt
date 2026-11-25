@@ -171,6 +171,47 @@ class FilterDecisionMachineTest {
     }
 
     @Test
+    fun `two very strong frames close the app at once, with no warning`() {
+        val clear = FilterScores(hentai = 0.99f, drawings = 0.01f, neutral = 0f)
+        assertIs<FilterAction.ShowWarning>(machine.processFrame(pkg, clear, t0))
+        val closed = machine.processFrame(pkg, clear, t0.plusMillis(500))
+        assertIs<FilterAction.ExitAndSuspend>(closed)
+        assertEquals(FilterAction.REASON_VERY_STRONG, (closed as FilterAction.ExitAndSuspend).reason)
+    }
+
+    @Test
+    fun `one very strong frame alone still only warns, and strong frames in two apps do not add up`() {
+        val clear = FilterScores(porn = 0.97f, neutral = 0f)
+        val fresh = FilterDecisionMachine(pornHentaiThreshold = 0.6f, sexyThreshold = 0.6f)
+        assertIs<FilterAction.ShowWarning>(fresh.processFrame(pkg, clear, t0))
+        assertIs<FilterAction.ShowWarning>(fresh.processFrame("com.other", clear, t0.plusMillis(500)))
+    }
+
+    @Test
+    fun `leaving within the 5 seconds again and again closes the app on the third warning`() {
+        val hit = FilterScores(porn = 0.70f, neutral = 0.30f)
+        for (i in 0 until 2) {
+            val at = t0.plusSeconds(60L * i)
+            assertIs<FilterAction.ShowWarning>(sure(machine, hit, at))
+            assertIs<FilterAction.ClearWarning>(machine.processFrame("com.miui.home", FilterScores(), at.plusSeconds(4)))
+            machine.reset()
+        }
+        val third = sure(machine, hit, t0.plusSeconds(120))
+        assertIs<FilterAction.ExitAndSuspend>(third)
+        assertEquals(FilterAction.REASON_DODGED, (third as FilterAction.ExitAndSuspend).reason)
+    }
+
+    @Test
+    fun `warnings more than 10 minutes apart are not a dodge`() {
+        val hit = FilterScores(porn = 0.70f, neutral = 0.30f)
+        for (i in 0 until 3) {
+            val at = t0.plusSeconds(400L * i)
+            assertIs<FilterAction.ShowWarning>(sure(machine, hit, at))
+            machine.reset()
+        }
+    }
+
+    @Test
     fun `once warned, one hit frame at the 5-second check closes the app`() {
         sure(machine, FilterScores(sexy = 0.8f), t0)
         machine.processFrame(pkg, FilterScores(neutral = 0.9f), t0.plusSeconds(2))

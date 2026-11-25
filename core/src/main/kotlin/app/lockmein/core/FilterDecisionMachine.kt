@@ -139,7 +139,15 @@ sealed interface FilterAction {
         val packageName: String,
         val duration: Duration = Duration.ofSeconds(30),
         val scores: FilterScores,
+        /** Why it closed: the 5-second check, a very strong screen, or warnings that kept being dodged. */
+        val reason: String = REASON_SECOND_CHECK,
     ) : FilterAction
+
+    companion object {
+        const val REASON_SECOND_CHECK = "second check"
+        const val REASON_VERY_STRONG = "very strong, closed at once"
+        const val REASON_DODGED = "warned 3 times in 10 min, closed at once"
+    }
 }
 
 sealed interface FilterState {
@@ -190,6 +198,30 @@ class FilterDecisionMachine(
 
     private val recent = ArrayDeque<Triple<String, Instant, Boolean>>()
 
+    /** Very strong frames of the app on screen, newest last: two close together close the app with no warning. */
+    private val strong = ArrayDeque<Pair<String, Instant>>()
+
+    /** When each app was last warned: leaving within the 5 seconds again and again does not get around the filter. */
+    private val warnings = HashMap<String, ArrayDeque<Instant>>()
+
+    /** A frame so clear it needs no warning: porn + hentai, or the anime model's explicit score, at [CLOSE_AT_ONCE] or more. */
+    fun isVeryStrong(scores: FilterScores): Boolean =
+        scores.porn + scores.hentai >= CLOSE_AT_ONCE || (scores.isDrawing && scores.animeExplicit >= CLOSE_AT_ONCE)
+
+    /** Warns, or closes at once when this app was already warned [DODGE_WARNINGS] - 1 times in [DODGE_WINDOW]. */
+    private fun warnOrClose(packageName: String, scores: FilterScores, now: Instant): FilterAction {
+        val times = warnings.getOrPut(packageName) { ArrayDeque() }
+        while (times.isNotEmpty() && Duration.between(times.first(), now) > DODGE_WINDOW) times.removeFirst()
+        times.addLast(now)
+        if (times.size >= DODGE_WARNINGS) {
+            times.clear()
+            state = FilterState.Idle
+            return FilterAction.ExitAndSuspend(packageName, suspensionDuration, scores, FilterAction.REASON_DODGED)
+        }
+        state = FilterState.WarningActive(packageName, now, scores)
+        return FilterAction.ShowWarning(packageName, scores)
+    }
+
     /** Whether this one frame is a hit by the thresholds (the base rule, no app offset). */
     fun frameHit(scores: FilterScores): Boolean = frameHit("", scores)
 
@@ -223,6 +255,20 @@ class FilterDecisionMachine(
         now: Instant,
     ): FilterAction {
         val sure = isHit(packageName, scores, now)
+
+        // Very strong on two frames of the same app within the agree window (about a second): closed with no warning.
+        while (strong.isNotEmpty() && (strong.first().first != packageName || Duration.between(strong.first().second, now) > AGREE_WINDOW)) strong.removeFirst()
+        if (frameHit(packageName, scores) && isVeryStrong(scores)) {
+            strong.addLast(packageName to now)
+            if (strong.size >= CLOSE_FRAMES) {
+                agreedFrames = recent.map { it.second to it.third }
+                recent.clear()
+                strong.clear()
+                state = FilterState.Idle
+                warnings[packageName]?.clear()
+                return FilterAction.ExitAndSuspend(packageName, suspensionDuration, scores, FilterAction.REASON_VERY_STRONG)
+            }
+        }
         // The second check, 5 seconds after the warning, needs this frame to be a hit: the warning was already sure.
         val warned = (state as? FilterState.WarningActive)?.packageName == packageName
         val hit = if (warned) frameHit(packageName, scores) || sure else sure
@@ -233,31 +279,18 @@ class FilterDecisionMachine(
 
         return when (val current = state) {
             is FilterState.Idle -> {
-                if (hit) {
-                    state = FilterState.WarningActive(
-                        packageName = packageName,
-                        hitStartedAt = now,
-                        initialScores = scores,
-                    )
-                    FilterAction.ShowWarning(packageName, scores)
-                } else {
-                    FilterAction.None
-                }
+                if (hit) warnOrClose(packageName, scores, now) else FilterAction.None
             }
 
             is FilterState.WarningActive -> {
                 // If user switched to another app, clear warning for previous app
                 if (current.packageName != packageName) {
                     val prev = current.packageName
-                    state = if (hit) {
-                        FilterState.WarningActive(packageName, now, scores)
-                    } else {
-                        FilterState.Idle
-                    }
                     if (hit) {
                         // Cleared for prev, immediately show for new app
-                        FilterAction.ShowWarning(packageName, scores)
+                        warnOrClose(packageName, scores, now)
                     } else {
+                        state = FilterState.Idle
                         FilterAction.ClearWarning(prev, "Switched away from app")
                     }
                 } else {
@@ -291,6 +324,7 @@ class FilterDecisionMachine(
         val prev = state
         state = FilterState.Idle
         recent.clear()
+        strong.clear() // the warnings stay: leaving the app is the dodge they count
         return if (prev is FilterState.WarningActive) {
             FilterAction.ClearWarning(prev.packageName, "Service reset")
         } else {
@@ -305,5 +339,12 @@ class FilterDecisionMachine(
         val AGREE_WINDOW: Duration = Duration.ofSeconds(6)
         /** porn + hentai this high on one frame acts at once. */
         const val STRONG_LEVEL = 0.95f
+        /** A frame this clear needs no warning: [CLOSE_FRAMES] of them close the app at once (asked 2026-11-25). */
+        const val CLOSE_AT_ONCE = 0.95f
+        /** Two, so one misread frame never closes an app without a warning. */
+        const val CLOSE_FRAMES = 2
+        /** Warnings in one app within [DODGE_WINDOW] after which the next one closes it (leaving after 4 seconds, again and again). */
+        const val DODGE_WARNINGS = 3
+        val DODGE_WINDOW: Duration = Duration.ofMinutes(10)
     }
 }

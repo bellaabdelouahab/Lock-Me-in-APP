@@ -562,7 +562,7 @@ class FilterService : AccessibilityService() {
                 val state = LockState(this)
                 val until = now.plus(action.duration)
                 state.blockWithFilter(pkg, until)
-                EventLog(this).add(EventKind.FILTER_BLOCKED, "$pkg until $until scores: $scores", now)
+                EventLog(this).add(EventKind.FILTER_BLOCKED, "$pkg until $until (${action.reason}) scores: $scores", now)
                 recordBlock(pkg, scores, now)
 
                 // Reapply policy to suspend the package via device owner
