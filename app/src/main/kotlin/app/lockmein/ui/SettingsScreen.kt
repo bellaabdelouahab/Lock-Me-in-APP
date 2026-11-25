@@ -25,6 +25,9 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
@@ -209,6 +212,27 @@ fun SettingsScreen(onBack: () -> Unit) {
         // Section: App
         Heading("App")
         AppCard {
+            SettingsItem(
+                icon = Icons.Filled.Palette,
+                title = "Look and wallpaper",
+                value = "Theme, colours, wallpaper",
+                onClick = { navigate(Screen.THEMES) },
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            SettingsItem(
+                icon = Icons.Filled.Link,
+                title = "Connect Claude",
+                value = "Let Claude read and request changes",
+                onClick = { navigate(Screen.REMOTE) },
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            SettingsItem(
+                icon = Icons.Filled.Info,
+                title = "About",
+                value = "Version, build, device owner",
+                onClick = { navigate(Screen.ABOUT) },
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             SettingsItem(
                 icon = Icons.Filled.SystemUpdate,
                 title = "App updates",

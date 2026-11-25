@@ -122,6 +122,10 @@ val LocalOpenDrawer = compositionLocalOf<() -> Unit> { {} }
 /** True on a page the side bar lists: its top bar shows the menu button; the phone's back still goes home. */
 val LocalTopLevel = compositionLocalOf { false }
 
+/** Pages merged into one side-bar entry: one title, and a tab per page under the top bar. */
+data class PageTabs(val title: String, val labels: List<String>, val selected: Int, val onSelect: (Int) -> Unit)
+val LocalPageTabs = compositionLocalOf<PageTabs?> { null }
+
 @Composable
 fun Navigation(navigate: (Screen) -> Unit, content: @Composable () -> Unit) =
     CompositionLocalProvider(LocalNavigate provides navigate, content = content)
@@ -144,11 +148,13 @@ fun Page(
     if (onBack != null) BackHandler(onBack = onBack)
     val openDrawer = LocalOpenDrawer.current
     val topLevel = LocalTopLevel.current
+    val tabs = LocalPageTabs.current
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
+            Column {
             TopAppBar(
-                title = { Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1) },
+                title = { Text(tabs?.title ?: title, style = MaterialTheme.typography.titleLarge, maxLines = 1) },
                 navigationIcon = {
                     if (onBack != null && !topLevel) {
                         IconButton(onClick = onBack) {
@@ -168,6 +174,24 @@ fun Page(
                     actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 ),
             )
+            if (tabs != null) {
+                androidx.compose.material3.PrimaryTabRow(
+                    selectedTabIndex = tabs.selected,
+                    containerColor = MaterialTheme.colorScheme.background,
+                    divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant) },
+                ) {
+                    tabs.labels.forEachIndexed { i, label ->
+                        androidx.compose.material3.Tab(
+                            selected = tabs.selected == i,
+                            onClick = { tabs.onSelect(i) },
+                            selectedContentColor = MaterialTheme.colorScheme.primary,
+                            unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = { Text(label, maxLines = 1) },
+                        )
+                    }
+                }
+            }
+            }
         },
         bottomBar = bottomBar,
     ) { padding ->

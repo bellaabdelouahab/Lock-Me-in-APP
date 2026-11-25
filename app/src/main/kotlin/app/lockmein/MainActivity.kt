@@ -163,31 +163,30 @@ private fun LockApp(requested: String?) {
         scope.launch { drawerState.close() }
     }
 
+    // Six entries; a page with one job sits inside the entry it belongs to (Browsers in App rules, Friend's code in Requests,
+    // Look, Connect Claude and About in Settings) and the three ways of looking back share Reports as tabs.
     val groups = listOf(
         DrawerGroup(null, listOf(
             DrawerItem("Home", Screen.HOME, Icons.Filled.Home),
-        )),
-        DrawerGroup("What is closed", listOf(
             DrawerItem("App rules", Screen.LISTS, Icons.Filled.Apps),
-            DrawerItem("Browsers", Screen.BROWSERS, Icons.Filled.Language),
             DrawerItem("Screen filter", Screen.FILTER, Icons.Filled.Shield),
-        )),
-        DrawerGroup("Changing it", listOf(
-            DrawerItem("Change requests", Screen.WINDOW, Icons.Filled.EventAvailable),
-            DrawerItem("Friend's code", Screen.EMERGENCY, Icons.Filled.Key),
-        )),
-        DrawerGroup("How it is going", listOf(
-            DrawerItem("Health check", Screen.HEALTH, Icons.Filled.CheckCircle),
-            DrawerItem("Weekly report", Screen.REPORT, Icons.Filled.Insights),
-            DrawerItem("App usage", Screen.PHONE_USE, Icons.Filled.BarChart),
-        )),
-        DrawerGroup("App", listOf(
-            DrawerItem("Look and wallpaper", Screen.THEMES, Icons.Filled.Palette),
-            DrawerItem("Connect Claude", Screen.REMOTE, Icons.Filled.Link),
+            DrawerItem("Requests", Screen.WINDOW, Icons.Filled.EventAvailable),
+            DrawerItem("Reports", Screen.HEALTH, Icons.Filled.Insights),
             DrawerItem("Settings", Screen.SETTINGS, Icons.Filled.Settings),
         )),
     )
-    val topLevel = groups.flatMap { g -> g.items.map { it.screen } }.toSet() + Screen.ABOUT
+    val reportTabs = listOf(Screen.HEALTH, Screen.REPORT, Screen.PHONE_USE)
+    val topLevel = groups.flatMap { g -> g.items.map { it.screen } }.toSet() + reportTabs
+    // Where a page inside an entry goes back to.
+    val parent = mapOf(
+        Screen.BROWSERS to Screen.LISTS,
+        Screen.EMERGENCY to Screen.WINDOW,
+        Screen.THEMES to Screen.SETTINGS,
+        Screen.REMOTE to Screen.SETTINGS,
+        Screen.ABOUT to Screen.SETTINGS,
+        Screen.REMOVE to Screen.SETTINGS,
+    )
+    val up = { screen = parent[screen] ?: Screen.HOME }
 
     @Composable
     fun DrawerHeader() {
@@ -223,7 +222,7 @@ private fun LockApp(requested: String?) {
             )
         }
         group.items.forEach { item ->
-            val isSelected = screen == item.screen
+            val isSelected = item.screen == screen || item.screen == parent[screen] || (item.screen == Screen.HEALTH && screen in reportTabs)
             NavigationDrawerItem(
                 label = { Text(item.title, style = MaterialTheme.typography.labelLarge) },
                 icon = { Icon(item.icon, contentDescription = null) },
@@ -243,30 +242,6 @@ private fun LockApp(requested: String?) {
         }
         }
 
-        HorizontalDivider(modifier = Modifier.padding(horizontal = 28.dp, vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
-
-        val isAboutSelected = screen == Screen.ABOUT
-        NavigationDrawerItem(
-            label = {
-                Column {
-                    Text("About", style = MaterialTheme.typography.labelLarge)
-                    Text("Version ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            },
-            icon = { Icon(Icons.Filled.Info, contentDescription = null) },
-            selected = isAboutSelected,
-            onClick = { selectScreen(Screen.ABOUT) },
-            shape = PillShape,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-            colors = NavigationDrawerItemDefaults.colors(
-                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                selectedIconColor = MaterialTheme.colorScheme.primary,
-                selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                unselectedContainerColor = Color.Transparent,
-                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                unselectedTextColor = MaterialTheme.colorScheme.onSurface,
-            ),
-        )
     }
 
     /** Always scrolls a little past the last item, even when everything fits, so the bottom items can be pulled up to the thumb. */
@@ -289,24 +264,30 @@ private fun LockApp(requested: String?) {
         CompositionLocalProvider(
             LocalOpenDrawer provides { scope.launch { drawerState.open() } },
             LocalTopLevel provides (screen in topLevel),
+            app.lockmein.ui.LocalPageTabs provides (if (screen in reportTabs) app.lockmein.ui.PageTabs(
+                title = "Reports",
+                labels = listOf("Health", "Week", "App usage"),
+                selected = reportTabs.indexOf(screen),
+                onSelect = { screen = reportTabs[it] },
+            ) else null),
         ) {
             Navigation(navigate = { screen = it }) {
                 when (screen) {
                     Screen.HOME -> HomeScreen()
                     Screen.SETUP -> SetupScreen(onExit = home)
                     Screen.LISTS -> ListsScreen(onBack = home)
-                    Screen.BROWSERS -> BrowsersScreen(onBack = home)
+                    Screen.BROWSERS -> BrowsersScreen(onBack = up)
                     Screen.WINDOW -> WindowScreen(onBack = home)
-                    Screen.EMERGENCY -> EmergencyScreen(onBack = home)
+                    Screen.EMERGENCY -> EmergencyScreen(onBack = up)
                     Screen.REPORT -> ReportScreen(onBack = home)
                     Screen.SETTINGS -> SettingsScreen(onBack = home)
-                    Screen.REMOVE -> RemoveScreen(onBack = home, onRemoved = home)
+                    Screen.REMOVE -> RemoveScreen(onBack = up, onRemoved = home)
                     Screen.HEALTH -> HealthScreen(onBack = home)
-                    Screen.ABOUT -> AboutScreen(onBack = home)
+                    Screen.ABOUT -> AboutScreen(onBack = up)
                     Screen.PHONE_USE -> app.lockmein.ui.PhoneUseScreen(onBack = home)
                     Screen.FILTER -> app.lockmein.ui.FilterScreen(onBack = home)
-                    Screen.THEMES -> app.lockmein.ui.ThemesScreen(onBack = home)
-                    Screen.REMOTE -> app.lockmein.ui.RemoteScreen(onBack = home)
+                    Screen.THEMES -> app.lockmein.ui.ThemesScreen(onBack = up)
+                    Screen.REMOTE -> app.lockmein.ui.RemoteScreen(onBack = up)
                 }
             }
         }

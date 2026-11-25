@@ -2,6 +2,10 @@ package app.lockmein.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -127,6 +131,24 @@ fun ListsScreen(onBack: () -> Unit) {
             }
         },
     ) {
+        // Browsers live under App rules: one row says which are open and leads to the list.
+        val navigate = LocalNavigate.current
+        Row(
+            Modifier.fillMaxWidth().clip(TileShape).background(MaterialTheme.colorScheme.surfaceContainer)
+                .clickable { navigate(Screen.BROWSERS) }.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(Icons.Filled.Language, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Column(Modifier.weight(1f)) {
+                Text("Browsers", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    if (config.openSecuredBrowsers) "Every secured browser is open" else "Open: ${config.allowedBrowser?.let { DeviceInventory(context).label(it) } ?: "none"}",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         // Scrollable, so every tab shows its whole name and count instead of being cut to "At" or "Windo".
         ScrollableTabRow(
             selectedTabIndex = selectedTab,

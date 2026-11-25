@@ -80,7 +80,6 @@ fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val navigate = LocalNavigate.current
     val isOwner = context.getSystemService(DevicePolicyManager::class.java).isDeviceOwnerApp(context.packageName)
-    val text = remember { Reports.week(EventLog(context).read(), Instant.now()).toText(ZoneId.systemDefault()) }
 
     Page("About", onBack) {
         AppCard {
@@ -105,13 +104,5 @@ fun AboutScreen(onBack: () -> Unit) {
             )
         }
 
-        Heading("Weekly report")
-        AppCard {
-            Text(text, style = MaterialTheme.typography.bodySmall)
-        }
-        SecondaryButton("Share weekly report", {
-            val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
-            context.startActivity(Intent.createChooser(send, "Share the report").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        })
     }
 }
