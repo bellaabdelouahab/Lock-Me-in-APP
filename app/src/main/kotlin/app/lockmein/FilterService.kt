@@ -162,7 +162,9 @@ class FilterService : AccessibilityService() {
                 closed.filter { inventory.label(it).let { l -> l.isNotBlank() && shown.contains(l, ignoreCase = true) } }.maxByOrNull { inventory.label(it).length }
             }.getOrNull().orEmpty()
             PhoneUseLog(this@FilterService).add(UseKind.BLOCKED, pkg)
-            EventLog(this@FilterService).add(EventKind.BLOCKED_TRY, pkg.ifEmpty { "an app (not named)" })
+            // When it still cannot be named, the dialog's own words go in the log, so the naming can be fixed from them.
+            EventLog(this@FilterService).add(EventKind.BLOCKED_TRY, pkg.ifEmpty { "an app (not named; the dialog said: \"${dialogText.trim().take(80)}\")" })
+            MoodAsk.afterTry(this@FilterService)
         }
     }
 

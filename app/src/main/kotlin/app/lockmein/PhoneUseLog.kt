@@ -44,6 +44,9 @@ class PhoneUseLog(context: Context) {
         runCatching { f.readLines().mapNotNull(UseLines::decode) }.getOrDefault(emptyList())
     }
 
+    /** The oldest day kept: the log began on 2026-11-22 (0.4.10x), so nothing exists before it. */
+    fun firstDay(): LocalDate? = dir.listFiles().orEmpty().mapNotNull { runCatching { LocalDate.parse(it.name.removeSuffix(".log")) }.getOrNull() }.minOrNull()
+
     companion object {
         const val KEEP_DAYS = 60L
         private val writer = Executors.newSingleThreadExecutor()

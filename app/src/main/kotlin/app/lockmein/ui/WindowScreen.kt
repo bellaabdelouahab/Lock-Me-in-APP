@@ -145,6 +145,15 @@ fun WindowScreen(onBack: () -> Unit) {
                             if (targetLabel != null) {
                                 Text(targetLabel, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                             }
+                            // What approving would change, against the settings in force now.
+                            request.settings?.let { asked ->
+                                val changes = app.lockmein.core.SettingsDiff.changes(config, asked)
+                                if (changes.isEmpty()) {
+                                    Text("Nothing: it matches the settings in force.", style = MaterialTheme.typography.bodyMedium)
+                                } else changes.forEach { c ->
+                                    Text("${c.field}: ${c.before} to ${c.after}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                }
+                            }
                             Text(timesAsked, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         StatusBadge(

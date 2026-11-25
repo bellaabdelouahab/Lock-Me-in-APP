@@ -44,10 +44,21 @@ class RemoteCommands(private val context: Context) {
         when (tool) {
             "status" -> status(now)
             "phone_use" -> phoneUse(s("day")?.let(LocalDate::parse) ?: LocalDate.now(zone))
+            "day_scores" -> dayScores(s("day")?.let(LocalDate::parse) ?: LocalDate.now(zone).minusDays(1), now)
+            "mood" -> {
+                val end = s("end")?.let(LocalDate::parse) ?: LocalDate.now(zone)
+                val start = s("start")?.let(LocalDate::parse) ?: end.minusDays(6)
+                buildJsonArray {
+                    MoodLog(context).read().filter { val d = it.at.atZone(zone).toLocalDate(); !d.isBefore(start) && !d.isAfter(end) }.forEach {
+                        add(buildJsonObject { put("at", it.at.atZone(zone).toLocalDateTime().toString()); put("score", it.score); put("asked", it.asked) })
+                    }
+                }
+            }
             "phone_use_events" -> phoneUseEvents(LocalDate.parse(need("start")), s("end")?.let(LocalDate::parse) ?: LocalDate.now(zone))
             "weekly_report" -> {
                 val days = (s("days")?.toLongOrNull() ?: 7L).coerceIn(1, 90)
-                JsonPrimitive(Reports.week(events.read(), now, Duration.ofDays(days)).toText(zone))
+                val starts = PhoneUseLog(context).firstDay()?.let { "\nPhone-use log kept from $it (nothing was recorded before it)." }.orEmpty()
+                JsonPrimitive(Reports.week(events.read(), now, Duration.ofDays(days)).toText(zone) + starts)
             }
             "events" -> {
                 val kind = s("kind")?.let { EventKind.valueOf(it.uppercase()) }
@@ -147,6 +158,7 @@ class RemoteCommands(private val context: Context) {
                 })
             }
             put("screen_filter_working", FilterService.isWorking(context))
+            put("training", buildJsonObject { TrainingUpload.state(context).forEach { (k, v) -> put(k, v) } })
             put("checks", buildJsonArray {
                 runCatching { Health(context).check(now) }.getOrDefault(emptyList()).forEach {
                     add(buildJsonObject { put("check", it.title); put("ok", it.ok); put("detail", it.detail) })
@@ -181,6 +193,40 @@ class RemoteCommands(private val context: Context) {
                     })
                 }
             })
+        }
+    }
+
+    private fun dayScores(day: LocalDate, now: java.time.Instant): JsonElement {
+        val config = manager.config()
+        val log = PhoneUseLog(context)
+        val uses = log.read(day) + log.read(day.plusDays(1)).filter { it.at.atZone(zone).toLocalDate() == day.plusDays(1) }
+        val blocks = FeedbackStore(context).records().map { java.time.Instant.ofEpochMilli(it.atMillis) to it.pkg }
+        val fajr = app.lockmein.core.AstronomicalFajr(config.fajrConfig(), zone)
+        val d = app.lockmein.core.Slides.day(day, zone, now, uses, events.read(), blocks, MoodLog(context).read(), fajr::fajr, ignored())
+        fun name(pkg: String?) = pkg?.takeIf { it.isNotEmpty() }?.let { inventory.label(it) }
+        fun leads(list: List<app.lockmein.core.Lead>) = buildJsonArray {
+            list.forEach { l ->
+                add(buildJsonObject {
+                    put("at", l.at.atZone(zone).toLocalTime().withNano(0).toString()); put("app", name(l.app) ?: "not named")
+                    put("previous_app", name(l.previousApp)); put("seconds_since_unlock", l.sinceUnlockSeconds); put("started_by_notification_from", name(l.startedBy))
+                })
+            }
+        }
+        return buildJsonObject {
+            put("day", day.toString())
+            put("in_bed_by_22", d.inBedBy22)
+            put("screen_minutes_after_22", d.screenMinutesAfter22)
+            put("screen_minutes_2130_to_fajr", d.screenMinutesNight)
+            put("screen_minutes_midnight_to_fajr", d.screenMinutesBeforeFajr)
+            put("screen_minutes", d.screenMinutes)
+            put("unlocks", d.unlocks)
+            put("tries", leads(d.tries))
+            put("filter_blocks", leads(d.blocks))
+            put("requests_to_open_up", d.loosenAsked)
+            put("tightenings", d.tightened)
+            put("top_apps", buildJsonArray { d.topApps.forEach { a -> add(buildJsonObject { put("app", name(a.pkg)); put("minutes", a.millis / 60_000) }) } })
+            put("moods", buildJsonArray { d.moods.forEach { m -> add(buildJsonObject { put("at", m.at.atZone(zone).toLocalTime().withNano(0).toString()); put("score", m.score); put("asked", m.asked) }) } })
+            put("usage_log_starts", log.firstDay()?.toString())
         }
     }
 
@@ -223,6 +269,13 @@ class RemoteCommands(private val context: Context) {
                 add(buildJsonObject {
                     put("id", r.id); put("kind", r.kind.name); put("target", r.target); put("app", r.target.takeIf { it.isNotEmpty() }?.let { inventory.label(it) })
                     put("asked_times", r.count); put("first_asked", r.requestedAt.atZone(zone).toString())
+                    r.settings?.let { asked ->
+                        put("changes", buildJsonArray {
+                            app.lockmein.core.SettingsDiff.changes(manager.config(), asked).forEach { c ->
+                                add(buildJsonObject { put("field", c.field); put("now", c.before); put("asked", c.after) })
+                            }
+                        })
+                    }
                 })
             }
         })

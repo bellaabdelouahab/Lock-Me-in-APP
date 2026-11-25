@@ -299,3 +299,18 @@ His choice (2026-11-24): the screen filter learns from his own screens, on his s
   than the one already offered.
 - **Install:** after each upload the phone asks for the offer and files it once as a settings change: a loosening, so it waits in
   the change gate like any other (TRAINING_OFFER). The MCP's `training_status` shows the counts and every version's numbers.
+
+### 3.21 Day scores, what came before a slide, mood
+
+- `day_scores(day)` (MCP): in bed by 22:00 (at most 3 minutes of screen from 22:00 to the next fajr), screen minutes after 22:00,
+  from 21:30 to fajr and from midnight to fajr, tries and filter blocks, requests to open up against tightenings, the top 3 apps
+  and the day's moods. One small answer instead of the raw events.
+- Every try and block carries what came just before it: the previous app, seconds since the unlock, and the app whose
+  notification started the session (posted at most 2 minutes before the unlock and the first app opened).
+- A try the dialog does not name logs the dialog's own words, so the naming can be fixed from them.
+- Mood, 1 to 5, one tap: a notification once a day from 13:00 (the phone stays at the office in the evening) and after a try on a
+  closed app at most every 2 hours. Kept on the phone (`mood` in the MCP, and in `day_scores`).
+- A settings request names each field it changes with the value now and the value asked for (Requests page, event log, MCP),
+  worked out against the settings in force, so a tightening that approving would undo shows too. The weekly report counts
+  requests to open up against tightenings.
+- The phone-use log began on 2026-11-22; `weekly_report` and `day_scores` say so, so empty earlier days are not read as a fault.

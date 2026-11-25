@@ -15,6 +15,8 @@
     <!-- FilterWatcher: closes the watched apps within seconds when the screen filter is switched off. Device owners may run it. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
+    <!-- The mood check: one notification a day, and one after a try on a closed app at most every two hours. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".LockMeInApp"
@@ -36,6 +38,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".MoodActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Material.Light.Dialog.NoActionBar" />
 
         <receiver
             android:name=".ReapplyReceiver"

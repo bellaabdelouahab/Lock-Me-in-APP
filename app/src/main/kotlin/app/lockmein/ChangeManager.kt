@@ -372,7 +372,8 @@ class ChangeManager(private val context: Context) {
             }
             val req = ChangeRequest(RequestKind.SETTINGS, "", now.toEpochMilli(), settings = updated)
             val count = state.addRequest(req, now)
-            events.add(EventKind.LOOSEN_REQUESTED, "Requested settings change (asked $count times)", now)
+            val changes = app.lockmein.core.SettingsDiff.summary(app.lockmein.core.SettingsDiff.changes(config(), updated))
+            events.add(EventKind.LOOSEN_REQUESTED, "Requested settings change (asked $count times): $changes", now)
             return Outcome.Done("Settings change requested. Review on Sunday 20:00 to 21:00.")
         }
         store.save(updated)

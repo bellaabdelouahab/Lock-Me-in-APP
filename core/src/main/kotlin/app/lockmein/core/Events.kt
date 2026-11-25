@@ -96,6 +96,7 @@ data class WeeklyReport(
             appendLine("Emergency windows used: ${count(EventKind.EMERGENCY_USED)} (refused codes: ${count(EventKind.EMERGENCY_REFUSED)})")
             appendLine("Changes that opened the phone up: ${count(EventKind.LOOSENED)}; refused: ${count(EventKind.DENIED)}")
             appendLine("Changes that closed it more: ${count(EventKind.TIGHTENED)}")
+            appendLine("Requests to open up: ${count(EventKind.LOOSEN_REQUESTED)} (vs ${count(EventKind.TIGHTENED)} that closed it more)")
             appendLine("Removal requests: ${count(EventKind.REMOVAL_REQUESTED)}")
             appendLine("Browsers asked for: ${count(EventKind.BROWSER_REQUESTED)}, approved: ${count(EventKind.BROWSER_APPROVED)}")
             if (count(EventKind.FILTER_BLOCKED) > 0 || count(EventKind.FILTER_HIT) > 0) {

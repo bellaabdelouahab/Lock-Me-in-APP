@@ -68,10 +68,12 @@ object TrainingUpload {
                 sent++
             }
             if (sent > 0) EventLog(context).add(EventKind.TRAINING_SENT, "$sent blocks")
+            prefs.edit().putString("last_result", "${java.time.Instant.now()}: sent $sent of ${pending.size}").apply()
             if (sent == pending.size) prefs.edit().putString("done_on", LocalDate.now(zone).toString()).apply()
             offer(context, server, token)
         } catch (e: Exception) {
             Log.w("TrainingUpload", "not sent: ${e.message}")
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("last_result", "${java.time.Instant.now()}: not sent: ${e.message}").apply()
         }
     }
 
@@ -112,6 +114,18 @@ object TrainingUpload {
         val cm = context.getSystemService(ConnectivityManager::class.java)
         val caps = cm.getNetworkCapabilities(cm.activeNetwork ?: return false) ?: return false
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
+    /** For the MCP's status: registered or not, what waits, the day's batch, the last try's result. */
+    fun state(context: Context): Map<String, String?> {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return mapOf(
+            "registered" to (prefs.getString("token", null) != null).toString(),
+            "waiting" to Training.pending(FeedbackStore(context).records()).size.toString(),
+            "sent_on" to prefs.getString("done_on", null),
+            "last_result" to prefs.getString("last_result", null),
+            "rule" to "once a day from 09:00 on Wi-Fi (an unmetered network)",
+        )
     }
 
     private val JSON = "application/json".toMediaType()

@@ -33,7 +33,7 @@ session, signals, contradictions) and the rules for changes.
 
 ## What it can and cannot do
 
-Reads: status and checks, his DNS server's log (dns_summary, dns_log; docs/DNS.md), phone use by day and raw events, weekly report, event log, apps and lists, requests, settings, filter
+Reads: status and checks (with the training uploads state), day_scores (one day in a few numbers), mood, his DNS server's log (dns_summary, dns_log; docs/DNS.md), phone use by day and raw events, weekly report, event log, apps and lists, requests, settings, filter
 blocks; saved screenshots only in the 19:30 review window. Changes: closing more applies at once; opening anything up becomes a
 request for the Sunday review; approvals only in the weekly window. Never: friend's code, holder code, removing the protection,
 resetting the setup. Every change is logged on the phone (REMOTE_CHANGE) and counted in the weekly report.
