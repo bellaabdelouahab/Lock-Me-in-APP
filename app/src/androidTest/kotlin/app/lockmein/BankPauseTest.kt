@@ -76,13 +76,16 @@ class BankPauseTest {
         shell("input keyevent KEYCODE_HOME")
         filterOn()
         FakeFilterBeat.awaitWorking()
+        // The next tests need the filter bound again, as it was before this one switched it off.
+        val start = System.currentTimeMillis()
+        while (FilterService.instance == null && System.currentTimeMillis() - start < 15_000) Thread.sleep(200)
         FakeFilterBeat.stop()
         PolicyRunner(context).cancelAlarm()
     }
 
     /** The bank app comes to the front; the filter stops itself (or, when Android holds the service back, the shell stands in). */
     private fun openBank() {
-        shell("monkey -p $bank -c android.intent.category.LAUNCHER 1")
+        shell("am start -W -n $bank/.MainActivity")
         Thread.sleep(1_500)
         val service = FilterService.instance
         if (service != null) {
@@ -108,7 +111,7 @@ class BankPauseTest {
         assertTrue("with the adb grant the pause is automatic", state.bankPause!!.auto)
         shell("input keyevent KEYCODE_HOME")
         waitFor("the filter back on") { FilterService.isListed(context) && state.bankPause == null }
-        assertTrue(ended(), ended().endsWith(BankPause.LEFT))
+        assertTrue(ended(), ended().contains(BankPause.LEFT))
         waitFor("the watcher counting it on again") { FilterWatcher.filterDownNow == false }
     }
 

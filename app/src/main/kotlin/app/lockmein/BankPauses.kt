@@ -26,6 +26,9 @@ import java.time.Duration
 object BankPauses {
     private const val TAG = "BankPause"
 
+    /** Windows that come up over an app without leaving it: Android's dialogs, permission prompts, the system bars. */
+    private val NOT_LEAVING = setOf("android", "com.android.systemui", "com.google.android.permissioncontroller", "com.android.permissioncontroller")
+
     /** Emulator tests shorten the cap. */
     @Volatile
     var capMsForTesting: Long? = null
@@ -50,8 +53,9 @@ object BankPauses {
         val state = LockState(context)
         val pause = state.bankPause ?: return
         if (!pause.auto) return
-        val reason = BankPause.endReason(pause, System.currentTimeMillis(), foreground(context, pause.startMs), screenOff, capMsForTesting ?: BankPause.CAP_MS) ?: return
-        end(context, pause, reason)
+        val front = foreground(context, pause.startMs)
+        val reason = BankPause.endReason(pause, System.currentTimeMillis(), front, screenOff, capMsForTesting ?: BankPause.CAP_MS) ?: return
+        end(context, pause, if (reason == BankPause.LEFT && front != null) "$reason (to ${DeviceInventory(context).label(front).ifBlank { front }})" else reason)
         if (reason == BankPause.CAP) state.bankCapped = pause.pkg
         if (!switchFilterOn(context)) {
             EventLog(context).add(EventKind.PASS_FAILED, "bank pause: could not switch the screen filter back on; the watched apps stay closed")
@@ -87,7 +91,7 @@ object BankPauses {
         var last: String? = null
         while (events.hasNextEvent()) {
             events.getNextEvent(e)
-            if (e.eventType == UsageEvents.Event.ACTIVITY_RESUMED && e.packageName != context.packageName) last = e.packageName
+            if (e.eventType == UsageEvents.Event.ACTIVITY_RESUMED && e.packageName != context.packageName && e.packageName !in NOT_LEAVING) last = e.packageName
         }
         return last
     }
