@@ -88,6 +88,7 @@ class FilterWatcher : Service() {
                 else -> return
             }
             PhoneUseLog(context).add(kind)
+            if (kind == app.lockmein.core.UseKind.UNLOCK) CenterPrompt.onUnlock(context)
         }
     }
 

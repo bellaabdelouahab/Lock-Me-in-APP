@@ -65,9 +65,12 @@ object MoodAsk {
     private const val CHANNEL = "mood"
     private const val ID = 31
     private const val PREFS = "lock_mood"
+    /** The center prompt replaces the daily notification; the one after a try stays. */
+    const val CENTER_PROMPT_ON = true
 
-    /** From the filter watcher's tick. */
+    /** From the filter watcher's tick. Off while the center prompt (spec N2) asks three times a day instead. */
     fun tick(context: Context) {
+        if (CENTER_PROMPT_ON) return
         if (BuildConfig.PREVIEW || !ConfigStore(context).protectionActive) return
         val zone = ZoneId.systemDefault()
         val now = TrustedClock(context).now().atZone(zone)

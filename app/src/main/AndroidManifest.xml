@@ -45,6 +45,13 @@
         </activity>
 
         <activity
+            android:name=".PromptActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Material.Light.Dialog.NoActionBar" />
+
+        <activity
             android:name=".MoodActivity"
             android:exported="false"
             android:excludeFromRecents="true"

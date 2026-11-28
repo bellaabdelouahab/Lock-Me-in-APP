@@ -652,6 +652,9 @@ class FilterService : AccessibilityService() {
         @Volatile
         var heartbeatPausedForTesting = false
 
+        /** The app in front now, as the filter last saw it (null when the filter is not running). */
+        val foregroundNow: String? get() = instance?.currentForegroundPackage
+
         /** Test hook for emulator tests to inject scores without explicit images. */
         @VisibleForTesting
         var testScoreInjector: ((packageName: String) -> FilterScores?)? = null

@@ -340,8 +340,13 @@ His choice (2026-11-24): the screen filter learns from his own screens, on his s
   fajr) per app with whether the screen came on within a minute. Counts only; contact-level detail never leaves the phone.
 - `dns_summary` lists every day of the range; a day with no lookups says the phone was not using the server, and no lookups
   at all is an error, never an empty answer.
-- Mood, 1 to 5, one tap: a notification once a day from 13:00 (the phone stays at the office in the evening) and after a try on a
-  closed app at most every 2 hours. Kept on the phone (`mood` in the MCP, and in `day_scores`).
+- Mood, 1 to 5, one tap, after a try on a closed app at most every 2 hours (a notification). Kept on the phone (`mood` in the
+  MCP, and in `day_scores`).
+- The center prompt (spec N2): a card in the middle of the screen at the first unlock after 07:45, 13:00 and 19:15 asks the
+  mood, 1 to 5. A slot within 10 minutes of a prayer time (computed from the fajr settings: fajr 19 degrees, isha 17, asr one
+  shadow, dhuhr and maghrib plus 5 min) moves 15 minutes later; none at or after 21:30. Never over a call or with Maps or
+  Waze in front. "Later" twice (15 min each), then "Skip"; leaving the card counts as Later. Each answer or skip is logged
+  with the app before and the seconds since the unlock (`center_prompts` in `day_scores`). It replaced the 13:00 notification.
 - A settings request names each field it changes with the value now and the value asked for (Requests page, event log, MCP),
   worked out against the settings in force, so a tightening that approving would undo shows too. The weekly report counts
   requests to open up against tightenings.

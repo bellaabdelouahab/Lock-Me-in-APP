@@ -235,6 +235,14 @@ class RemoteCommands(private val context: Context) {
             put("tightenings", d.tightened)
             put("top_apps", buildJsonArray { d.topApps.forEach { a -> add(buildJsonObject { put("app", name(a.pkg)); put("minutes", a.millis / 60_000) }) } })
             put("moods", buildJsonArray { d.moods.forEach { m -> add(buildJsonObject { put("at", hms.format(m.at.atZone(zone))); put("score", m.score); put("asked", m.asked) }) } })
+            put("center_prompts", buildJsonArray {
+                PromptLog(context).read().filter { it.at.atZone(zone).toLocalDate() == day }.forEach { p ->
+                    add(buildJsonObject {
+                        put("slot", p.slot); put("at", hms.format(p.at.atZone(zone))); put("result", p.result); put("score", p.score)
+                        put("laters", p.snoozes); put("app_before", p.appBefore.takeIf { it.isNotEmpty() }?.let { name(it) }); put("seconds_since_unlock", p.secondsSinceUnlock)
+                    })
+                }
+            })
             put("usage_log_starts", log.firstDay()?.toString())
             put("notification_access", NotifyListener.enabled(context))
         }
