@@ -17,13 +17,14 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Named to run last: it switches the screen filter service off and on, and the other tests expect it bound throughout.
+ * Named to run after FilterServiceTest (it switches the filter service off and on, which that test needs bound) and before
+ * PolicyApplierTest, whose last test ends device ownership on purpose.
  *
  * Spec D1, end to end on the emulator: a "bank" app (the test app, put on the pause list) comes to the front, the filter goes
  * off and the watcher counts it off (the watched apps close), and the filter is switched back on by the app itself when the
  * bank app leaves, at the cap, or by hand without the adb grant.
  */
-class ZBankPauseTest {
+class FilterWatcherBankPauseTest {
     private val context: Context = InstrumentationRegistry.getInstrumentation().targetContext
     private val store = ConfigStore(context)
     private val state = LockState(context)
