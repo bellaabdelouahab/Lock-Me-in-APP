@@ -152,6 +152,8 @@ class RemoteCommands(private val context: Context) {
             put("app_version", BuildConfig.VERSION_NAME)
             if (config != null) {
                 put("phase", Rules.schedule(config, zone).phaseAt(now).toString())
+                put("exact_alarms", context.getSystemService(android.app.AlarmManager::class.java).canScheduleExactAlarms())
+                LockState(context).nextPassAt.takeIf { it > 0 }?.let { put("next_pass", hms.format(java.time.Instant.ofEpochMilli(it).atZone(zone))) }
                 put("closed_now", buildJsonArray {
                     ClosedReasons.all(context, config, now).filter { it.closedNow }.forEach {
                         add(buildJsonObject { put("package", it.packageName); put("app", inventory.label(it.packageName)); put("why", it.why) })

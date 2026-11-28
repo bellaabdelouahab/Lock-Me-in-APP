@@ -96,6 +96,11 @@ class LockState(context: Context) {
         get() = if (prefs.contains(LAST_CODE)) prefs.getLong(LAST_CODE, 0L) else null
         set(value) = prefs.edit().apply { if (value == null) remove(LAST_CODE) else putLong(LAST_CODE, value) }.apply()
 
+    /** When the next policy pass is due (millis), as the last pass set its alarm. */
+    var nextPassAt: Long
+        get() = prefs.getLong(NEXT_PASS_AT, 0L)
+        set(value) = prefs.edit().putLong(NEXT_PASS_AT, value).apply()
+
     /** The last DNS host Android would not take, why, the host it kept, and when; for the health check. */
     val dnsChangeFailed: String? get() = prefs.getString(DNS_CHANGE_FAILED, null)
 
@@ -193,6 +198,7 @@ class LockState(context: Context) {
         const val FILTER_DOWN = "filter_down"
         const val DNS_FALLBACK_SINCE = "dns_fallback_since"
         const val DNS_CHANGE_FAILED = "dns_change_failed"
+        const val NEXT_PASS_AT = "next_pass_at"
         const val DNS_FAILS = "dns_fails"
         const val DNS_FIRST_FAIL = "dns_first_fail"
         const val DNS_OKS = "dns_oks"

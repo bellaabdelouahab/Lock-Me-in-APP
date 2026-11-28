@@ -11,7 +11,10 @@
     <!-- The planner has to see every installed app to suspend it. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Exact alarms for the phase changes (fajr, night, the windows). SCHEDULE_EXACT_ALARM is denied by default from Android 14
+         and Android then delays the alarm, so fajr's pass came late; USE_EXACT_ALARM is granted at install (not a Play app). -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <!-- Updates from GitHub: silent as device owner, Android's own prompt otherwise. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- FilterWatcher: closes the watched apps within seconds when the screen filter is switched off. Device owners may run it. -->

@@ -46,6 +46,13 @@ class FilterWatcher : Service() {
             if (trainBusy.compareAndSet(false, true)) trainWorker.execute {
                 try { TrainingUpload.tick(this@FilterWatcher); RemoteLink.autoPair(this@FilterWatcher); MoodAsk.tick(this@FilterWatcher) } catch (e: Throwable) { Log.w("TrainingUpload", "tick failed", e) } finally { trainBusy.set(false) }
             }
+            // A pass Android's alarm has not run yet (it can be held back): run it now, so fajr or a window opens on time.
+            if (passBusy.compareAndSet(false, true)) passWorker.execute {
+                try {
+                    val runner = PolicyRunner(this@FilterWatcher)
+                    if (runner.overdue()) runner.runIfActive()
+                } catch (e: Throwable) { Log.w(TAG, "overdue pass failed", e) } finally { passBusy.set(false) }
+            }
             // On the uptime clock, which pauses while the phone sleeps: no wake-ups, and waking does not look like silence.
             main.postDelayed(this, FilterWatch.BEAT_EVERY_MS)
         }
@@ -167,6 +174,8 @@ class FilterWatcher : Service() {
         private val dnsBusy = java.util.concurrent.atomic.AtomicBoolean(false)
         private val trainWorker = Executors.newSingleThreadExecutor()
         private val trainBusy = java.util.concurrent.atomic.AtomicBoolean(false)
+        private val passWorker = Executors.newSingleThreadExecutor()
+        private val passBusy = java.util.concurrent.atomic.AtomicBoolean(false)
 
         @Volatile
         private var current: FilterWatch? = null

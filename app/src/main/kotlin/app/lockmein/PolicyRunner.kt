@@ -69,6 +69,7 @@ class PolicyRunner(private val context: Context) {
         }
         val next = candidates.min()
         scheduleAt(next, now)
+        state.nextPassAt = next.toEpochMilli()
         return RunResult(report, next)
     }
 
@@ -149,6 +150,15 @@ class PolicyRunner(private val context: Context) {
         }
     }
 
+    /**
+     * A pass that is due and has not run: Android can hold the alarm back (it did at fajr, by over 15 minutes, with the apps of
+     * the night still closed). The filter watcher's beat calls this while the phone is in use and runs the pass itself.
+     */
+    fun overdue(now: Instant = TrustedClock(context).now()): Boolean {
+        val due = LockState(context).nextPassAt
+        return ConfigStore(context).protectionActive && due > 0 && now.toEpochMilli() >= due + OVERDUE_GRACE_MS
+    }
+
     /** Stops the alarm chain, when the protection is removed. */
     fun cancelAlarm() {
         val alarms = context.getSystemService(AlarmManager::class.java)
@@ -165,5 +175,6 @@ class PolicyRunner(private val context: Context) {
     companion object {
         val CHECK_EVERY: Duration = Duration.ofMinutes(15)
         private val LOCK = Any()
+        const val OVERDUE_GRACE_MS = 5_000L
     }
 }
