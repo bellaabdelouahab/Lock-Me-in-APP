@@ -17,11 +17,13 @@ import org.junit.Before
 import org.junit.Test
 
 /**
+ * Named to run last: it switches the screen filter service off and on, and the other tests expect it bound throughout.
+ *
  * Spec D1, end to end on the emulator: a "bank" app (the test app, put on the pause list) comes to the front, the filter goes
  * off and the watcher counts it off (the watched apps close), and the filter is switched back on by the app itself when the
  * bank app leaves, at the cap, or by hand without the adb grant.
  */
-class BankPauseTest {
+class ZBankPauseTest {
     private val context: Context = InstrumentationRegistry.getInstrumentation().targetContext
     private val store = ConfigStore(context)
     private val state = LockState(context)
@@ -52,7 +54,12 @@ class BankPauseTest {
     @Before
     fun setup() {
         FakeFilterBeat.start()
+        PolicyRunner(context).cancelAlarm()
         if (!shell("pm list packages $bank").contains(bank)) shell("pm install -r /data/local/tmp/test-app.apk")
+        // A freshly installed app is held back as new: Android's "blocked" dialog would come up instead of the "bank" app.
+        val dpm = context.getSystemService(DevicePolicyManager::class.java)
+        val admin = ComponentName(context, AdminReceiver::class.java)
+        if (dpm.isPackageSuspended(admin, bank)) dpm.setPackagesSuspended(admin, arrayOf(bank), false)
         events.clear()
         state.bankPause = null
         state.bankCapped = null
@@ -70,6 +77,7 @@ class BankPauseTest {
     @After
     fun tearDown() {
         BankPauses.capMsForTesting = null
+        BankPauses.noGrantForTesting = false
         state.bankPause = null
         state.bankCapped = null
         shell("am force-stop $bank")
@@ -127,8 +135,8 @@ class BankPauseTest {
 
     @Test
     fun withoutTheGrantItWaitsToBeSwitchedBackOnByHand() {
-        shell("pm revoke ${context.packageName} android.permission.WRITE_SECURE_SETTINGS")
-        try {
+        BankPauses.noGrantForTesting = true
+        run {
             openBank()
             assertFalse(state.bankPause!!.auto)
             shell("input keyevent KEYCODE_HOME")
@@ -138,8 +146,6 @@ class BankPauseTest {
             filterOn() // by hand
             waitFor("the pause ended by hand") { state.bankPause == null && events.read().any { it.kind == EventKind.BANK_PAUSE_ENDED } }
             assertTrue(ended(), ended().endsWith(BankPause.BY_HAND))
-        } finally {
-            shell("pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS")
         }
     }
 }

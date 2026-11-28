@@ -33,7 +33,11 @@ object BankPauses {
     @Volatile
     var capMsForTesting: Long? = null
 
-    fun canSwitchBackOn(context: Context): Boolean =
+    /** Emulator tests: behave as without the adb grant (revoking it would kill the app's process). */
+    @Volatile
+    var noGrantForTesting = false
+
+    fun canSwitchBackOn(context: Context): Boolean = !noGrantForTesting &&
         context.checkSelfPermission("android.permission.WRITE_SECURE_SETTINGS") == PackageManager.PERMISSION_GRANTED
 
     /** From the filter, when [pkg] came to the front. True when the filter is pausing itself (it must stop at once). */
@@ -86,7 +90,8 @@ object BankPauses {
         val ops = context.getSystemService(AppOpsManager::class.java)
         val mode = runCatching { ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), context.packageName) }.getOrNull()
         if (mode != AppOpsManager.MODE_ALLOWED) return null
-        val events = context.getSystemService(UsageStatsManager::class.java).queryEvents(sinceMs - 5_000, System.currentTimeMillis())
+        // Only what came to the front after the pause began: the bank app itself came just before it.
+        val events = context.getSystemService(UsageStatsManager::class.java).queryEvents(sinceMs, System.currentTimeMillis())
         val e = UsageEvents.Event()
         var last: String? = null
         while (events.hasNextEvent()) {
