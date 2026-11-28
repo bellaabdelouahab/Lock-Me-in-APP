@@ -60,7 +60,12 @@ class RemoteCommands(private val context: Context) {
             "weekly_report" -> {
                 val days = (s("days")?.toLongOrNull() ?: 7L).coerceIn(1, 90)
                 val starts = PhoneUseLog(context).firstDay()?.let { "\nPhone-use log kept from $it (nothing was recorded before it)." }.orEmpty()
-                JsonPrimitive(Reports.week(events.read(), now, Duration.ofDays(days)).toText(zone) + starts)
+                // Spec N4: one row a day (at most 14), from the phone-use log's first day on.
+                val today = now.atZone(zone).toLocalDate()
+                val first = PhoneUseLog(context).firstDay()
+                val rows = (minOf(days, 14L) downTo 1L).map { today.minusDays(it) }.filter { first == null || !it.isBefore(first) }
+                val table = if (rows.isEmpty()) "" else "\n\n" + app.lockmein.core.WeeklyTable.text(rows.map { scoresFor(it, now) }, zone)
+                JsonPrimitive(Reports.week(events.read(), now, Duration.ofDays(days)).toText(zone) + table + starts)
             }
             "events" -> {
                 val kind = s("kind")?.let { EventKind.valueOf(it.uppercase()) }
@@ -200,13 +205,18 @@ class RemoteCommands(private val context: Context) {
         }
     }
 
-    private fun dayScores(day: LocalDate, now: java.time.Instant): JsonElement {
+    private fun scoresFor(day: LocalDate, now: java.time.Instant): app.lockmein.core.DayScores {
         val config = manager.config()
         val log = PhoneUseLog(context)
         val uses = log.read(day) + log.read(day.plusDays(1)).filter { it.at.atZone(zone).toLocalDate() == day.plusDays(1) }
         val blocks = FeedbackStore(context).records().map { java.time.Instant.ofEpochMilli(it.atMillis) to it.pkg }
         val fajr = app.lockmein.core.AstronomicalFajr(config.fajrConfig(), zone)
-        val d = app.lockmein.core.Slides.day(day, zone, now, uses, events.read(), blocks, MoodLog(context).read(), fajr::fajr, ignored())
+        return app.lockmein.core.Slides.day(day, zone, now, uses, events.read(), blocks, MoodLog(context).read(), fajr::fajr, ignored())
+    }
+
+    private fun dayScores(day: LocalDate, now: java.time.Instant): JsonElement {
+        val log = PhoneUseLog(context)
+        val d = scoresFor(day, now)
         fun name(pkg: String?) = pkg?.takeIf { it.isNotEmpty() }?.let { inventory.label(it) }
         fun leads(list: List<app.lockmein.core.Lead>) = buildJsonArray {
             list.forEach { l ->

@@ -60,6 +60,8 @@ data class DayScores(
     /** Midnight until fajr of the same night (the next morning): part of [screenMinutesAfter22], never more. */
     val screenMinutesBeforeFajr: Long,
     val screenMinutes: Long,
+    /** The day's last screen-off (before midnight), or null. */
+    val lastScreenOff: Instant? = null,
     val unlocks: Int,
     val tries: List<Lead>,
     val blocks: List<Lead>,
@@ -139,6 +141,7 @@ object Slides {
             screenMinutesNight = min(screenMillis(uses, nightFrom, cut(fajrNext))),
             screenMinutesBeforeFajr = min(screenMillis(uses, end, cut(fajrNext))),
             screenMinutes = min(summary.screenMillis),
+            lastScreenOff = summary.lastScreenOff,
             unlocks = summary.unlocks,
             tries = uses.filter { it.kind == UseKind.BLOCKED && inDay(it.at) && it.at < cut(end) }.sortedBy { it.at }
                 .map { lead(uses, it.at, it.pkg, ignore, it.detail) },
@@ -148,5 +151,30 @@ object Slides {
             topApps = summary.apps.filter { it.millis > 0 }.take(3),
             moods = moods.filter { inDay(it.at) }.sortedBy { it.at },
         )
+    }
+}
+
+/** Spec N4: the week as one row a day, the table the Saturday session used to build by hand. */
+object WeeklyTable {
+    fun text(days: List<DayScores>, zone: ZoneId): String = buildString {
+        appendLine("Day        | in bed | 22-04 min | last off | after 21:30 | tries | blocks | open-up asks | tightenings | moods")
+        for (d in days.sortedBy { it.day }) {
+            val bed = when (d.inBedBy22) { true -> "yes"; false -> "no"; null -> "-" }
+            val off = d.lastScreenOff?.atZone(zone)?.toLocalTime()?.withSecond(0)?.withNano(0)?.toString() ?: "-"
+            appendLine("${d.day} | $bed | ${d.screenMinutes22To04} | $off | ${d.screenMinutesNight} | ${d.tries.size} | ${d.blocks.size} | ${d.loosenAsked} | ${d.tightened} | ${d.moods.size}")
+        }
+    }.trimEnd()
+}
+
+/** Spec D4: how the rules drift, as one number: requests to open up minus tightenings over the last [days] days. */
+data class Drift(val openUpAsked: Int, val tightened: Int) {
+    val net: Int get() = openUpAsked - tightened
+
+    companion object {
+        fun of(events: List<LockEvent>, now: Instant, days: Long = 14): Drift {
+            val from = now.minus(java.time.Duration.ofDays(days))
+            val recent = events.filter { !it.at.isBefore(from) && !it.at.isAfter(now) }
+            return Drift(recent.count { it.kind == EventKind.LOOSEN_REQUESTED }, recent.count { it.kind == EventKind.TIGHTENED })
+        }
     }
 }

@@ -119,4 +119,20 @@ class DayScoresTest {
         assertEquals(m, MoodEntry.decode(MoodEntry.encode(m)))
         assertNull(MoodEntry.decode("123\t9\tdaily"))
     }
+
+    @Test
+    fun theWeeklyTableHasOneRowADayAndDriftIsOpenUpMinusTightenings() {
+        val uses = listOf(e("21:40", UseKind.SCREEN_ON), e("21:40", UseKind.UNLOCK), e("21:50", UseKind.SCREEN_OFF))
+        val events = listOf(
+            LockEvent(t("12:00"), EventKind.LOOSEN_REQUESTED), LockEvent(t("12:30"), EventKind.LOOSEN_REQUESTED), LockEvent(t("13:00"), EventKind.TIGHTENED),
+            LockEvent(t("2026-11-01T13:00:00"), EventKind.LOOSEN_REQUESTED), // older than 14 days
+        )
+        val d = scores(uses, events = events)
+        val table = WeeklyTable.text(listOf(d), zone).lines()
+        assertEquals(2, table.size)
+        assertEquals("2026-11-22 | yes | 0 | 21:50 | 10 | 0 | 1 | 2 | 1 | 0", table[1])
+        val drift = Drift.of(events, t("2026-11-23T12:00:00"))
+        assertEquals(1, drift.net)
+        assertEquals(2, drift.openUpAsked)
+    }
 }

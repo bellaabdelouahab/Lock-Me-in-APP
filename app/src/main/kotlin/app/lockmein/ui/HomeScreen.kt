@@ -252,6 +252,14 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
         QuickAction(Modifier.weight(1f), Icons.Filled.Key, "Friend's code") { navigate(Screen.EMERGENCY) }
     }
 
+    // Spec D4: how the rules drift, one number over 14 days (requests to open up minus tightenings).
+    val drift = remember(now.epochSecond / 600) { app.lockmein.core.Drift.of(app.lockmein.EventLog(context).read(), now) }
+    Text(
+        "Rules drift, last 14 days: ${if (drift.net > 0) "+" else ""}${drift.net} (${drift.openUpAsked} asked to open up, ${drift.tightened} closed more)",
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (drift.net > 0) Palette.Attention else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
     // 4. Which apps are closed right now, and why (read back from Android, as on Apps, Now).
     val closed by produceState<List<app.lockmein.ClosedReasons.Reason>?>(null, config) {
         value = withContext(Dispatchers.IO) { runCatching { app.lockmein.ClosedReasons.all(context, config, now) }.getOrNull() }
