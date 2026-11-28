@@ -93,6 +93,17 @@
             </intent-filter>
         </receiver>
 
+        <!-- Notification access (spec F3): package and time of each notification, and which were tapped; never their text. -->
+        <service
+            android:name=".NotifyListener"
+            android:exported="true"
+            android:label="Lock Me In phone use"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <service
             android:name=".FilterWatcher"
             android:exported="false"

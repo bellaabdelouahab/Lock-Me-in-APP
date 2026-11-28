@@ -63,7 +63,7 @@ fun HealthScreen(onBack: () -> Unit) {
 
     LaunchedEffect(Unit) { recheck() }
 
-    val failing = items?.filter { !it.ok }.orEmpty()
+    val failing = items?.filter { it.failing }.orEmpty()
     val hasFailing = failing.isNotEmpty()
 
     Page(
@@ -156,6 +156,15 @@ fun HealthScreen(onBack: () -> Unit) {
                         if (index < sortedList.lastIndex) RowDivider(inset = 36.dp)
                     }
                 }
+            }
+            if (list.any { it.title == Health.NOTIFICATION_ACCESS && !it.ok }) {
+                SecondaryButton("Open notification access", onClick = {
+                    runCatching {
+                        context.startActivity(
+                            android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                })
             }
         }
     }

@@ -200,7 +200,7 @@ fun SetupScreen(onExit: () -> Unit) {
                     working = false
                     outcome = result
                     afterStart = health
-                    if (result is Outcome.Done && (BuildConfig.PREVIEW || health.orEmpty().all { it.ok })) {
+                    if (result is Outcome.Done && (BuildConfig.PREVIEW || health.orEmpty().none { it.failing })) {
                         store.setupComplete = true
                         navigate(Screen.HOME)
                     }
@@ -218,7 +218,7 @@ fun SetupScreen(onExit: () -> Unit) {
             outcome = null
         })
 
-        afterStart?.filter { !it.ok }?.takeIf { it.isNotEmpty() && !BuildConfig.PREVIEW }?.let { failed ->
+        afterStart?.filter { it.failing }?.takeIf { it.isNotEmpty() && !BuildConfig.PREVIEW }?.let { failed ->
             Heading("Not in force yet")
             failed.forEach { CheckRow(it.title, CheckState.FAIL, it.detail) }
             SecondaryButton("Open the full check", { navigate(Screen.HEALTH) })

@@ -122,6 +122,9 @@ class PhoneUseTest {
     fun `lines and csv round trip`() {
         val e = UseEvent(t("07:00"), UseKind.APP, "com.x")
         assertEquals(e, UseLines.decode(UseLines.encode(e)))
+        val withDetail = UseEvent(t("07:00"), UseKind.BLOCKED, "", "com.android.settings > Apps\tx")
+        assertEquals(withDetail.copy(detail = "com.android.settings > Apps x"), UseLines.decode(UseLines.encode(withDetail)))
+        assertEquals("1\tAPP\tcom.x", UseLines.encode(UseEvent(Instant.ofEpochMilli(1), UseKind.APP, "com.x")), "old lines keep three columns")
         assertEquals(null, UseLines.decode("garbage"))
         val csv = PhoneUse.csv(listOf(e), zone) { "X \"app\"" }
         assertEquals("time,event,package,app\n2026-11-22T07:00,app,com.x,\"X \"\"app\"\"\"\n", csv)

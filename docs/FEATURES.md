@@ -328,8 +328,15 @@ His choice (2026-11-24): the screen filter learns from his own screens, on his s
   never more than 22:00 to fajr), tries and filter blocks, requests to open up against tightenings, the top 3 apps
   and the day's moods. One small answer instead of the raw events.
 - Every try and block carries what came just before it: the previous app, seconds since the unlock, and the app whose
-  notification started the session (posted at most 2 minutes before the unlock and the first app opened).
-- A try the dialog does not name logs the dialog's own words, so the naming can be fixed from them.
+  notification started the session: the last one posted in the 60 seconds before the unlock (Android's own left out), or
+  "no notification" when none came (null only when no unlock was found).
+- Notification access (NotifyListener, switched on once in Settings; a Health line with a button, never blocking setup):
+  the package and time of each notification and of each one tapped open, never the title, sender or text, all on the phone.
+  Ongoing ones (music, timers) and group summaries are left out. Without it the screen filter still counts notifications.
+- A try the dialog does not name logs the app it came over (`dialog_over`) and, over Settings, the page (`settings_page`:
+  Accessibility, Apps...), plus the dialog's own words in the event log, so the naming can be fixed from them.
+- `dns_summary` lists every day of the range; a day with no lookups says the phone was not using the server, and no lookups
+  at all is an error, never an empty answer.
 - Mood, 1 to 5, one tap: a notification once a day from 13:00 (the phone stays at the office in the evening) and after a try on a
   closed app at most every 2 hours. Kept on the phone (`mood` in the MCP, and in `day_scores`).
 - A settings request names each field it changes with the value now and the value asked for (Requests page, event log, MCP),

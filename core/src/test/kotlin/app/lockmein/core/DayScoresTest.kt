@@ -35,6 +35,23 @@ class DayScoresTest {
     }
 
     @Test
+    fun theLastNotificationInTheMinuteBeforeTheUnlockStartedItWhateverOpensNextAndAndroidsOwnNeverDo() {
+        val uses = listOf(
+            e("10:00", UseKind.NOTIFICATION, "chat"), e("10:00:30".let { "2026-11-22T$it" }, UseKind.NOTIFICATION, "android"),
+            e("10:01", UseKind.SCREEN_ON), e("10:01", UseKind.UNLOCK), e("10:01", UseKind.APP, "claude"),
+            UseEvent(t("10:02"), UseKind.BLOCKED, "", "com.android.settings > Accessibility"),
+        )
+        val lead = scores(uses).tries.single()
+        assertEquals("chat", lead.startedBy)
+        assertEquals(true, lead.sessionKnown)
+        assertEquals("com.android.settings", lead.over)
+        assertEquals("Accessibility", lead.page)
+        val noStart = scores(listOf(UseEvent(t("10:02"), UseKind.BLOCKED, "yt"))).tries.single()
+        assertEquals(false, noStart.sessionKnown, "no unlock found: unknown, not \"no notification\"")
+        assertNull(noStart.over)
+    }
+
+    @Test
     fun aSessionOpenedByHandHasNoStarter() {
         val uses = listOf(
             e("09:00", UseKind.NOTIFICATION, "insta"), e("10:01", UseKind.UNLOCK), e("10:01", UseKind.APP, "insta"), e("10:02", UseKind.BLOCKED, ""),

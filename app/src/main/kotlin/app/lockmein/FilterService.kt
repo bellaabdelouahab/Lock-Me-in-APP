@@ -60,6 +60,7 @@ class FilterService : AccessibilityService() {
     /** The label of the last thing tapped (an app icon), kept in memory for 3 s to name the app behind a "blocked" dialog. */
     private var lastClick: Pair<String, Long>? = null
     private var lastTryAt = 0L
+    private var lastSettingsPage: String? = null
     /** The record saved with "Wrong?" during the current warning, if any: the close that may follow reuses it. */
     private var warningSaved: BlockRecord? = null
     /** Private tabs (FEATURES 3.16): last window check, last count, and since when the screen is black (Android 11 to 13). */
@@ -116,7 +117,8 @@ class FilterService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         if (event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED) {
             // A notification (not a toast) for the phone-use log: which app, when. Its text is never read.
-            if (event.parcelableData is android.app.Notification && pkg != packageName) PhoneUseLog(this).add(UseKind.NOTIFICATION, pkg)
+            // With notification access on, NotifyListener counts them (it can leave out ongoing ones); this is the fallback.
+            if (event.parcelableData is android.app.Notification && pkg != packageName && !NotifyListener.connected) PhoneUseLog(this).add(UseKind.NOTIFICATION, pkg)
             return
         }
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
@@ -140,6 +142,9 @@ class FilterService : AccessibilityService() {
         // counts, otherwise the filter thought you had left the browser and stayed off when the banner went away.
         val app = foregroundApp() ?: return
         catchNewApp(app)
+        // The Settings page on screen, so a "blocked by your admin" dialog over it can say which page (spec F4).
+        if (app == SETTINGS && pkg == SETTINGS) lastSettingsPage = event.text.firstOrNull()?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+            ?: cls.substringAfterLast('.').takeIf { it.isNotEmpty() }
 
         if (app != currentForegroundPackage) {
             currentForegroundPackage = app
@@ -154,6 +159,9 @@ class FilterService : AccessibilityService() {
         if (nowMs - lastTryAt < 1_500) return // one dialog sends several events
         lastTryAt = nowMs
         val shown = dialogText + " " + (lastClick?.takeIf { nowMs - it.second < 3_000 }?.first ?: "")
+        // The app the dialog came over (the dialog itself never becomes the foreground app), and Settings' page when it was Settings.
+        val behind = currentForegroundPackage.orEmpty()
+        val detail = if (behind == SETTINGS) "$behind > ${lastSettingsPage.orEmpty()}".removeSuffix(" > ") else behind
         val config = ConfigStore(this).load()
         serviceScope.launch(Dispatchers.Default) {
             val pkg = runCatching {
@@ -161,9 +169,9 @@ class FilterService : AccessibilityService() {
                 val closed = if (config == null) emptyList() else ClosedReasons.all(this@FilterService, config).filter { it.closedNow }.map { it.packageName }
                 closed.filter { inventory.label(it).let { l -> l.isNotBlank() && shown.contains(l, ignoreCase = true) } }.maxByOrNull { inventory.label(it).length }
             }.getOrNull().orEmpty()
-            PhoneUseLog(this@FilterService).add(UseKind.BLOCKED, pkg)
-            // When it still cannot be named, the dialog's own words go in the log, so the naming can be fixed from them.
-            EventLog(this@FilterService).add(EventKind.BLOCKED_TRY, pkg.ifEmpty { "an app (not named; the dialog said: \"${dialogText.trim().take(80)}\")" })
+            PhoneUseLog(this@FilterService).add(UseKind.BLOCKED, pkg, detail = if (pkg.isEmpty()) detail else "")
+            // When it still cannot be named, the dialog's own words and what it came over go in the log.
+            EventLog(this@FilterService).add(EventKind.BLOCKED_TRY, pkg.ifEmpty { "an app (not named; over ${detail.ifEmpty { "nothing known" }}; the dialog said: \"${dialogText.trim().take(80)}\")" })
             MoodAsk.afterTry(this@FilterService)
         }
     }
@@ -625,6 +633,7 @@ class FilterService : AccessibilityService() {
         const val SAMPLE_INTERVAL_MS = 500L
         private const val MAX_TEXT_NODES = 400
         private val SUPPORT_MESSAGE_START = SUPPORT_MESSAGE.take(24)
+        private const val SETTINGS = "com.android.settings"
         private const val MAX_TEXT_CHARS = 8_000
         private const val SITE_RULES_EVERY_MS = 30_000L
         private const val MAX_BAR_NODES = 150

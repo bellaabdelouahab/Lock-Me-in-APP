@@ -184,7 +184,7 @@ private fun DashboardView(config: LockConfig, state: LockState, owner: Boolean) 
     val healthItems by produceState<List<HealthItem>?>(null, config) {
         value = withContext(Dispatchers.IO) { Health(context).check() }
     }
-    val failingHealth = healthItems?.count { !it.ok } ?: 0
+    val failingHealth = healthItems?.count { it.failing } ?: 0
 
     TintedCard(Modifier, Color.Unspecified, quiet = true, padding = 16.dp) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {

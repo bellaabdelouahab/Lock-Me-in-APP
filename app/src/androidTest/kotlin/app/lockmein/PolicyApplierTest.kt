@@ -601,8 +601,12 @@ class PolicyApplierTest {
         val result = PolicyRunner(context).run(config, mondayNoon)
         assertEquals(emptyList<String>(), result.report.failed)
         val health = Health(context).check(mondayNoon)
-        assertEquals("every check passes once the rules are in force", emptyList<String>(), health.filter { !it.ok }.map { "${it.title}: ${it.detail}" })
+        assertEquals("every protection check passes once the rules are in force", emptyList<String>(), health.filter { it.failing }.map { "${it.title}: ${it.detail}" })
         assertTrue(health.any { it.title == "Private DNS" } && health.any { it.title == "Can't be stopped or wiped" })
+        // Notification access only improves the records: it shows, but can never be what blocks setup or asks for a repair.
+        val notify = health.single { it.title == Health.NOTIFICATION_ACCESS }
+        assertFalse(notify.required)
+        assertTrue("only the notification-access line may be off", health.filter { !it.ok }.all { it.title == Health.NOTIFICATION_ACCESS })
     }
 
     @Test

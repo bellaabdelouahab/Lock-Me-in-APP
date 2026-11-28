@@ -211,7 +211,10 @@ class RemoteCommands(private val context: Context) {
             list.forEach { l ->
                 add(buildJsonObject {
                     put("at", hms.format(l.at.atZone(zone))); put("app", name(l.app) ?: "not named")
-                    put("previous_app", name(l.previousApp)); put("seconds_since_unlock", l.sinceUnlockSeconds); put("started_by_notification_from", name(l.startedBy))
+                    put("previous_app", name(l.previousApp)); put("seconds_since_unlock", l.sinceUnlockSeconds)
+                    put("started_by_notification_from", name(l.startedBy) ?: if (l.sessionKnown) "no notification" else null)
+                    l.over?.let { put("dialog_over", name(it)) }
+                    l.page?.let { put("settings_page", it) }
                 })
             }
         }
@@ -232,6 +235,7 @@ class RemoteCommands(private val context: Context) {
             put("top_apps", buildJsonArray { d.topApps.forEach { a -> add(buildJsonObject { put("app", name(a.pkg)); put("minutes", a.millis / 60_000) }) } })
             put("moods", buildJsonArray { d.moods.forEach { m -> add(buildJsonObject { put("at", hms.format(m.at.atZone(zone))); put("score", m.score); put("asked", m.asked) }) } })
             put("usage_log_starts", log.firstDay()?.toString())
+            put("notification_access", NotifyListener.enabled(context))
         }
     }
 

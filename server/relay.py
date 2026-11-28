@@ -256,7 +256,8 @@ def dns_log(day: str | None = None, blocked_only: bool = False, limit: int = 200
 @mcp.tool(
     name="dns_summary",
     description="His DNS server over the last days (default 7): per day, lookups and blocked lookups, blocked by list (adult, "
-    "lists = ads and trackers, bypass = other DNS, VPN and proxies), and blocked adult lookups per hour of the day (UTC).",
+    "lists = ads and trackers, bypass = other DNS, VPN and proxies, social, gambling, dating), and blocked adult lookups per "
+    "hour of the day (UTC). Every day in the range is listed; a day with no lookups says so, and no lookups at all is an error.",
 )
 def dns_summary(days: int = 7) -> dict:
     days = max(1, min(int(days), 7))
@@ -276,7 +277,19 @@ def dns_summary(days: int = 7) -> dict:
             d["blocked_by"][group] = d["blocked_by"].get(group, 0) + 1
             if group == "adult":
                 adult_hours[hour] = adult_hours.get(hour, 0) + 1
-    return {"days": dict(sorted(per_day.items())), "adult_blocked_by_hour_utc": dict(sorted(adult_hours.items()))}
+    if not rows:
+        raise ValueError(
+            f"No lookups reached the DNS server in the last {days} days: the phone is not using it (check Private DNS in status) "
+            "or the log was reset."
+        )
+    from datetime import datetime, timedelta, timezone
+
+    today = datetime.now(timezone.utc).date()
+    for i in range(days):
+        day = (today - timedelta(days=i)).isoformat()
+        if day not in per_day:
+            per_day[day] = {"lookups": 0, "blocked": 0, "blocked_by": {}, "note": "no lookups: the phone was not using this server"}
+    return {"days": dict(sorted(per_day.items())), "adult_blocked_by_hour_utc": dict(sorted(adult_hours.items())), "times_utc": True}
 
 
 @tool("remove_judge", "Take the personal judge off (stricter, instant).")

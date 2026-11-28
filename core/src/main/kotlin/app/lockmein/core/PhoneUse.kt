@@ -4,26 +4,34 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
-/** One thing that happened on the phone: an app came to the front, the screen went on or off, the phone was unlocked, a notification came. */
-data class UseEvent(val at: Instant, val kind: UseKind, val pkg: String = "")
+/**
+ * One thing that happened on the phone: an app came to the front, the screen went on or off, the phone was unlocked, a
+ * notification came. [detail] is set only for a try the dialog did not name: the app it came over, and the Settings page
+ * ("com.android.settings > Accessibility").
+ */
+data class UseEvent(val at: Instant, val kind: UseKind, val pkg: String = "", val detail: String = "")
 
 enum class UseKind {
     APP, SCREEN_ON, SCREEN_OFF, UNLOCK, NOTIFICATION,
+
+    /** A notification was tapped open (from the notification listener). */
+    NOTIFICATION_OPENED,
 
     /** A try to open a closed app: Android's "blocked" dialog came up (package empty when the app could not be named). */
     BLOCKED,
 }
 
-/** Stored one event per line: epoch millis, kind, package. */
+/** Stored one event per line: epoch millis, kind, package, and the detail when there is one. */
 object UseLines {
-    fun encode(e: UseEvent): String = "${e.at.toEpochMilli()}\t${e.kind}\t${e.pkg}"
+    fun encode(e: UseEvent): String =
+        "${e.at.toEpochMilli()}\t${e.kind}\t${e.pkg}" + if (e.detail.isEmpty()) "" else "\t" + e.detail.replace('\t', ' ').replace('\n', ' ')
 
     fun decode(line: String): UseEvent? {
         val parts = line.split('\t')
         if (parts.size < 2) return null
         val at = parts[0].toLongOrNull() ?: return null
         val kind = runCatching { UseKind.valueOf(parts[1]) }.getOrNull() ?: return null
-        return UseEvent(Instant.ofEpochMilli(at), kind, parts.getOrElse(2) { "" })
+        return UseEvent(Instant.ofEpochMilli(at), kind, parts.getOrElse(2) { "" }, parts.getOrElse(3) { "" })
     }
 }
 
@@ -120,7 +128,7 @@ object PhoneUse {
                     if (!on) { on = true; unlocked = true }
                     if (unlocked) windowEnd = e.at.plusMillis(MAX_STRETCH_MS) else sinceOn = e.pkg
                 }
-                UseKind.NOTIFICATION, UseKind.BLOCKED -> Unit
+                UseKind.NOTIFICATION, UseKind.NOTIFICATION_OPENED, UseKind.BLOCKED -> Unit
             }
         }
         emit(until)
@@ -198,7 +206,7 @@ object PhoneUse {
                     tryList += e.at to e.pkg
                     if (e.pkg.isNotEmpty()) tryCount[e.pkg] = (tryCount[e.pkg] ?: 0) + 1
                 }
-                UseKind.SCREEN_ON -> Unit
+                UseKind.SCREEN_ON, UseKind.NOTIFICATION_OPENED -> Unit
             }
         }
 

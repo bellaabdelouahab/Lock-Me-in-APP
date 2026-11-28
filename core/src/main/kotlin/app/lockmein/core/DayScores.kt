@@ -14,8 +14,17 @@ data class Lead(
     val previousApp: String?,
     /** Seconds since the phone was last unlocked (or the screen came on), or null when nothing is known. */
     val sinceUnlockSeconds: Long?,
-    /** The app whose notification started this session: it came just before the unlock and was the first app opened. */
+    /**
+     * The app whose notification started this session: the last one posted in the [Slides.NOTIFICATION_LEAD_MS] before the
+     * unlock. Null when none came (see [sessionKnown]).
+     */
     val startedBy: String?,
+    /** The session's start (an unlock or screen-on) was found, so a null [startedBy] means "no notification", not "unknown". */
+    val sessionKnown: Boolean = false,
+    /** For a try the dialog did not name: the app the dialog came over (Settings, Google). */
+    val over: String? = null,
+    /** And when that was Settings, the page it was on (Accessibility, Apps, Device admin apps). */
+    val page: String? = null,
 )
 
 /** A one-tap mood score, 1 (low) to 5 (good), and what asked for it. */
@@ -70,19 +79,24 @@ data class DayScores(
 
 object Slides {
     /** How long before an unlock a notification can be what started it. */
-    const val NOTIFICATION_LEAD_MS = 2 * 60_000L
+    const val NOTIFICATION_LEAD_MS = 60_000L
 
-    fun lead(events: List<UseEvent>, at: Instant, app: String, ignore: Set<String>): Lead {
+    /** Notifications that are never what started a session: Android itself. */
+    private val NOT_A_STARTER = setOf("android", "com.android.systemui")
+
+    fun lead(events: List<UseEvent>, at: Instant, app: String, ignore: Set<String>, detail: String = ""): Lead {
         val before = events.filter { it.at <= at }.sortedBy { it.at }
         val previous = before.lastOrNull { it.kind == UseKind.APP && it.pkg !in ignore && it.pkg != app }?.pkg
         val start = before.lastOrNull { it.kind == UseKind.UNLOCK } ?: before.lastOrNull { it.kind == UseKind.SCREEN_ON }
         val startedBy = start?.let { s ->
-            val firstApp = events.filter { it.at >= s.at && it.at <= at && it.kind == UseKind.APP && it.pkg !in ignore }.minByOrNull { it.at }?.pkg
             before.lastOrNull {
-                it.kind == UseKind.NOTIFICATION && it.at <= s.at && s.at.toEpochMilli() - it.at.toEpochMilli() <= NOTIFICATION_LEAD_MS && it.pkg == firstApp
+                it.kind == UseKind.NOTIFICATION && it.at <= s.at && s.at.toEpochMilli() - it.at.toEpochMilli() <= NOTIFICATION_LEAD_MS &&
+                    it.pkg !in ignore && it.pkg !in NOT_A_STARTER
             }?.pkg
         }
-        return Lead(at, app, previous, start?.let { (at.toEpochMilli() - it.at.toEpochMilli()) / 1000 }, startedBy)
+        val over = detail.substringBefore(" > ").takeIf { it.isNotBlank() }
+        val page = detail.substringAfter(" > ", "").takeIf { it.isNotBlank() }
+        return Lead(at, app, previous, start?.let { (at.toEpochMilli() - it.at.toEpochMilli()) / 1000 }, startedBy, start != null, over, page)
     }
 
     /** Screen-on time between [from] and [to], from the same spans as every other number ([PhoneUse.spans]). */
@@ -126,7 +140,8 @@ object Slides {
             screenMinutesBeforeFajr = min(screenMillis(uses, end, cut(fajrNext))),
             screenMinutes = min(summary.screenMillis),
             unlocks = summary.unlocks,
-            tries = summary.tries.map { (at, pkg) -> lead(uses, at, pkg, ignore) },
+            tries = uses.filter { it.kind == UseKind.BLOCKED && inDay(it.at) && it.at < cut(end) }.sortedBy { it.at }
+                .map { lead(uses, it.at, it.pkg, ignore, it.detail) },
             blocks = blocks.filter { inDay(it.first) }.sortedBy { it.first }.map { (at, pkg) -> lead(uses, at, pkg, ignore) },
             loosenAsked = events.count { inDay(it.at) && it.kind == EventKind.LOOSEN_REQUESTED },
             tightened = events.count { inDay(it.at) && it.kind == EventKind.TIGHTENED },

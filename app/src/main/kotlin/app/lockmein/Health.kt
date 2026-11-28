@@ -10,8 +10,14 @@ import app.lockmein.core.Restrictions
 import java.time.Duration
 import java.time.Instant
 
-/** One thing the protection depends on, as the phone reports it right now. */
-data class HealthItem(val title: String, val ok: Boolean, val detail: String)
+/**
+ * One thing the protection depends on, as the phone reports it right now. [required] is false for a check that only makes the
+ * records better (notification access): it shows, but never blocks setup, asks for a repair or marks the phone at risk.
+ */
+data class HealthItem(val title: String, val ok: Boolean, val detail: String, val required: Boolean = true) {
+    /** Failing in a way that matters for protection. */
+    val failing: Boolean get() = !ok && required
+}
 
 /**
  * Reads back from Android what is really in force and compares it with what the rules say should be, so the app never claims to
@@ -143,6 +149,15 @@ class Health(private val context: Context) {
             },
         )
 
+        val notify = NotifyListener.enabled(context)
+        items += HealthItem(
+            NOTIFICATION_ACCESS,
+            notify,
+            if (notify) "Counts which app each notification came from and which you opened (never their text), to find what starts a session."
+            else "Off: \"what started it\" cannot be named and ongoing notifications are counted. Turn on Lock Me In in Notification access.",
+            required = false,
+        )
+
         val lastOk = EventLog(context).read().lastOrNull { it.kind == EventKind.PASS_OK || it.kind == EventKind.PASS_FAILED }
         val fresh = lastOk != null && lastOk.kind == EventKind.PASS_OK && Duration.between(lastOk.at, now) < WATCHDOG_LATE
         items += HealthItem(
@@ -159,6 +174,8 @@ class Health(private val context: Context) {
     }
 
     companion object {
+        const val NOTIFICATION_ACCESS = "Notification access"
+
         /** A pass runs at least every 15 minutes; past this, the alarm chain is broken. */
         val WATCHDOG_LATE: Duration = Duration.ofMinutes(35)
     }

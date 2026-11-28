@@ -71,7 +71,7 @@ fun UnfinishedSetupBanner(onReset: () -> Unit) {
             result to if (result is Outcome.Done) app.lockmein.Health(context).check() else null
         }) { (result, health) ->
             working = false
-            val bad = health.orEmpty().filter { !it.ok }
+            val bad = health.orEmpty().filter { it.failing }
             if (result is Outcome.Done && health != null && bad.isEmpty()) {
                 ConfigStore(context).setupComplete = true
                 complete = true

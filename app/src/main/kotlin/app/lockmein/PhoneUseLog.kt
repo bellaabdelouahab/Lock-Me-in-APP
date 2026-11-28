@@ -17,8 +17,8 @@ import java.util.concurrent.Executors
 class PhoneUseLog(context: Context) {
     private val dir = File(context.noBackupFilesDir, "phone-use")
 
-    fun add(kind: UseKind, pkg: String = "", at: Instant = Instant.now()) {
-        val line = UseLines.encode(UseEvent(at, kind, pkg)) + "\n"
+    fun add(kind: UseKind, pkg: String = "", at: Instant = Instant.now(), detail: String = "") {
+        val line = UseLines.encode(UseEvent(at, kind, pkg, detail)) + "\n"
         writer.execute {
             runCatching {
                 dir.mkdirs()
