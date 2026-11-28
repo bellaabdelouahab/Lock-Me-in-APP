@@ -243,6 +243,13 @@ class FilterService : AccessibilityService() {
     }
 
     private fun onForegroundAppChanged(pkg: String) {
+        // Spec D1: a bank app that refuses to run with any accessibility service on. The watched apps stay closed meanwhile.
+        if (BankPauses.shouldPause(this, pkg)) {
+            stopSampling()
+            stopSiteWatch()
+            disableSelf()
+            return
+        }
         if (pkg in KnownBrowsers.ALL || pkg in (siteBrowsers ?: emptySet())) startSiteWatch(pkg) else stopSiteWatch()
         val config = ConfigStore(this).load()
         val isWatched = config != null && WatchedApps.isWatched(pkg, config.watchedNow())

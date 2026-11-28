@@ -143,6 +143,10 @@ class Health(private val context: Context) {
             "Screen filter",
             filterOk,
             when {
+                !filterEnabled && LockState(context).bankPause != null -> LockState(context).bankPause!!.let { p ->
+                    "Paused for ${DeviceInventory(context).label(p.pkg).ifBlank { p.pkg }}: the watched apps are closed until it is back" +
+                        if (p.auto) " (when the bank app leaves, the screen goes off or after 10 min)." else ". Switch Lock Me In's filter back on in Accessibility."
+                }
                 !filterEnabled -> "Accessibility service is off or not answering: all ${config.watchedApps.size} watched apps are suspended until it is turned on."
                 !modelReady -> "Accessibility service is on, but filter model is missing or failed to load."
                 else -> "Accessibility service is on, model loaded ($lastCheckDetail)."

@@ -46,6 +46,8 @@ class FilterWatcher : Service() {
             if (trainBusy.compareAndSet(false, true)) trainWorker.execute {
                 try { TrainingUpload.tick(this@FilterWatcher); RemoteLink.autoPair(this@FilterWatcher); MoodAsk.tick(this@FilterWatcher) } catch (e: Throwable) { Log.w("TrainingUpload", "tick failed", e) } finally { trainBusy.set(false) }
             }
+            // Spec D1: an automatic bank pause ends when the bank app leaves or after 10 minutes.
+            if (LockState(this@FilterWatcher).bankPause != null) passWorker.execute { runCatching { BankPauses.tick(this@FilterWatcher) } }
             // A pass Android's alarm has not run yet (it can be held back): run it now, so fajr or a window opens on time.
             if (passBusy.compareAndSet(false, true)) passWorker.execute {
                 try {
@@ -88,6 +90,9 @@ class FilterWatcher : Service() {
                 else -> return
             }
             PhoneUseLog(context).add(kind)
+            if (kind == app.lockmein.core.UseKind.SCREEN_OFF && LockState(context).bankPause != null) {
+                passWorker.execute { runCatching { BankPauses.tick(context, screenOff = true) } }
+            }
             if (kind == app.lockmein.core.UseKind.UNLOCK) CenterPrompt.onUnlock(context)
         }
     }
@@ -124,6 +129,17 @@ class FilterWatcher : Service() {
             val now = TrustedClock(this).now()
             val watched = PolicyRunner(this).planFor(config, now, filterServiceEnabled = false).suspended.intersect(config.watchedNow())
             val refused = dpm().setPackagesSuspended(admin(), watched.toTypedArray(), true).toList()
+            val bank = LockState(this).bankPause
+            if (bank != null) {
+                EventLog(this).add(
+                    EventKind.BANK_PAUSE_STARTED,
+                    "${DeviceInventory(this).label(bank.pkg).ifBlank { bank.pkg }}: screen filter paused, ${watched.size} watched apps closed, " +
+                        if (bank.auto) "back on when it leaves, the screen goes off or after 10 min" else "switch it back on by hand in Accessibility",
+                    now,
+                )
+                return
+            }
+            LockState(this).downForBank = false
             EventLog(this).add(
                 EventKind.FILTER_SERVICE_OFF,
                 "screen filter $why: ${watched.size} watched apps closed${if (refused.isNotEmpty()) ", refused: ${refused.joinToString()}" else ""}",
@@ -143,6 +159,14 @@ class FilterWatcher : Service() {
             val closed = PolicyRunner(this).planFor(config, now, filterServiceEnabled = true).suspended
             val open = config.watchedNow() - closed
             dpm().setPackagesSuspended(admin(), open.toTypedArray(), false)
+            val state = LockState(this)
+            if (state.downForBank) {
+                // Back from a bank pause: ended by the pause itself, or by hand when it could not switch the filter on.
+                state.downForBank = false
+                state.bankPause?.let { BankPauses.end(this, it, app.lockmein.core.BankPause.BY_HAND) }
+                EventLog(this).add(EventKind.FILTER_CLEARED, "bank pause over, screen filter answering: watched apps open again", now)
+                return
+            }
             val since = LockState(this).filterDownSince
             val off = if (since > 0) ", off for ${app.lockmein.core.Reports.hoursMinutes(java.time.Duration.ofMillis((now.toEpochMilli() - since).coerceAtLeast(0)))}" else ""
             EventLog(this).add(EventKind.FILTER_SERVICE_BACK, "screen filter back on and answering: watched apps open again$off", now)

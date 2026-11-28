@@ -59,6 +59,12 @@ enum class EventKind {
     /** The screen filter service is back on and answering; the detail holds how long it was off. */
     FILTER_SERVICE_BACK,
 
+    /** The screen filter paused itself for a bank app in front (spec D1); the watched apps stay closed. Detail: the app. */
+    BANK_PAUSE_STARTED,
+
+    /** The bank pause ended; the detail holds the app, how long, and how it ended (left the app, screen off, the cap, by hand). */
+    BANK_PAUSE_ENDED,
+
     /** A block saved for review with "Wrong block?" (spec v3.1 F3); the detail holds the day's count. */
     FILTER_SAVED,
 
@@ -103,6 +109,7 @@ data class WeeklyReport(
     val refusals: List<LockEvent>,
     val problems: List<LockEvent>,
     val filterOff: List<FilterOff> = emptyList(),
+    val bankPauses: List<LockEvent> = emptyList(),
 ) {
     fun count(kind: EventKind) = counts[kind] ?: 0
 
@@ -123,6 +130,10 @@ data class WeeklyReport(
             filterOff.forEach { off ->
                 val until = off.end?.let { day.format(it) } ?: "now (still off)"
                 appendLine("Screen filter service off: ${day.format(off.start)} to $until, ${Reports.hoursMinutes(off.duration(to))} (${off.why})")
+            }
+            if (bankPauses.isNotEmpty()) {
+                appendLine("Screen filter paused for a bank app: ${bankPauses.size} times")
+                bankPauses.forEach { appendLine("  ${day.format(it.at)}: ${it.detail}") }
             }
             if (count(EventKind.FILTER_SAVED) > 0) appendLine("Blocks saved as wrong for review: ${count(EventKind.FILTER_SAVED)}")
             if (count(EventKind.REMOTE_CHANGE) > 0) appendLine("Changes asked through the MCP: ${count(EventKind.REMOTE_CHANGE)}")
@@ -148,6 +159,7 @@ object Reports {
             to = now,
             counts = inRange.groupingBy { it.kind }.eachCount(),
             filterOff = filterOff(all).filter { it.start <= now && (it.end ?: now) >= from },
+            bankPauses = inRange.filter { it.kind == EventKind.BANK_PAUSE_ENDED },
             newApps = inRange.filter { it.kind == EventKind.APP_QUARANTINED }.map { it.detail }.distinct(),
             refusals = inRange.filter { it.kind == EventKind.DENIED || it.kind == EventKind.EMERGENCY_REFUSED },
             problems = inRange.filter { it.kind == EventKind.PASS_FAILED },

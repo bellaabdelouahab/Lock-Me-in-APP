@@ -365,3 +365,24 @@ His choice (2026-11-24): the screen filter learns from his own screens, on his s
   screen after 21:30, tries, blocks, requests to open up, tightenings, moods answered.
 - Home shows the rules' drift as one number (spec D4): requests to open up minus tightenings over the last 14 days.
 - The phone-use log began on 2026-11-22; `weekly_report` and `day_scores` say so, so empty earlier days are not read as a fault.
+
+
+### 3.22 Bank pause (spec D1)
+
+Simple (`com.attijariwafabank.lbankalik`), Assafa Mobile (`com.bankassafaa.main`) and Cih Mobile (`com.b3g.cih.online`) refuse
+to open while any accessibility service is on. While one of them is in front, the screen filter switches itself off
+(`filterPauseApps` in the settings; adding an app is a loosening through the change gate, removing one is instant). Every
+watched app stays closed during the pause, as whenever the filter is off. Each pause is BANK_PAUSE_STARTED and
+BANK_PAUSE_ENDED (app, how long, and how it ended), listed in the weekly report, and never logged as FILTER_SERVICE_OFF, so a
+FILTER_SERVICE_OFF now always means the filter was switched off.
+
+Android lets no app, the device owner included, switch an accessibility service on. With two one-time grants from a computer
+the pause ends on its own when the bank app leaves, when the screen goes off, or after 10 minutes (then no new pause until
+another app has been in front):
+
+    adb shell pm grant app.lockmein android.permission.WRITE_SECURE_SETTINGS
+    adb shell appops set app.lockmein GET_USAGE_STATS allow
+
+Without the first, the filter is switched back on by hand in Accessibility (the watched apps stay closed until then); without
+the second, it comes back when the screen goes off or at 10 minutes. The grants survive updates. The sealed build locks USB
+debugging, so they are given while it is open (the test build, or before sealing).

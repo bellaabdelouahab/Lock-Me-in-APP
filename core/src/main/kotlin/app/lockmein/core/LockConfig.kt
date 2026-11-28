@@ -18,6 +18,13 @@ val WINDOW_APPS_DEFAULT = setOf(
     "com.google.android.youtube",
 )
 
+/**
+ * Apps that refuse to open while any accessibility service is on (spec D1, agreed 2026-11-28): Simple, Assafa Mobile, Cih
+ * Mobile. The screen filter pauses itself only while one of them is in front. Adding one opens the phone up (the change gate);
+ * removing one is instant.
+ */
+val FILTER_PAUSE_APPS_DEFAULT = setOf("com.attijariwafabank.lbankalik", "com.bankassafaa.main", "com.b3g.cih.online")
+
 val WATCHED_APPS_DEFAULT = setOf(
     "com.brave.browser",
     "com.android.chrome",
@@ -44,6 +51,8 @@ data class LockConfig(
     val windowApps: Set<String> = WINDOW_APPS_DEFAULT,
     /** Apps monitored by the on-device AI screen filter. */
     val watchedApps: Set<String> = WATCHED_APPS_DEFAULT,
+    /** Bank apps the screen filter pauses for while they are in front ([FILTER_PAUSE_APPS_DEFAULT]). */
+    val filterPauseApps: Set<String> = FILTER_PAUSE_APPS_DEFAULT,
     /**
      * Thresholds for one frame of the screen (spec v3.1 F2), tuned together with the 3-of-4 frame agreement on simulated phone
      * screens (docs/FILTER-EVAL.md): porn + hentai on a photo.
@@ -158,6 +167,7 @@ object FilterTighten {
             filterSeductiveLive = old.filterSeductiveLive,
             filterAppOffsets = old.filterAppOffsets,
             filterJudge = old.filterJudge,
+            filterPauseApps = old.filterPauseApps,
         ) == old
         if (!sameElsewhere) return false
         if (new.filterPornHentaiThreshold > old.filterPornHentaiThreshold || new.filterSexyThreshold > old.filterSexyThreshold ||
@@ -166,6 +176,8 @@ object FilterTighten {
         if (old.filterSeductiveLive && !new.filterSeductiveLive) return false
         val apps = old.filterAppOffsets.keys + new.filterAppOffsets.keys
         if (apps.any { (new.filterAppOffsets[it] ?: 0f) > (old.filterAppOffsets[it] ?: 0f) }) return false
+        // Pausing for fewer bank apps is stricter; any new one opens the phone up.
+        if (!old.filterPauseApps.containsAll(new.filterPauseApps)) return false
         // A judge only ever removes hits: adding or changing one loosens, taking it off tightens.
         if (new.filterJudge != null && new.filterJudge != old.filterJudge) return false
         return true

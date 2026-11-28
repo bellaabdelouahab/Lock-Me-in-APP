@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Android checks the private DNS server from inside this app's process before it accepts the host. -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -22,6 +23,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
     <!-- The mood check: one notification a day, and one after a try on a closed app at most every two hours. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- The bank pause (spec D1): switching the screen filter back on after a bank app, and seeing it leave. Neither can be
+         granted by the app or the device owner; one adb grant each (docs/FEATURES.md 3.22). Without them the pause still
+         works, and the filter is switched back on by hand. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
 
     <application
         android:name=".LockMeInApp"

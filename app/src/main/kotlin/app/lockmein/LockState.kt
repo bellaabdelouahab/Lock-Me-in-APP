@@ -86,6 +86,21 @@ class LockState(context: Context) {
         get() = prefs.getBoolean(FILTER_DOWN, false)
         set(value) = prefs.edit().putBoolean(FILTER_DOWN, value).apply()
 
+    /** The screen filter's pause for a bank app in front (spec D1), while it lasts. */
+    var bankPause: app.lockmein.core.BankPause?
+        get() = app.lockmein.core.BankPause.decode(prefs.getString(BANK_PAUSE, null))
+        set(value) { prefs.edit().apply { if (value == null) remove(BANK_PAUSE) else putString(BANK_PAUSE, value.encode()) }.commit() }
+
+    /** A bank app whose pause hit the cap: no new pause for it until another app has been in front. */
+    var bankCapped: String?
+        get() = prefs.getString(BANK_CAPPED, null)
+        set(value) { prefs.edit().apply { if (value == null) remove(BANK_CAPPED) else putString(BANK_CAPPED, value) }.commit() }
+
+    /** The filter's last time off was a bank pause, so its return is not logged as FILTER_SERVICE_BACK. */
+    var downForBank: Boolean
+        get() = prefs.getBoolean(DOWN_FOR_BANK, false)
+        set(value) = prefs.edit().putBoolean(DOWN_FOR_BANK, value).apply()
+
     /** When the screen filter service was last found off (epoch millis), for how long it was off. */
     var filterDownSince: Long
         get() = prefs.getLong(FILTER_DOWN_SINCE, 0L)
@@ -202,6 +217,9 @@ class LockState(context: Context) {
         const val LAST_FILTER_HIT = "last_filter_hit"
         const val FILTER_DOWN = "filter_down"
         const val FILTER_DOWN_SINCE = "filter_down_since"
+        const val BANK_PAUSE = "bank_pause"
+        const val BANK_CAPPED = "bank_capped"
+        const val DOWN_FOR_BANK = "down_for_bank"
         const val DNS_FALLBACK_SINCE = "dns_fallback_since"
         const val DNS_CHANGE_FAILED = "dns_change_failed"
         const val NEXT_PASS_AT = "next_pass_at"
