@@ -95,13 +95,17 @@ class FilterWatcherBankPauseTest {
     /** The bank app comes to the front; the filter stops itself (or, when Android holds the service back, the shell stands in). */
     private fun openBank() {
         shell("am start -W -n $bank/.MainActivity")
-        Thread.sleep(1_500)
-        val service = FilterService.instance
-        if (service != null) {
-            service.onForegroundAppChangedForTesting(bank)
-        } else {
-            assertTrue(BankPauses.shouldPause(context, bank))
-            shell("settings put secure enabled_accessibility_services \"\"")
+        // The live filter sees the bank app and pauses by itself; when Android holds the service back in tests, stand in for it.
+        val start = System.currentTimeMillis()
+        while (state.bankPause == null && System.currentTimeMillis() - start < 5_000) Thread.sleep(200)
+        if (state.bankPause == null) {
+            val service = FilterService.instance
+            if (service != null) {
+                service.onForegroundAppChangedForTesting(bank)
+            } else {
+                assertTrue("the pause starts for a listed bank app", BankPauses.shouldPause(context, bank))
+                shell("settings put secure enabled_accessibility_services \"\"")
+            }
         }
         waitFor("the pause recorded and the filter off") { state.bankPause?.pkg == bank && !FilterService.isListed(context) }
         waitFor("the watcher counting the filter off (watched apps closed)") { FilterWatcher.filterDownNow == true }
