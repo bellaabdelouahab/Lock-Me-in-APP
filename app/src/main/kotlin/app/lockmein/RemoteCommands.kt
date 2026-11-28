@@ -45,6 +45,7 @@ class RemoteCommands(private val context: Context) {
         when (tool) {
             "status" -> status(now)
             "phone_use" -> phoneUse(s("day")?.let(LocalDate::parse) ?: LocalDate.now(zone))
+            "notifications" -> notifications(s("day")?.let(LocalDate::parse) ?: LocalDate.now(zone).minusDays(1), now)
             "day_scores" -> dayScores(s("day")?.let(LocalDate::parse) ?: LocalDate.now(zone).minusDays(1), now)
             "mood" -> {
                 val end = s("end")?.let(LocalDate::parse) ?: LocalDate.now(zone)
@@ -236,6 +237,31 @@ class RemoteCommands(private val context: Context) {
             put("moods", buildJsonArray { d.moods.forEach { m -> add(buildJsonObject { put("at", hms.format(m.at.atZone(zone))); put("score", m.score); put("asked", m.asked) }) } })
             put("usage_log_starts", log.firstDay()?.toString())
             put("notification_access", NotifyListener.enabled(context))
+        }
+    }
+
+    /** Spec N1: notification counts per app and hour, the unlocks they started, the night's. Counts only, never names or text. */
+    private fun notifications(day: LocalDate, now: java.time.Instant): JsonElement {
+        val config = manager.config()
+        val log = PhoneUseLog(context)
+        val uses = log.read(day) + log.read(day.plusDays(1)).filter { it.at.atZone(zone).toLocalDate() == day.plusDays(1) }
+        val fajr = app.lockmein.core.AstronomicalFajr(config.fajrConfig(), zone)
+        val d = app.lockmein.core.NotificationStats.day(day, zone, now, uses, fajr::fajr, ignored())
+        fun name(pkg: String) = inventory.label(pkg).ifBlank { pkg }
+        return buildJsonObject {
+            put("day", day.toString())
+            put("notification_access", NotifyListener.enabled(context))
+            put("posted", d.posted); put("opened", d.opened); put("unlocks", d.unlocks)
+            put("unlocks_after_a_notification", d.unlocksAfterNotification)
+            put("share_of_unlocks_after_a_notification", if (d.unlocks == 0) null else Math.round(100.0 * d.unlocksAfterNotification / d.unlocks).toInt())
+            put("per_app_per_hour", buildJsonArray {
+                d.hours.forEach { h ->
+                    add(buildJsonObject { put("app", name(h.pkg)); put("hour", h.hour); put("posted", h.posted); put("opened", h.opened); put("led_to_unlock", h.ledToUnlock) })
+                }
+            })
+            put("night_2130_to_fajr", buildJsonArray {
+                d.night.forEach { n -> add(buildJsonObject { put("app", name(n.pkg)); put("posted", n.posted); put("screen_came_on_within_60s", n.screenCameOn) }) }
+            })
         }
     }
 

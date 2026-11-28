@@ -335,6 +335,9 @@ His choice (2026-11-24): the screen filter learns from his own screens, on his s
   Ongoing ones (music, timers) and group summaries are left out. Without it the screen filter still counts notifications.
 - A try the dialog does not name logs the app it came over (`dialog_over`) and, over Settings, the page (`settings_page`:
   Accessibility, Apps...), plus the dialog's own words in the event log, so the naming can be fixed from them.
+- `notifications(day)` (MCP, spec N1): per app per hour, notifications posted, tapped open and those that started an unlock
+  (the last one in the minute before it); unlocks after a notification as a share of all unlocks; the night's (21:30 to
+  fajr) per app with whether the screen came on within a minute. Counts only; contact-level detail never leaves the phone.
 - `dns_summary` lists every day of the range; a day with no lookups says the phone was not using the server, and no lookups
   at all is an error, never an empty answer.
 - Mood, 1 to 5, one tap: a notification once a day from 13:00 (the phone stays at the office in the evening) and after a try on a
