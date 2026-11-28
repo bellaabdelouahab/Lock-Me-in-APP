@@ -47,7 +47,7 @@ fun ReportScreen(onBack: () -> Unit) {
         Note("The report stays on this phone unless you share it. It holds events (changes, refusals, new apps, filter detections), never browsing or screen content.")
 
         val detections = remember {
-            EventLog(context).read()
+            EventLog(context).read().map(app.lockmein.core.Reports::legacy)
                 .filter { it.kind == EventKind.FILTER_HIT || it.kind == EventKind.FILTER_BLOCKED }
                 .takeLast(20)
                 .reversed()

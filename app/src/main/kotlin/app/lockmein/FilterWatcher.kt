@@ -111,6 +111,7 @@ class FilterWatcher : Service() {
         val working = watch.check(SystemClock.uptimeMillis(), FilterService.isListed(this))
         if (working == !state.filterDown) return
         state.filterDown = !working
+        if (!working) state.filterDownSince = System.currentTimeMillis()
         val why = if (FilterService.isListed(this)) "not answering" else "switched off in Accessibility"
         worker.execute { if (working) reopen() else close(why) }
     }
@@ -123,7 +124,7 @@ class FilterWatcher : Service() {
             val watched = PolicyRunner(this).planFor(config, now, filterServiceEnabled = false).suspended.intersect(config.watchedNow())
             val refused = dpm().setPackagesSuspended(admin(), watched.toTypedArray(), true).toList()
             EventLog(this).add(
-                EventKind.FILTER_BLOCKED,
+                EventKind.FILTER_SERVICE_OFF,
                 "screen filter $why: ${watched.size} watched apps closed${if (refused.isNotEmpty()) ", refused: ${refused.joinToString()}" else ""}",
                 now,
             )
@@ -141,7 +142,9 @@ class FilterWatcher : Service() {
             val closed = PolicyRunner(this).planFor(config, now, filterServiceEnabled = true).suspended
             val open = config.watchedNow() - closed
             dpm().setPackagesSuspended(admin(), open.toTypedArray(), false)
-            EventLog(this).add(EventKind.FILTER_CLEARED, "screen filter back on and answering: watched apps open again", now)
+            val since = LockState(this).filterDownSince
+            val off = if (since > 0) ", off for ${app.lockmein.core.Reports.hoursMinutes(java.time.Duration.ofMillis((now.toEpochMilli() - since).coerceAtLeast(0)))}" else ""
+            EventLog(this).add(EventKind.FILTER_SERVICE_BACK, "screen filter back on and answering: watched apps open again$off", now)
         } catch (e: Exception) {
             Log.w(TAG, "reopening the watched apps failed", e)
         }

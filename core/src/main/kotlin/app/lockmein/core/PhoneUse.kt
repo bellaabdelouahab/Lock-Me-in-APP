@@ -47,74 +47,144 @@ data class DayUse(
     val tries: List<Pair<Instant, String>> = emptyList(),
 )
 
+/** A stretch of screen-on time that counts: [from] to [to], unlocked or on the lock screen, and the app in front (null when none). */
+data class ScreenSpan(val from: Instant, val to: Instant, val unlocked: Boolean, val app: String?) {
+    val millis: Long get() = to.toEpochMilli() - from.toEpochMilli()
+
+    /** The part of this span between [a] and [b], in millis. */
+    fun within(a: Instant, b: Instant): Long {
+        val x = maxOf(from, a)
+        val y = minOf(to, b)
+        return if (y > x) y.toEpochMilli() - x.toEpochMilli() else 0L
+    }
+}
+
 /**
- * Turns the day's events into time per app, opens, unlocks and screen time. An app's time runs from when it came to the front
- * until another app did or the screen went off. Pure, so it is tested here.
+ * Turns the day's events into time per app, opens, unlocks and screen time. Every number comes from the same screen-on spans
+ * ([PhoneUse.spans]), so an app's time is never more than the screen time it sits in. Pure, so it is tested here.
  */
 object PhoneUse {
-    /** Longest an app can count without a fresh event (a missed screen-off must not turn into a 10-hour session). */
+    /** Longest an unlocked screen can count without a fresh event (a missed screen-off must not turn into a 10-hour session). */
     const val MAX_STRETCH_MS = 2 * 60 * 60 * 1000L
+
+    /**
+     * Longest a lit lock screen counts. Past that it is an adhan or alarm screen, or a screen-off Android never sent (11-27 23:52
+     * to 04:45), not use. A glance at a notification fits in it.
+     */
+    const val LOCKED_MAX_MS = 2 * 60 * 1000L
+
+    /**
+     * The screen-on time the events show, up to [until]. App time counts only while unlocked: from the unlock (or an app coming
+     * to the front with the screen off, which means events were missed) until the screen goes off. A screen that comes on is
+     * locked until the unlock, and counts at most [LOCKED_MAX_MS] that way. An unlocked screen counts at most [MAX_STRETCH_MS]
+     * after the last unlock or app change.
+     */
+    fun spans(events: List<UseEvent>, until: Instant): List<ScreenSpan> {
+        val out = ArrayList<ScreenSpan>()
+        var on = false
+        var unlocked = false
+        var current: String? = null
+        // The app that came to the front since the screen came on (what a lock screen shows: an adhan, the camera).
+        var sinceOn: String? = null
+        var windowEnd: Instant? = null
+        var prev: Instant? = null
+        var lastApp: UseEvent? = null
+
+        fun emit(to: Instant) {
+            val p = prev ?: return
+            val w = windowEnd ?: return
+            if (!on) return
+            val b = minOf(to, w)
+            if (b > p) out += ScreenSpan(p, b, unlocked, if (unlocked) current else sinceOn)
+        }
+
+        for (e in events.sortedBy { it.at }) {
+            if (e.at >= until) break
+            emit(e.at)
+            prev = e.at
+            when (e.kind) {
+                UseKind.SCREEN_ON -> {
+                    on = true; unlocked = false
+                    // An app logged in the same instant came up with the screen (Android's order between the two varies).
+                    sinceOn = lastApp?.takeIf { it.at == e.at }?.pkg
+                    windowEnd = e.at.plusMillis(LOCKED_MAX_MS)
+                }
+                UseKind.UNLOCK -> {
+                    on = true; unlocked = true
+                    windowEnd = e.at.plusMillis(MAX_STRETCH_MS)
+                }
+                UseKind.SCREEN_OFF -> { on = false; unlocked = false; sinceOn = null; windowEnd = null }
+                UseKind.APP -> {
+                    current = e.pkg
+                    lastApp = e
+                    if (!on) { on = true; unlocked = true }
+                    if (unlocked) windowEnd = e.at.plusMillis(MAX_STRETCH_MS) else sinceOn = e.pkg
+                }
+                UseKind.NOTIFICATION, UseKind.BLOCKED -> Unit
+            }
+        }
+        emit(until)
+        // Merge touching spans of the same kind, so a notification in the middle does not split them.
+        return out.fold(ArrayList()) { acc, s ->
+            val last = acc.lastOrNull()
+            if (last != null && last.to == s.from && last.unlocked == s.unlocked && last.app == s.app) acc[acc.size - 1] = last.copy(to = s.to) else acc += s
+            acc
+        }
+    }
+
+    /** Screen-on time between [from] and [to]. */
+    fun screenMillis(events: List<UseEvent>, from: Instant, to: Instant): Long =
+        if (!to.isAfter(from)) 0L else spans(events, to).sumOf { it.within(from, to) }
+
+    /** Screen-on time per app between [from] and [to] (lock-screen time only for an app shown on it), most first. */
+    fun appMillis(events: List<UseEvent>, from: Instant, to: Instant, ignore: Set<String> = emptySet()): List<Pair<String, Long>> {
+        if (!to.isAfter(from)) return emptyList()
+        val time = HashMap<String, Long>()
+        for (s in spans(events, to)) {
+            val app = s.app ?: continue
+            if (app in ignore) continue
+            val ms = s.within(from, to)
+            if (ms > 0) time[app] = (time[app] ?: 0L) + ms
+        }
+        return time.entries.sortedByDescending { it.value }.map { it.key to it.value }
+    }
 
     fun summarize(events: List<UseEvent>, day: LocalDate, zone: ZoneId, now: Instant, ignore: Set<String> = emptySet()): DayUse {
         val start = day.atStartOfDay(zone).toInstant()
         val end = minOf(day.plusDays(1).atStartOfDay(zone).toInstant(), now)
         val sorted = events.sortedBy { it.at }
+        val spans = spans(sorted, end)
         val time = HashMap<String, Long>()
+        for (s in spans) {
+            val app = s.app
+            if (!s.unlocked || app == null || app in ignore) continue
+            val ms = s.within(start, end)
+            if (ms > 0) time[app] = (time[app] ?: 0L) + ms
+        }
+        val screenMillis = spans.sumOf { it.within(start, end) }
         val opens = HashMap<String, Int>()
         val notes = HashMap<String, Int>()
         val openList = ArrayList<Pair<Instant, String>>()
-        var screenMillis = 0L
         var unlocks = 0
         var firstUnlock: Instant? = null
         var lastOff: Instant? = null
         var notifications = 0
         val tryCount = HashMap<String, Int>()
         val tryList = ArrayList<Pair<Instant, String>>()
-
-        var screenOn = false
-        var screenSince: Instant? = null
         var current: String? = null
-        var since: Instant? = null
-
-        fun clip(from: Instant, to: Instant): Long {
-            val a = maxOf(from, start)
-            val b = minOf(to, end)
-            return if (b > a) minOf(b.toEpochMilli() - a.toEpochMilli(), MAX_STRETCH_MS) else 0L
-        }
-
-        fun closeApp(at: Instant) {
-            val app = current
-            val from = since
-            if (app != null && from != null && app !in ignore) time[app] = (time[app] ?: 0L) + clip(from, at)
-            since = if (current != null) at else null
-        }
 
         for (e in sorted) {
             if (e.at >= end) break
             val inDay = e.at >= start
             when (e.kind) {
-                UseKind.SCREEN_ON -> {
-                    if (!screenOn) { screenOn = true; screenSince = e.at }
-                    if (current != null) since = e.at
-                }
-                UseKind.SCREEN_OFF -> {
-                    closeApp(e.at)
-                    since = null
-                    screenSince?.let { if (screenOn) screenMillis += clip(it, e.at) }
-                    screenOn = false
-                    screenSince = null
-                    if (inDay) lastOff = e.at
-                }
+                UseKind.SCREEN_OFF -> if (inDay) lastOff = e.at
                 UseKind.UNLOCK -> if (inDay) {
                     unlocks++
                     if (firstUnlock == null) firstUnlock = e.at
                 }
                 UseKind.APP -> {
                     if (e.pkg == current) continue
-                    if (since != null) closeApp(e.at)
                     current = e.pkg
-                    since = e.at
-                    if (!screenOn) { screenOn = true; screenSince = e.at } // an app on screen means the screen is on
                     if (inDay && e.pkg !in ignore) {
                         opens[e.pkg] = (opens[e.pkg] ?: 0) + 1
                         openList += e.at to e.pkg
@@ -128,11 +198,9 @@ object PhoneUse {
                     tryList += e.at to e.pkg
                     if (e.pkg.isNotEmpty()) tryCount[e.pkg] = (tryCount[e.pkg] ?: 0) + 1
                 }
+                UseKind.SCREEN_ON -> Unit
             }
         }
-        // Still on screen now (or at the day's end).
-        if (since != null) closeApp(end)
-        screenSince?.let { if (screenOn) screenMillis += clip(it, end) }
 
         val apps = (time.keys + opens.keys + notes.keys + tryCount.keys).map { AppUse(it, time[it] ?: 0L, opens[it] ?: 0, notes[it] ?: 0, tryCount[it] ?: 0) }
             .sortedWith(compareByDescending<AppUse> { it.millis }.thenByDescending { it.opens }.thenByDescending { it.notifications })

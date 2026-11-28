@@ -50,6 +50,15 @@ enum class EventKind {
     /** Warning cleared after a clean check. */
     FILTER_CLEARED,
 
+    /**
+     * The screen filter service itself stopped: switched off in Accessibility, or not answering. The watched apps are closed
+     * until it is back (detail: why, how many apps). Up to 0.4.128 this was logged as FILTER_BLOCKED "screen filter ...".
+     */
+    FILTER_SERVICE_OFF,
+
+    /** The screen filter service is back on and answering; the detail holds how long it was off. */
+    FILTER_SERVICE_BACK,
+
     /** A block saved for review with "Wrong block?" (spec v3.1 F3); the detail holds the day's count. */
     FILTER_SAVED,
 
@@ -80,6 +89,11 @@ enum class EventKind {
 
 data class LockEvent(val at: Instant, val kind: EventKind, val detail: String = "")
 
+/** A time the screen filter service was off: from [start] to [end] (null while it still is), and why. */
+data class FilterOff(val start: Instant, val end: Instant?, val why: String) {
+    fun duration(now: Instant): Duration = Duration.between(start, end ?: now)
+}
+
 /** A week of events in numbers, for the Sunday session. */
 data class WeeklyReport(
     val from: Instant,
@@ -88,6 +102,7 @@ data class WeeklyReport(
     val newApps: List<String>,
     val refusals: List<LockEvent>,
     val problems: List<LockEvent>,
+    val filterOff: List<FilterOff> = emptyList(),
 ) {
     fun count(kind: EventKind) = counts[kind] ?: 0
 
@@ -104,6 +119,10 @@ data class WeeklyReport(
             appendLine("Browsers asked for: ${count(EventKind.BROWSER_REQUESTED)}, approved: ${count(EventKind.BROWSER_APPROVED)}")
             if (count(EventKind.FILTER_BLOCKED) > 0 || count(EventKind.FILTER_HIT) > 0) {
                 appendLine("Screen filter detections: ${count(EventKind.FILTER_HIT)} hits, ${count(EventKind.FILTER_BLOCKED)} blocks")
+            }
+            filterOff.forEach { off ->
+                val until = off.end?.let { day.format(it) } ?: "now (still off)"
+                appendLine("Screen filter service off: ${day.format(off.start)} to $until, ${Reports.hoursMinutes(off.duration(to))} (${off.why})")
             }
             if (count(EventKind.FILTER_SAVED) > 0) appendLine("Blocks saved as wrong for review: ${count(EventKind.FILTER_SAVED)}")
             if (count(EventKind.REMOTE_CHANGE) > 0) appendLine("Changes asked through the MCP: ${count(EventKind.REMOTE_CHANGE)}")
@@ -122,15 +141,47 @@ data class WeeklyReport(
 object Reports {
     fun week(events: List<LockEvent>, now: Instant, length: Duration = Duration.ofDays(7)): WeeklyReport {
         val from = now.minus(length)
-        val inRange = events.filter { !it.at.isBefore(from) && !it.at.isAfter(now) }.sortedBy { it.at }
+        val all = events.map(::legacy)
+        val inRange = all.filter { !it.at.isBefore(from) && !it.at.isAfter(now) }.sortedBy { it.at }
         return WeeklyReport(
             from = from,
             to = now,
             counts = inRange.groupingBy { it.kind }.eachCount(),
+            filterOff = filterOff(all).filter { it.start <= now && (it.end ?: now) >= from },
             newApps = inRange.filter { it.kind == EventKind.APP_QUARANTINED }.map { it.detail }.distinct(),
             refusals = inRange.filter { it.kind == EventKind.DENIED || it.kind == EventKind.EMERGENCY_REFUSED },
             problems = inRange.filter { it.kind == EventKind.PASS_FAILED },
         )
+    }
+
+    /** Old logs said "screen filter switched off" under FILTER_BLOCKED and "screen filter back on" under FILTER_CLEARED. */
+    fun legacy(e: LockEvent): LockEvent = when {
+        e.kind == EventKind.FILTER_BLOCKED && e.detail.startsWith("screen filter ") -> e.copy(kind = EventKind.FILTER_SERVICE_OFF)
+        e.kind == EventKind.FILTER_CLEARED && e.detail.startsWith("screen filter back on") -> e.copy(kind = EventKind.FILTER_SERVICE_BACK)
+        else -> e
+    }
+
+    /** Each time the filter service was off, from its OFF to the next BACK (a second OFF before BACK belongs to the same time). */
+    fun filterOff(events: List<LockEvent>): List<FilterOff> {
+        val out = ArrayList<FilterOff>()
+        var open: LockEvent? = null
+        for (e in events.map(::legacy).sortedBy { it.at }) {
+            when (e.kind) {
+                EventKind.FILTER_SERVICE_OFF -> if (open == null) open = e
+                EventKind.FILTER_SERVICE_BACK -> open?.let { out += FilterOff(it.at, e.at, it.why()); open = null }
+                else -> Unit
+            }
+        }
+        open?.let { out += FilterOff(it.at, null, it.why()) }
+        return out
+    }
+
+    private fun LockEvent.why() = detail.removePrefix("screen filter ").substringBefore(':').ifBlank { "off" }
+
+    /** "5 h 07" or "12 min". */
+    fun hoursMinutes(d: Duration): String {
+        val m = d.toMinutes()
+        return if (m < 60) "$m min" else "${m / 60} h ${"%02d".format(m % 60)}"
     }
 }
 

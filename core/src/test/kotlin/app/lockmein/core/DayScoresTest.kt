@@ -45,30 +45,51 @@ class DayScoresTest {
     }
 
     @Test
-    fun lateScreenTimeDecidesBedAndCountsTheNightUntilFajr() {
+    fun theBedScoreIsThreeMinutesOfScreenFrom22To04() {
         val uses = listOf(
-            e("21:40", UseKind.SCREEN_ON), e("21:40", UseKind.APP, "chat"), e("21:50", UseKind.SCREEN_OFF),
-            e("22:30", UseKind.SCREEN_ON), e("22:32", UseKind.SCREEN_OFF), // two minutes: still in bed
-            e("2026-11-23T05:00:00", UseKind.SCREEN_ON), e("2026-11-23T05:20:00", UseKind.SCREEN_OFF),
+            e("21:40", UseKind.SCREEN_ON), e("21:40", UseKind.UNLOCK), e("21:40", UseKind.APP, "chat"), e("21:50", UseKind.SCREEN_OFF),
+            e("22:30", UseKind.SCREEN_ON), e("22:32", UseKind.SCREEN_OFF), // two minutes on the lock screen: still in bed
+            e("2026-11-23T03:59:00", UseKind.SCREEN_ON), e("2026-11-23T03:59:00", UseKind.UNLOCK), e("2026-11-23T04:20:00", UseKind.SCREEN_OFF),
+            e("2026-11-23T05:00:00", UseKind.SCREEN_ON), e("2026-11-23T05:00:00", UseKind.UNLOCK), e("2026-11-23T05:20:00", UseKind.SCREEN_OFF),
         )
         val d = scores(uses)
-        assertEquals(22L, d.screenMinutesAfter22)
-        assertEquals(false, d.inBedBy22)
-        assertEquals(32L, d.screenMinutesNight)
-        val early = scores(uses.take(5))
-        assertEquals(true, early.inBedBy22)
+        assertEquals(3L, d.screenMinutes22To04)
+        assertEquals(true, d.inBedBy22, "a 03:59 alarm and the 05:00 wake do not fail the night")
+        assertEquals(43L, d.screenMinutesAfter22, "22:00 to fajr (06:00) counts it all")
+        assertEquals(53L, d.screenMinutesNight)
+        val late = scores(uses + listOf(e("23:00", UseKind.SCREEN_ON), e("23:00", UseKind.UNLOCK), e("23:00", UseKind.APP, "chat"), e("23:05", UseKind.SCREEN_OFF)))
+        assertEquals(false, late.inBedBy22)
+        assertEquals(8L, late.screenMinutes22To04)
+        assertEquals("chat", late.apps22To04.first().pkg)
         assertNull(scores(uses, now = t("21:45")).inBedBy22, "before 22:00 it is not known yet")
     }
 
     @Test
-    fun screenBeforeFajrRequestsAndMood() {
-        val uses = listOf(e("04:00", UseKind.SCREEN_ON), e("04:15", UseKind.SCREEN_OFF), e("07:00", UseKind.SCREEN_ON), e("07:10", UseKind.SCREEN_OFF))
+    fun midnightToFajrIsPartOfTheSameNightAndNeverMoreThan22ToFajr() {
+        val uses = listOf(
+            e("04:00", UseKind.SCREEN_ON), e("04:00", UseKind.UNLOCK), e("04:15", UseKind.SCREEN_OFF), // the night before: not this day's night
+            e("23:50", UseKind.SCREEN_ON), e("23:50", UseKind.UNLOCK), e("23:50", UseKind.APP, "chat"),
+            e("2026-11-23T00:30:00", UseKind.SCREEN_OFF),
+            e("2026-11-23T05:00:00", UseKind.SCREEN_ON), e("2026-11-23T05:00:00", UseKind.UNLOCK), e("2026-11-23T05:10:00", UseKind.SCREEN_OFF),
+        )
+        val d = scores(uses)
+        assertEquals(40L, d.screenMinutesBeforeFajr)
+        assertEquals(50L, d.screenMinutesAfter22)
+        assert(d.screenMinutesBeforeFajr <= d.screenMinutesAfter22)
+        assert(d.screenMinutesAfter22 <= d.screenMinutesNight)
+    }
+
+    @Test
+    fun requestsMoodAndScreenTime() {
+        val uses = listOf(
+            e("04:00", UseKind.SCREEN_ON), e("04:00", UseKind.UNLOCK), e("04:15", UseKind.SCREEN_OFF),
+            e("07:00", UseKind.SCREEN_ON), e("07:00", UseKind.UNLOCK), e("07:10", UseKind.SCREEN_OFF),
+        )
         val events = listOf(
             LockEvent(t("12:00"), EventKind.LOOSEN_REQUESTED), LockEvent(t("13:00"), EventKind.TIGHTENED),
             LockEvent(t("2026-11-23T01:00:00"), EventKind.LOOSEN_REQUESTED),
         )
         val d = scores(uses, events = events, moods = listOf(MoodEntry(t("13:00"), 2, MoodEntry.DAILY), MoodEntry(t("2026-11-21T13:00:00"), 5, MoodEntry.DAILY)))
-        assertEquals(15L, d.screenMinutesBeforeFajr)
         assertEquals(25L, d.screenMinutes)
         assertEquals(1, d.loosenAsked)
         assertEquals(1, d.tightened)

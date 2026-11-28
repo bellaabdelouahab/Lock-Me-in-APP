@@ -86,6 +86,11 @@ class LockState(context: Context) {
         get() = prefs.getBoolean(FILTER_DOWN, false)
         set(value) = prefs.edit().putBoolean(FILTER_DOWN, value).apply()
 
+    /** When the screen filter service was last found off (epoch millis), for how long it was off. */
+    var filterDownSince: Long
+        get() = prefs.getLong(FILTER_DOWN_SINCE, 0L)
+        set(value) = prefs.edit().putLong(FILTER_DOWN_SINCE, value).apply()
+
     /** Last time the screen filter detected a violation. */
     var lastFilterHitMillis: Long
         get() = prefs.getLong(LAST_FILTER_HIT, 0L)
@@ -196,6 +201,7 @@ class LockState(context: Context) {
         const val LAST_FILTER_CHECK = "last_filter_check"
         const val LAST_FILTER_HIT = "last_filter_hit"
         const val FILTER_DOWN = "filter_down"
+        const val FILTER_DOWN_SINCE = "filter_down_since"
         const val DNS_FALLBACK_SINCE = "dns_fallback_since"
         const val DNS_CHANGE_FAILED = "dns_change_failed"
         const val NEXT_PASS_AT = "next_pass_at"

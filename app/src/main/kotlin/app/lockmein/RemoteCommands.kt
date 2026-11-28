@@ -65,7 +65,7 @@ class RemoteCommands(private val context: Context) {
                 val kind = s("kind")?.let { EventKind.valueOf(it.uppercase()) }
                 val limit = (s("limit")?.toIntOrNull() ?: 100).coerceIn(1, 1000)
                 buildJsonArray {
-                    events.read().asReversed().filter { kind == null || it.kind == kind }.take(limit).forEach {
+                    events.read().map(Reports::legacy).asReversed().filter { kind == null || it.kind == kind }.take(limit).forEach {
                         add(buildJsonObject { put("at", it.at.atZone(zone).toString()); put("kind", it.kind.name); put("detail", it.detail) })
                     }
                 }
@@ -218,6 +218,8 @@ class RemoteCommands(private val context: Context) {
         return buildJsonObject {
             put("day", day.toString())
             put("in_bed_by_22", d.inBedBy22)
+            put("screen_minutes_22_to_04", d.screenMinutes22To04)
+            put("apps_22_to_04", buildJsonArray { d.apps22To04.forEach { a -> add(buildJsonObject { put("app", name(a.pkg)); put("minutes", a.millis / 60_000.0) }) } })
             put("screen_minutes_after_22", d.screenMinutesAfter22)
             put("screen_minutes_2130_to_fajr", d.screenMinutesNight)
             put("screen_minutes_midnight_to_fajr", d.screenMinutesBeforeFajr)

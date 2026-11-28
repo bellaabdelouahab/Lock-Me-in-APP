@@ -322,8 +322,10 @@ His choice (2026-11-24): the screen filter learns from his own screens, on his s
 
 ### 3.21 Day scores, what came before a slide, mood
 
-- `day_scores(day)` (MCP): in bed by 22:00 (at most 3 minutes of screen from 22:00 to the next fajr), screen minutes after 22:00,
-  from 21:30 to fajr and from midnight to fajr, tries and filter blocks, requests to open up against tightenings, the top 3 apps
+- `day_scores(day)` (MCP): in bed (`in_bed_by_22`: at most 3 minutes of screen from 22:00 to 04:00 the next morning, his rule
+  of 2026-11-28; 04:00 and not fajr so a 05:00 wake does not fail the night) with `screen_minutes_22_to_04` and the apps on
+  screen then; screen minutes from 22:00, from 21:30 and from midnight to the next fajr (one night, so midnight to fajr is
+  never more than 22:00 to fajr), tries and filter blocks, requests to open up against tightenings, the top 3 apps
   and the day's moods. One small answer instead of the raw events.
 - Every try and block carries what came just before it: the previous app, seconds since the unlock, and the app whose
   notification started the session (posted at most 2 minutes before the unlock and the first app opened).
@@ -333,4 +335,12 @@ His choice (2026-11-24): the screen filter learns from his own screens, on his s
 - A settings request names each field it changes with the value now and the value asked for (Requests page, event log, MCP),
   worked out against the settings in force, so a tightening that approving would undo shows too. The weekly report counts
   requests to open up against tightenings.
+- Every minute (screen, per app, the night windows) comes from the same screen-on spans. App time counts only while the phone
+  is unlocked, until the screen goes off. A lit lock screen counts at most 2 minutes: past that it is an adhan or alarm screen,
+  or a screen-off Android never sent (11-27 23:52 to 04:45 had counted 2 h of Claude). So a day's app minutes never exceed its
+  screen minutes.
+- The screen filter service going off (switched off in Accessibility, or not answering) is FILTER_SERVICE_OFF, and its return
+  FILTER_SERVICE_BACK with how long it was off; the weekly report shows each time as its own line with start, end and
+  duration. Up to 0.4.128 it was logged as FILTER_BLOCKED, which is now the filter's content blocks only (old lines are read
+  as the new kind).
 - The phone-use log began on 2026-11-22; `weekly_report` and `day_scores` say so, so empty earlier days are not read as a fault.

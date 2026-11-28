@@ -38,12 +38,17 @@ data class MoodEntry(val at: Instant, val score: Int, val asked: String) {
 /** One day in a few numbers, for a morning check-in: sleep, late screen time, tries, blocks, requests, top apps and mood. */
 data class DayScores(
     val day: LocalDate,
-    /** No more than [DayScores.BED_GRACE_MINUTES] of screen time from 22:00 until the next fajr; null before 22:00. */
+    /** In bed: no more than [DayScores.BED_GRACE_MINUTES] of screen time from 22:00 to 04:00 the next morning; null before 22:00. */
     val inBedBy22: Boolean?,
+    /** 22:00 to 04:00 the next morning: the bed score's number. */
+    val screenMinutes22To04: Long,
+    /** The apps on screen from 22:00 to 04:00, most first (lock-screen time too, for an app shown on it: an alarm, an adhan). */
+    val apps22To04: List<AppUse>,
+    /** 22:00 until the next day's fajr. */
     val screenMinutesAfter22: Long,
     /** 21:30 until the next day's fajr (so far, if that is still to come). */
     val screenMinutesNight: Long,
-    /** Midnight until this day's fajr. */
+    /** Midnight until fajr of the same night (the next morning): part of [screenMinutesAfter22], never more. */
     val screenMinutesBeforeFajr: Long,
     val screenMinutes: Long,
     val unlocks: Int,
@@ -58,6 +63,8 @@ data class DayScores(
         const val BED_GRACE_MINUTES = 3L
         val NIGHT_FROM: LocalTime = LocalTime.of(21, 30)
         val BED_AT: LocalTime = LocalTime.of(22, 0)
+        /** The bed score's window ends here, not at fajr: a 05:00 wake must not fail the night. */
+        val BED_UNTIL: LocalTime = LocalTime.of(4, 0)
     }
 }
 
@@ -78,33 +85,8 @@ object Slides {
         return Lead(at, app, previous, start?.let { (at.toEpochMilli() - it.at.toEpochMilli()) / 1000 }, startedBy)
     }
 
-    /** Screen-on time between [from] and [to], from the use events (an app on screen means the screen is on). */
-    fun screenMillis(events: List<UseEvent>, from: Instant, to: Instant): Long {
-        if (!to.isAfter(from)) return 0
-        var total = 0L
-        var since: Instant? = null
-        fun close(at: Instant) {
-            val s = since ?: return
-            val a = maxOf(s, from)
-            val b = minOf(at, to, s.plusMillis(PhoneUse.MAX_STRETCH_MS))
-            if (b > a) total += b.toEpochMilli() - a.toEpochMilli()
-            since = null
-        }
-        for (e in events.sortedBy { it.at }) {
-            if (e.at >= to) break
-            when (e.kind) {
-                UseKind.SCREEN_ON, UseKind.UNLOCK, UseKind.APP -> {
-                    // A fresh event while on restarts the stretch cap without losing time.
-                    if (since != null) close(e.at)
-                    since = e.at
-                }
-                UseKind.SCREEN_OFF -> close(e.at)
-                else -> Unit
-            }
-        }
-        close(to)
-        return total
-    }
+    /** Screen-on time between [from] and [to], from the same spans as every other number ([PhoneUse.spans]). */
+    fun screenMillis(events: List<UseEvent>, from: Instant, to: Instant): Long = PhoneUse.screenMillis(events, from, to)
 
     /**
      * The day's scores. [uses] must cover the day before (for what was on screen at midnight) through the morning after (for the
@@ -123,22 +105,25 @@ object Slides {
     ): DayScores {
         val start = day.atStartOfDay(zone).toInstant()
         val end = day.plusDays(1).atStartOfDay(zone).toInstant()
-        val fajrToday = day.atTime(fajr(day)).atZone(zone).toInstant()
         val fajrNext = day.plusDays(1).atTime(fajr(day.plusDays(1))).atZone(zone).toInstant()
         val bedAt = day.atTime(DayScores.BED_AT).atZone(zone).toInstant()
         val nightFrom = day.atTime(DayScores.NIGHT_FROM).atZone(zone).toInstant()
+        val bedUntil = day.plusDays(1).atTime(DayScores.BED_UNTIL).atZone(zone).toInstant()
         val cut = { t: Instant -> minOf(t, now) }
         val min = { ms: Long -> ms / 60_000 }
 
         val after22 = min(screenMillis(uses, bedAt, cut(fajrNext)))
+        val bed = min(screenMillis(uses, bedAt, cut(bedUntil)))
         val summary = PhoneUse.summarize(uses.filter { it.at < end }, day, zone, now, ignore)
         val inDay = { t: Instant -> !t.isBefore(start) && t.isBefore(end) }
         return DayScores(
             day = day,
-            inBedBy22 = if (now.isBefore(bedAt)) null else after22 <= DayScores.BED_GRACE_MINUTES,
+            inBedBy22 = if (now.isBefore(bedAt)) null else bed <= DayScores.BED_GRACE_MINUTES,
+            screenMinutes22To04 = bed,
+            apps22To04 = PhoneUse.appMillis(uses, bedAt, cut(bedUntil), ignore).map { (pkg, ms) -> AppUse(pkg, ms, 0, 0) },
             screenMinutesAfter22 = after22,
             screenMinutesNight = min(screenMillis(uses, nightFrom, cut(fajrNext))),
-            screenMinutesBeforeFajr = min(screenMillis(uses, start, cut(fajrToday))),
+            screenMinutesBeforeFajr = min(screenMillis(uses, end, cut(fajrNext))),
             screenMinutes = min(summary.screenMillis),
             unlocks = summary.unlocks,
             tries = summary.tries.map { (at, pkg) -> lead(uses, at, pkg, ignore) },

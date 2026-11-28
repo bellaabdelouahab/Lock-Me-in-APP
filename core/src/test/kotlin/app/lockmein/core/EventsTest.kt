@@ -87,4 +87,24 @@ class EventsTest {
         assertEquals("line 1500", kept.last())
         assertEquals(lines.take(10), EventLines.trim(lines.take(10)))
     }
+
+    @Test
+    fun `the filter service being off is its own line with start, end and duration, old logs included`() {
+        val events = listOf(
+            // As 0.4.128 logged it (under FILTER_BLOCKED and FILTER_CLEARED), back 5 h 07 later.
+            LockEvent(now.minus(Duration.ofHours(30)), EventKind.FILTER_BLOCKED, "screen filter switched off in Accessibility: 12 watched apps closed"),
+            LockEvent(now.minus(Duration.ofHours(30)).plus(Duration.ofMinutes(307)), EventKind.FILTER_CLEARED, "screen filter back on and answering: watched apps open again"),
+            LockEvent(now.minus(Duration.ofHours(2)), EventKind.FILTER_BLOCKED, "com.brave.browser until x (two hits) scores: y"),
+            LockEvent(now.minus(Duration.ofMinutes(20)), EventKind.FILTER_SERVICE_OFF, "screen filter not answering: 12 watched apps closed"),
+        )
+        val report = Reports.week(events, now)
+        assertEquals(2, report.filterOff.size)
+        assertEquals(Duration.ofMinutes(307), report.filterOff[0].duration(now))
+        assertEquals("switched off in Accessibility", report.filterOff[0].why)
+        assertNull(report.filterOff[1].end)
+        assertEquals(1, report.count(EventKind.FILTER_BLOCKED), "a content block is no longer mixed with the service going off")
+        val text = report.toText(ZoneId.of("UTC"))
+        assertTrue(text.contains("Screen filter service off: ") && text.contains(", 5 h 07 (switched off in Accessibility)"), text)
+        assertTrue(text.contains("to now (still off), 20 min (not answering)"), text)
+    }
 }
