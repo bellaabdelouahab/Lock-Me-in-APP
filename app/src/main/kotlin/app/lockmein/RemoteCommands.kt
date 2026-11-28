@@ -65,7 +65,11 @@ class RemoteCommands(private val context: Context) {
                 val first = PhoneUseLog(context).firstDay()
                 val rows = (minOf(days, 14L) downTo 1L).map { today.minusDays(it) }.filter { first == null || !it.isBefore(first) }
                 val table = if (rows.isEmpty()) "" else "\n\n" + app.lockmein.core.WeeklyTable.text(rows.map { scoresFor(it, now) }, zone)
-                JsonPrimitive(Reports.week(events.read(), now, Duration.ofDays(days)).toText(zone) + table + starts)
+                // Spec F7: per app, blocks and the share called wrong over the same days.
+                val rates = app.lockmein.core.Feedback.falseRates(FeedbackStore(context).records(), now.minus(Duration.ofDays(days)), now)
+                val falseText = if (rates.isEmpty()) "" else "\n\nBlocks called wrong, per app: " +
+                    rates.joinToString("; ") { "${inventory.label(it.pkg).ifBlank { it.pkg }} ${it.calledWrong} of ${it.blocks} (${Math.round(it.rate * 100)}%)" }
+                JsonPrimitive(Reports.week(events.read(), now, Duration.ofDays(days)).toText(zone) + falseText + table + starts)
             }
             "events" -> {
                 val kind = s("kind")?.let { EventKind.valueOf(it.uppercase()) }
@@ -120,8 +124,8 @@ class RemoteCommands(private val context: Context) {
                 val label = when (need("label").uppercase()) { "WRONG" -> BlockLabel.WRONG; "CORRECT" -> BlockLabel.CORRECT; else -> throw IllegalArgumentException("label must be WRONG or CORRECT") }
                 val store = FeedbackStore(context)
                 require(store.records().any { it.id == need("block_id") && it.waiting }) { "No saved block with that id is waiting." }
-                store.label(need("block_id"), label, now)
-                logged("label_block ${s("block_id")} $label")
+                store.label(need("block_id"), label, now, s("reason"))
+                logged("label_block ${s("block_id")} $label${s("reason")?.let { " ($it)" }.orEmpty()}")
                 JsonPrimitive("Labelled ${label.name.lowercase()}.")
             }
             "install_judge" -> {

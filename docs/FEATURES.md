@@ -358,6 +358,9 @@ His choice (2026-11-24): the screen filter learns from his own screens, on his s
   FILTER_SERVICE_BACK with how long it was off; the weekly report shows each time as its own line with start, end and
   duration. Up to 0.4.128 it was logged as FILTER_BLOCKED, which is now the filter's content blocks only (old lines are read
   as the new kind).
+- A wrong label (review screen or `label_block`) needs a reason (spec F7): nothing revealing on screen, text or an ordinary
+  photo, cartoon/game/anime not sexual, or other (the MCP takes own words). `weekly_report` shows per app the blocks and the
+  share called wrong (saved for review or labelled wrong) over the same days.
 - `weekly_report` ends with one row a day (spec N4, at most 14): in bed, screen minutes 22:00 to 04:00, last screen-off,
   screen after 21:30, tries, blocks, requests to open up, tightenings, moods answered.
 - Home shows the rules' drift as one number (spec D4): requests to open up minus tightenings over the last 14 days.

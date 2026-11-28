@@ -93,8 +93,8 @@ class FeedbackStore(private val context: Context) {
         if (!record.hasImage) null else runCatching { decrypt(image(record.id).readBytes()) }.getOrNull()
 
     @Synchronized
-    fun label(id: String, label: BlockLabel, now: Instant) {
-        val updated = Feedback.label(records(), id, label, now)
+    fun label(id: String, label: BlockLabel, now: Instant, reason: String? = null) {
+        val updated = Feedback.label(records(), id, label, now, reason)
         if (updated.firstOrNull { it.id == id }?.hasImage == false) image(id).delete()
         write(updated)
     }

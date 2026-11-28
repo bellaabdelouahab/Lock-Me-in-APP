@@ -60,6 +60,8 @@ data class BlockRecord(
     val label: BlockLabel = BlockLabel.NONE,
     val hasImage: Boolean = false,
     val labelledAtMillis: Long? = null,
+    /** Why a block was labelled wrong (spec F7: a WRONG label needs one, from [Feedback.WRONG_REASONS]). */
+    val reason: String? = null,
     /** When it went to the training server (FEATURES 3.20); its image is deleted from the phone then. */
     val uploadedAtMillis: Long? = null,
 ) {
@@ -96,9 +98,25 @@ object Feedback {
      * After labelling. Both keep their image until it goes to the training server (his choice, 2026-11-24: the model learns from
      * the right closes too, FEATURES 3.20); it was "a correct block loses it" before.
      */
-    fun label(records: List<BlockRecord>, id: String, label: BlockLabel, now: Instant): List<BlockRecord> = records.map {
-        if (it.id != id) it else it.copy(label = label, labelledAtMillis = now.toEpochMilli())
+    fun label(records: List<BlockRecord>, id: String, label: BlockLabel, now: Instant, reason: String? = null): List<BlockRecord> {
+        // Spec F7: 72% of a week's blocks were saved as wrong. A wrong label has to say why, so a loosening by labels shows.
+        require(label != BlockLabel.WRONG || !reason.isNullOrBlank()) { "A wrong label needs a reason: ${WRONG_REASONS.joinToString()}." }
+        return records.map { if (it.id != id) it else it.copy(label = label, labelledAtMillis = now.toEpochMilli(), reason = reason?.trim()?.take(80)) }
     }
+
+    /** The reasons offered for a wrong label (the MCP also takes free text). */
+    val WRONG_REASONS = listOf("nothing revealing on screen", "text or an ordinary photo", "cartoon, game or anime, not sexual", "other")
+
+    /** One app's blocks over a period and how many were called wrong (saved for review or labelled wrong). */
+    data class AppFalseRate(val pkg: String, val blocks: Int, val calledWrong: Int) {
+        val rate: Double get() = if (blocks == 0) 0.0 else calledWrong.toDouble() / blocks
+    }
+
+    /** Spec F7: per app, the share of blocks called wrong from [from] to [to], most blocks first. */
+    fun falseRates(records: List<BlockRecord>, from: Instant, to: Instant): List<AppFalseRate> =
+        records.filter { !it.at.isBefore(from) && it.at.isBefore(to) }.groupBy { it.pkg }.map { (pkg, list) ->
+            AppFalseRate(pkg, list.size, list.count { it.label == BlockLabel.WRONG || it.label == BlockLabel.CLAIMED_FALSE })
+        }.sortedByDescending { it.blocks }
 }
 
 /** The daily review window, 19:30 to 20:00 (spec v3.1 F4). The queue opens only inside it. */

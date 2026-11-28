@@ -5,6 +5,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -147,11 +148,23 @@ class FeedbackTest {
     @Test
     fun `both labels keep the image for training`() {
         val list = listOf(rec(1, BlockLabel.CLAIMED_FALSE), rec(2, BlockLabel.CLAIMED_FALSE))
-        val a = Feedback.label(Feedback.label(list, "r1", BlockLabel.CORRECT, t0), "r2", BlockLabel.WRONG, t0)
+        val a = Feedback.label(Feedback.label(list, "r1", BlockLabel.CORRECT, t0), "r2", BlockLabel.WRONG, t0, "text or an ordinary photo")
         assertEquals(BlockLabel.CORRECT, a[0].label)
         assertTrue(a[0].hasImage)
         assertTrue(a[1].hasImage)
         assertEquals(a, Feedback.decode(Feedback.encode(a)))
+    }
+
+    @Test
+    fun `a wrong label needs a reason, and the per-app rate counts saved and labelled wrong`() {
+        val list = listOf(rec(1, BlockLabel.CLAIMED_FALSE), rec(2, BlockLabel.NONE), rec(3, BlockLabel.WRONG))
+        assertFailsWith<IllegalArgumentException> { Feedback.label(list, "r1", BlockLabel.WRONG, t0) }
+        assertFailsWith<IllegalArgumentException> { Feedback.label(list, "r1", BlockLabel.WRONG, t0, " ") }
+        assertEquals("other", Feedback.label(list, "r1", BlockLabel.WRONG, t0, "other")[0].reason)
+        val rates = Feedback.falseRates(list, Instant.EPOCH, Instant.now())
+        assertEquals(1, rates.size)
+        assertEquals(3, rates[0].blocks)
+        assertEquals(2, rates[0].calledWrong)
     }
 
     // --- the review window (F4) ---

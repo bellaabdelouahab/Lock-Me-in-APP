@@ -45,7 +45,7 @@ class FeedbackStoreTest {
 
         // Both labels keep the screen until it goes to training (FEATURES 3.20); sending it removes it from the phone.
         store.label("t1", BlockLabel.CORRECT, Instant.now())
-        store.label("t2", BlockLabel.WRONG, Instant.now())
+        store.label("t2", BlockLabel.WRONG, Instant.now(), "nothing revealing on screen")
         assertTrue(File(dir, "t1.bin").exists())
         assertArrayEquals(jpeg, store.image(store.records().first { it.id == "t1" }))
         store.uploaded("t1", 1_000)

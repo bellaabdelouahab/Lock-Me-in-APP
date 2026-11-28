@@ -183,9 +183,9 @@ fun FilterScreen(onBack: () -> Unit) {
                 InfoCard { Note(if (waiting.isEmpty()) "Nothing saved to look at." else "Everything left was skipped for now.") }
             } else {
                 for (r in waiting.filter { it.id !in skipped }.take(20)) {
-                    ReviewItem(r, store, inventory.label(r.pkg), dayHm) { label ->
+                    ReviewItem(r, store, inventory.label(r.pkg), dayHm) { label, reason ->
                         if (label == null) skipped = skipped + r.id
-                        else scope.background({ store.label(r.id, label, now) }) { version++ }
+                        else scope.background({ store.label(r.id, label, now, reason) }) { version++ }
                     }
                 }
             }
@@ -242,7 +242,7 @@ private fun Figure(value: String, label: String) {
 
 /** A saved block: a heavily blurred screenshot (hold to see it, release to blur again), the app, the time, the scores, three labels. */
 @Composable
-private fun ReviewItem(r: BlockRecord, store: FeedbackStore, appLabel: String, fmt: DateTimeFormatter, onLabel: (BlockLabel?) -> Unit) {
+private fun ReviewItem(r: BlockRecord, store: FeedbackStore, appLabel: String, fmt: DateTimeFormatter, onLabel: (BlockLabel?, String?) -> Unit) {
     val full = remember(r.id) { store.image(r)?.let { BitmapFactory.decodeByteArray(it, 0, it.size) } }
     val blurred = remember(full) { full?.let { Bitmap.createScaledBitmap(it, 12, (12f * it.height / it.width).toInt().coerceAtLeast(1), true) } }
     var reveal by remember { mutableStateOf(false) }
@@ -263,11 +263,21 @@ private fun ReviewItem(r: BlockRecord, store: FeedbackStore, appLabel: String, f
         Text("$appLabel, ${fmt.format(r.at)}", style = MaterialTheme.typography.titleSmall)
         Text(r.scores.toScores().toString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("${r.agreed.count { it.hit }} of ${r.agreed.size} frames agreed" + (if (r.appOffset != 0f) ", app setting ${r.appOffset}" else ""), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        ButtonRow {
-            SecondaryButtonSmall("Wrong block") { onLabel(BlockLabel.WRONG) }
-            SecondaryButtonSmall("Correct block") { onLabel(BlockLabel.CORRECT) }
+        var askReason by remember(r.id) { mutableStateOf(false) }
+        if (askReason) {
+            // Spec F7: a wrong label says why.
+            Text("Why was it wrong?", style = MaterialTheme.typography.titleSmall)
+            app.lockmein.core.Feedback.WRONG_REASONS.forEach { reason ->
+                SecondaryButton(reason.replaceFirstChar { it.uppercase() }, { onLabel(BlockLabel.WRONG, reason) })
+            }
+            androidx.compose.material3.TextButton(onClick = { askReason = false }, modifier = Modifier.fillMaxWidth()) { Text("Back") }
+        } else {
+            ButtonRow {
+                SecondaryButtonSmall("Wrong block") { askReason = true }
+                SecondaryButtonSmall("Correct block") { onLabel(BlockLabel.CORRECT, null) }
+            }
+            androidx.compose.material3.TextButton(onClick = { onLabel(null, null) }, modifier = Modifier.fillMaxWidth()) { Text("Skip for now") }
         }
-        androidx.compose.material3.TextButton(onClick = { onLabel(null) }, modifier = Modifier.fillMaxWidth()) { Text("Skip for now") }
     }
 }
 
